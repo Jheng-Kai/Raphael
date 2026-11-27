@@ -41,7 +41,7 @@ export const zhCN = {
   "memberComputer.idle": "待命",
   "memberComputer.setup": "请帮我设置隔离电脑（Docker）。",
   "memberComputer.certificate": "屏幕上打开了一个 {p0} 窗口，请在那里选择证书，然后点击“{p1}”。",
-  "memberComputer.certificateAuto": "正在使用你的证书登录 {p0}…",
+  "memberComputer.certificateAuto": "正在使用你的证书登录 {p0}。",
   "memberComputer.certificateAutoKeychain": "正在使用你的证书登录 {p0}。如果 macOS 询问是否允许 Chrome 使用，请选择“始终允许”。",
   "memberComputer.certificateUnmatched": "Chrome 无法自行为此网站选择证书。屏幕上打开了一个 {p0} 窗口，请在那里选择证书，然后点击“{p1}”。",
   "memberComputer.certificateRefused": "电脑未允许 Chrome 使用该证书。屏幕上打开了一个 {p0} 窗口，请在那里选择证书，并在系统询问时允许，然后点击“{p1}”。",

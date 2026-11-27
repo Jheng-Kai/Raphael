@@ -41,7 +41,7 @@ export const fr = {
   "memberComputer.idle": "En veille",
   "memberComputer.setup": "Aide-moi à configurer l’ordinateur isolé (Docker).",
   "memberComputer.certificate": "Une fenêtre {p0} s’est ouverte sur votre écran. Sélectionnez-y le certificat, puis appuyez sur « {p1} ».",
-  "memberComputer.certificateAuto": "Connexion à {p0} avec votre certificat…",
+  "memberComputer.certificateAuto": "Connexion à {p0} avec votre certificat.",
   "memberComputer.certificateAutoKeychain": "Connexion à {p0} avec votre certificat. Si macOS demande si Chrome peut l’utiliser, choisissez « Toujours autoriser ».",
   "memberComputer.certificateUnmatched": "Chrome n’a pas pu choisir seul un certificat pour ce site. Une fenêtre {p0} s’est ouverte sur votre écran. Sélectionnez-y le certificat, puis appuyez sur « {p1} ».",
   "memberComputer.certificateRefused": "L’ordinateur n’a pas autorisé Chrome à utiliser le certificat. Une fenêtre {p0} s’est ouverte sur votre écran. Sélectionnez-y le certificat, autorisez-le quand on vous le demande, puis appuyez sur « {p1} ».",

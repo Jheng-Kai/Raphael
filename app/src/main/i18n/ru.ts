@@ -41,7 +41,7 @@ export const ru = {
   "memberComputer.idle": "Ожидание",
   "memberComputer.setup": "Помоги мне настроить изолированный компьютер (Docker).",
   "memberComputer.certificate": "На экране открылось окно {p0}. Выберите в нём сертификат, затем нажмите «{p1}».",
-  "memberComputer.certificateAuto": "Вход на {p0} с вашим сертификатом…",
+  "memberComputer.certificateAuto": "Вход на {p0} с вашим сертификатом.",
   "memberComputer.certificateAutoKeychain": "Вход на {p0} с вашим сертификатом. Если macOS спросит, может ли Chrome его использовать, выберите «Всегда разрешать».",
   "memberComputer.certificateUnmatched": "Chrome не смог сам выбрать сертификат для этого сайта. На экране открылось окно {p0}. Выберите в нём сертификат, затем нажмите «{p1}».",
   "memberComputer.certificateRefused": "Компьютер не разрешил Chrome использовать сертификат. На экране открылось окно {p0}. Выберите в нём сертификат, разрешите доступ по запросу, затем нажмите «{p1}».",

@@ -41,7 +41,7 @@ export const id = {
   "memberComputer.idle": "Siaga",
   "memberComputer.setup": "Bantu saya menyiapkan komputer terisolasi (Docker).",
   "memberComputer.certificate": "Jendela {p0} terbuka di layar. Pilih sertifikat di sana, lalu tekan “{p1}”.",
-  "memberComputer.certificateAuto": "Masuk ke {p0} dengan sertifikat Anda…",
+  "memberComputer.certificateAuto": "Masuk ke {p0} dengan sertifikat Anda.",
   "memberComputer.certificateAutoKeychain": "Masuk ke {p0} dengan sertifikat Anda. Jika macOS menanyakan apakah Chrome boleh memakainya, pilih “Selalu Izinkan”.",
   "memberComputer.certificateUnmatched": "Chrome tidak dapat memilih sertifikat untuk situs ini sendiri. Jendela {p0} terbuka di layar. Pilih sertifikat di sana, lalu tekan “{p1}”.",
   "memberComputer.certificateRefused": "Komputer tidak mengizinkan Chrome memakai sertifikat. Jendela {p0} terbuka di layar. Pilih sertifikat di sana, izinkan saat ditanya, lalu tekan “{p1}”.",

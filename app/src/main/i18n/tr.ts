@@ -41,7 +41,7 @@ export const tr = {
   "memberComputer.idle": "Boşta",
   "memberComputer.setup": "Yalıtılmış bilgisayarı (Docker) kurmama yardım et.",
   "memberComputer.certificate": "Ekranınızda bir {p0} penceresi açıldı. Sertifikayı orada seçin, ardından “{p1}” düğmesine basın.",
-  "memberComputer.certificateAuto": "Sertifikanızla {p0} oturumu açılıyor…",
+  "memberComputer.certificateAuto": "Sertifikanızla {p0} oturumu açılıyor.",
   "memberComputer.certificateAutoKeychain": "Sertifikanızla {p0} oturumu açılıyor. macOS, Chrome’un sertifikayı kullanıp kullanamayacağını sorarsa “Her Zaman İzin Ver”i seçin.",
   "memberComputer.certificateUnmatched": "Chrome bu site için sertifikayı kendi başına seçemedi. Ekranınızda bir {p0} penceresi açıldı. Sertifikayı orada seçin, ardından “{p1}” düğmesine basın.",
   "memberComputer.certificateRefused": "Bilgisayar, Chrome’un sertifikayı kullanmasına izin vermedi. Ekranınızda bir {p0} penceresi açıldı. Sertifikayı orada seçin, sorulduğunda izin verin, ardından “{p1}” düğmesine basın.",

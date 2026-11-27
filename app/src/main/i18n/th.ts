@@ -41,7 +41,7 @@ export const th = {
   "memberComputer.idle": "รอทำงาน",
   "memberComputer.setup": "ช่วยตั้งค่าคอมพิวเตอร์แยก (Docker) ให้ฉันหน่อย",
   "memberComputer.certificate": "หน้าต่าง {p0} เปิดขึ้นบนหน้าจอของคุณแล้ว เลือกใบรับรองในหน้าต่างนั้น แล้วกด “{p1}”",
-  "memberComputer.certificateAuto": "กำลังลงชื่อเข้าใช้ {p0} ด้วยใบรับรองของคุณ…",
+  "memberComputer.certificateAuto": "กำลังลงชื่อเข้าใช้ {p0} ด้วยใบรับรองของคุณ",
   "memberComputer.certificateAutoKeychain": "กำลังลงชื่อเข้าใช้ {p0} ด้วยใบรับรองของคุณ หาก macOS ถามว่า Chrome ใช้ใบรับรองได้หรือไม่ ให้เลือก “อนุญาตเสมอ”",
   "memberComputer.certificateUnmatched": "Chrome เลือกใบรับรองสำหรับเว็บไซต์นี้เองไม่ได้ หน้าต่าง {p0} เปิดขึ้นบนหน้าจอของคุณแล้ว เลือกใบรับรองในหน้าต่างนั้น แล้วกด “{p1}”",
   "memberComputer.certificateRefused": "คอมพิวเตอร์ไม่อนุญาตให้ Chrome ใช้ใบรับรอง หน้าต่าง {p0} เปิดขึ้นบนหน้าจอของคุณแล้ว เลือกใบรับรองในหน้าต่างนั้น อนุญาตเมื่อมีการถาม แล้วกด “{p1}”",

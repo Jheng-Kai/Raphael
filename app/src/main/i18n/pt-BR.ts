@@ -41,7 +41,7 @@ export const ptBR = {
   "memberComputer.idle": "Em espera",
   "memberComputer.setup": "Ajude-me a configurar o computador isolado (Docker).",
   "memberComputer.certificate": "Uma janela do {p0} foi aberta na sua tela. Escolha o certificado nela e depois clique em “{p1}”.",
-  "memberComputer.certificateAuto": "Entrando em {p0} com o seu certificado…",
+  "memberComputer.certificateAuto": "Entrando em {p0} com o seu certificado.",
   "memberComputer.certificateAutoKeychain": "Entrando em {p0} com o seu certificado. Se o macOS perguntar se o Chrome pode usá-lo, escolha “Sempre permitir”.",
   "memberComputer.certificateUnmatched": "O Chrome não conseguiu escolher sozinho um certificado para este site. Uma janela do {p0} foi aberta na sua tela. Escolha o certificado nela e depois clique em “{p1}”.",
   "memberComputer.certificateRefused": "O computador não deixou o Chrome usar o certificado. Uma janela do {p0} foi aberta na sua tela. Escolha o certificado nela, permita quando for perguntado e depois clique em “{p1}”.",
