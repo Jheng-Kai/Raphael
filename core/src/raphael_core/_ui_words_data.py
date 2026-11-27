@@ -4141,7 +4141,7 @@ WORDS = {'This version cannot connect compatibly to {name}. Update Raphael. If i
                  'th': 'เพื่อนร่วมงาน',
                  'id': 'seorang rekan',
                  'tr': 'bir çalışma arkadaşı'},
- '{name} handed you an email draft, "{subject}", for the owner to edit and send.': {'zh-CN': '{name}把一封邮件草稿「{subject}」交给你，等主人编辑后寄出。',
+ '{name} handed you an email draft, "{subject}", for the owner to edit and send.': {'zh-CN': '{name}把一封邮件草稿「{subject}」交给你，等用户编辑后寄出。',
                                                                                     'ko': '{name} 님이 소유자가 편집하고 보낼 이메일 '
                                                                                           '초안 “{subject}”을 전달했습니다.',
                                                                                     'es': '{name} te entregó un '
@@ -7301,7 +7301,7 @@ WORDS = {'This version cannot connect compatibly to {name}. Update Raphael. If i
               'th': 'หยุดแล้ว',
               'id': 'Dihentikan.',
               'tr': 'Durduruldu.'},
- 'This step needs the Master to do it in person.': {'zh-CN': '这一步需要主人亲自操作。',
+ 'This step needs you to do it in person.': {'zh-CN': '这一步需要你亲自操作。',
                                                     'ko': '이 단계는 직접 수행해야 합니다.',
                                                     'es': 'Este paso debes hacerlo personalmente.',
                                                     'fr': 'Vous devez effectuer cette étape vous-même.',
@@ -10469,7 +10469,7 @@ WORDS = {'This version cannot connect compatibly to {name}. Update Raphael. If i
                                                                                                                                   'için '
                                                                                                                                   '/stop '
                                                                                                                                   'gönderin.'},
- "This bot is private. Ask the owner to approve code {code} on the pairing card in this bot's member conversation in Raphael on the computer (valid for 10 minutes).": {'zh-CN': '这个机器人是私人的。请主人在电脑上与这个机器人所属成员的对话中，核准配对卡的 '
+ "This bot is private. Ask the owner to approve code {code} on the pairing card in this bot's member conversation in Raphael on the computer (valid for 10 minutes).": {'zh-CN': '这个机器人是私人的。请这个机器人的拥有者在电脑上与这个机器人所属成员的对话中，核准配对卡的 '
                                                                                                                                                                                  '{code}（10 '
                                                                                                                                                                                  '分钟内有效）。',
                                                                                                                                                                         'ko': '이 '

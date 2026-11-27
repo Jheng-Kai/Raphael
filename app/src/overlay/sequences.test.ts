@@ -569,9 +569,9 @@ const WAITING = ["《告。解析中……》", "《告。並列演算中……�
 
 test("a question: greeted, thought about with changing lines, and the answer takes them away", () => {
   const p = page();
-  p.send(SETTINGS, { type: "show", mode: "listening", line: "《告。主人，請下達指示。》" });
+  p.send(SETTINGS, { type: "show", mode: "listening", line: "《告。請下達指示。》" });
   run(1500);
-  expect(p.view.lines).toBe("《告。主人，請下達指示。》");
+  expect(p.view.lines).toBe("《告。請下達指示。》");
   expect(p.view.caption).toBeNull();
   p.send({ type: "mode", mode: "thinking", quiet: true, lines: WAITING });
   expect(p.view.lines).toBeNull();
@@ -597,7 +597,7 @@ test("a question: greeted, thought about with changing lines, and the answer tak
 
 test("Esc while a question is thought about takes the line away with the emblem", () => {
   const p = page();
-  p.send(SETTINGS, { type: "show", mode: "listening", line: "《告。主人，請下達指示。》" });
+  p.send(SETTINGS, { type: "show", mode: "listening", line: "《告。請下達指示。》" });
   run(1000);
   p.send({ type: "mode", mode: "thinking", quiet: true, lines: WAITING });
   run(4000);

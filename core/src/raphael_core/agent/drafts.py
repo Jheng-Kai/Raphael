@@ -587,7 +587,7 @@ class EmailDrafts:
 
 # What a colleague's chat says (to the model, never as a bubble) when a draft was handed to it.
 _RECEIVED: Mapping[str, str] = with_ui_words({
-    "zh-TW": "{name}把一封郵件草稿「{subject}」交給你，等主人編輯後寄出。",
+    "zh-TW": "{name}把一封郵件草稿「{subject}」交給你，等使用者編輯後寄出。",
     "en": "{name} handed you an email draft, \"{subject}\", for the owner to edit and send.",
     "ja": "{name}からメールの下書き「{subject}」が届きました。オーナーが編集して送信します。",
 })

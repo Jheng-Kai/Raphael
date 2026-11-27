@@ -71,7 +71,7 @@ async def test_a_hand_over_pauses_the_run_and_takes_it_off_the_desktop(make_run,
     assert run.owner_has_control and not run.done
     # The run took itself off the desktop: the overlay and the watch on the owner's input are down.
     assert [phase for phase, _ in shell.states][-1] == "end"
-    assert shell.states[-1][1] == "《告。這一步需要主人親自操作。》"
+    assert shell.states[-1][1] == "《告。這一步需要你親自操作。》"
     # It waits: no more of the run reaches the shell, and no model call is made.
     ops = list(shell.ops())
     calls = len(model.calls)
@@ -255,7 +255,7 @@ async def test_a_run_that_may_not_hand_back_ends_with_the_hand_off_line_as_befor
     run = make_run(FakeModel(*hands_over()))
     run.start()
     final = await event(run)
-    assert (final.kind, final.text) == ("handoff", "這一步需要主人親自操作。")
+    assert (final.kind, final.text) == ("handoff", "這一步需要你親自操作。")
     assert not run.owner_has_control and not run.give_back()
 
 

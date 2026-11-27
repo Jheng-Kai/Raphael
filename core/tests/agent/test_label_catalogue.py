@@ -82,7 +82,7 @@ def test_a_question_card_written_for_a_chat_is_not_english_in_another_language(l
 # a sentence the owner reads (a model's example, a script's letters, a length) or has the catalogue behind it another way.
 # A table written for the owner and left out of the catalogue falls back to English in the other languages.
 NOT_OWNER_COPY = {
-    "agent/persona.py": 5,  # the Mac's own phrases (the catalogue's follow for the rest), how Raphael is addressed and the tone line shown to a model, line lengths
+    "agent/persona.py": 4,  # the Mac's own phrases (the catalogue's follow for the rest), the tone line shown to a model, line lengths
     "brain/raphael_split.py": 1,  # the name schema 101 gives a slime made from a member 0 that had none: data written once, never shown as a message
     "brain/cleanup.py": 1, "brain/cloud_stt.py": 1, "device/stt.py": 1,  # language codes of speech services
     "computer/vm_tools.py": 3,  # the wake lines: the catalogue's `with_ui_words` is applied to them by a comprehension

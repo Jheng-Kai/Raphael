@@ -76,7 +76,7 @@ async def test_worker_and_scheduler_use_only_the_selected_persona(make_rig, conn
             for marker in ("主人", "マスター", "《", "your master", "You are Raphael", other.personality, f"OWN-{other.name}", f"THREAD-{other.name}"):
                 assert marker not in shown
         else:
-            assert "You are Raphael" in system and "主人" in system
+            assert "You are Raphael" in system and "主人" not in system
             for person in (teacher, coach):
                 assert person.personality not in shown and f"OWN-{person.name}" not in shown
     finally:
