@@ -299,6 +299,7 @@ export function createSettings(app: AppContext): SettingsPage {
   const cap = createUsageCap({ limit: () => limitOf(view()), save: (limit) => changeBrain("monthly_limit_usd", limit) });
   app.onEvent((event) => {
     providers.followEvent(event);
+    skillLibrary.follow(event);
     // Closed too: Settings open at once on what they hold, and a choice made at the composer must already be in it.
     if (event.type === "SettingsChanged") void api.settingsGet().then(result => { brain = result.settings; if (visible) { render(); void refreshProjectDetails(); } }, () => {});
     cliBrains.followEvent(event);
