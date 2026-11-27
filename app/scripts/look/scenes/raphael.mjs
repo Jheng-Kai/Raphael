@@ -26,8 +26,8 @@ export default [
     [wait(tourCard), check("raphael-tour")], { turns: [], tour: true }),
   scene("raphael-tour-answer", "The pick on the card is the card's own and the tour goes on below it: what the part is, and the offer that waits for the owner's yes",
     [wait(tourCard), click('[data-owner-question^="greeting-card-"] [data-owner-option]'), { action: "wait-text", selector: ".ra-scroll", text: "經你同意才會動手" }, check("raphael-tour-answer")], { turns: [], tour: true }),
-  scene("raphael-no-model", "With no answer model Raphael cannot speak: its empty page says answers have no model yet, with the one button that chooses it, and no greeting stands there",
-    [wait(".ra-notice:not([hidden])"), check("raphael-no-model")], { turns: [], tour: true, noSources: true }),
+  scene("raphael-no-model", "With no answer model Raphael cannot speak: its empty conversation is the ordinary layout, one line above the docked composer says answers have no model yet with the one button that chooses it, and no greeting stands there",
+    [wait(".ra-dock > .model-chips"), check("raphael-no-model")], { turns: [], tour: true, noSources: true }),
   scene("no-chief", "Slimes without a chief (the role is nobody's): the app opens on Raphael's conversation, the slimes are listed, and no row leads or wears a crown",
     [wait(".page-agent:not([hidden]) .conversation-trigger"), wait('.mb-col [data-member="1"]'), check("no-chief"), check("sidebar-shell")], { ...atStart, primaryMember: null }),
 ];

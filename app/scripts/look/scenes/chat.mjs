@@ -327,7 +327,8 @@ export default [
   scene("member-draft", "Editable member draft cards in the conversation", [wait('.draft-panel:not([hidden])'), check("member-draft")], { adminApproval: "draft" }),
   scene("member-draft-edit", "Owner edits a member draft and removes another before confirming", [wait('.draft-panel:not([hidden])'), click('[data-draft-id="draft-1"] [data-draft-act="more"]'), type('[data-draft-id="draft-1"] [data-draft-field="role"]', "首席營運長"), click('[data-draft-id="draft-3"] [data-draft-act="remove"]'), check("member-draft-edit")], { adminApproval: "draft" }),
   scene("member-draft-done", "Confirmed drafts settle into a summary and add members to the column", [wait('.draft-panel:not([hidden])'), click('[data-draft-act="confirm"]'), check('member-draft-submitted'), wait('.draft-done'), click('[data-act="draft-done"]'), wait('.draft-done.is-open'), check("member-draft-done")], { adminApproval: "draft" }),
-  scene("empty", "Conversation without turns", [], { turns: [] }),
+  scene("empty", "Raphael's conversation without turns is the ordinary layout: an empty thread and the composer docked at the bottom, no start screen", [wait(".ra-dock .composer"), check("conversation-empty")], { turns: [] }),
+  scene("member-empty", "A slime's conversation without turns (its greeting did not come) is the same ordinary layout, the composer docked at the bottom", [member(1), wait(".ra-dock .composer"), check("conversation-empty")], { turns: [], greetRefused: true }),
   // 新增角色 is one small dialog over the dimmed window: the slime, the name, the shared picker, 取消 and 建立.
   scene("member-maker", "新增角色 is a small centred dialog: the large slime, the name under it, the tabbed picker, 取消 and a 建立 that waits for a name", [...makerOpen, check("member-maker")]),
   scene("nav-layer-maker", "Back keeps an unsaved member name, then closes the clean maker. Forward restores its avatar tab", [

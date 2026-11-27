@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // Raphael's one conversation: an empty one is the ordinary layout (the thread, empty, and the composer in the dock), begins its
 // guided tour once there is a model to speak with, says so in one line above the composer when there is none, says so when the
-// thread could not be read, and its header has no ⋯: no screen of its own for nothing yet (R-UI-NOEMPTY-01).
+// thread could not be read, and its header has no ⋯: no screen of its own for nothing yet (R-UI-183).
 import { afterEach, expect, test, vi } from "vitest";
 const api = vi.hoisted(() => ({
   statusGet: vi.fn(async () => ({ openrouter: { state: "ok" }, spend: { month_usd: 0, limit_usd: 10 } })), core: vi.fn(), agentHistoryList: vi.fn(),

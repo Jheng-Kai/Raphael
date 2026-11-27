@@ -1292,7 +1292,7 @@ export function createAgent(app: AppContext, places?: {
     // An open conversation between members follows the turns it is read from, and closes with its conversation.
     if (peer) queueMicrotask(() => peer?.update());
     stage.setAttribute("aria-busy", String(pending));
-    // Only a thread not read yet says it is loading: a refresh of an empty one keeps its empty state (R-UI-71).
+    // Only a thread not read yet says it is loading: a refresh of an empty one keeps its ordinary empty layout (R-UI-71, R-UI-183).
     if (pending && isEmpty() && !loadedThread) {
       wait.innerHTML = loadingHTML();
       wait.hidden = false;

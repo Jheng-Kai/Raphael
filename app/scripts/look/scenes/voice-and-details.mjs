@@ -1,8 +1,6 @@
 import { accountMenu, check, click, hold, key, member, page, scene, settings, wait, waitGone } from "./steps.mjs";
 
 const details = [{ action: "open-details" }, wait('.mb-det:not([hidden])')];
-const clearMenu = [wait(".page-agent:not([hidden]) .conversation-trigger"), click('[data-act="raphael-more"]'), wait('#app-popover [data-pick="clear"]')];
-const clearAsk = [...clearMenu, click('#app-popover [data-pick="clear"]'), wait('.mb-confirm')];
 // The voice button records a voice message while held; voice chat waits for a later release.
 const voice = id => [click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]'), id ? hold('.cmp-voice') : click('.cmp-voice')];
 const language = locale => [click('[data-k="ui-language"]'), click(`#app-popover [data-value="${locale}"]`), wait(`html[lang="${locale}"]`), check(`locale-${locale}`)];
@@ -26,9 +24,6 @@ export default [
   ])),
   scene("raphael-details-no-list", "Raphael's panel lists no conversation, as a slime's does not: it has the one", [...details, check("raphael-details-no-list")]),
   scene("member-conversation-sections", "A member has one conversation and no conversation list", [member(1), ...details, check("member-no-conversations")]),
-  scene("raphael-clear-menu", "Raphael's ⋯ at the right of its header opens one red item, 清除對話", [...clearMenu, check("raphael-clear-menu")]),
-  scene("raphael-clear-confirm", "清除對話 uses the shared compact destructive confirmation", [...clearAsk, check("raphael-clear-confirm")]),
-  scene("raphael-cleared", "The cleared conversation is empty and the owner's pick of what to do first starts again: Raphael's tour begins on the empty page", [...clearAsk, click('[data-dlg="delete"]'), wait('[data-owner-question^="greeting-card-"][data-card-state="asked"]'), check("raphael-cleared")], { tour: true }),
   ...[0, 1].flatMap(id => [
     scene(`composer-voice-pending-${id}`, "Composer voice waits in the member's one conversation", [
       member(id), ...details, ...voice(id), wait('[data-key="hearing"]'), check("composer-voice-destination"),

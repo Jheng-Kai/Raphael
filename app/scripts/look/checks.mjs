@@ -2,6 +2,22 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  // An empty conversation is the ordinary layout (R-UI-183): the thread with nothing in it, and the composer docked where it always
+  // is, at the bottom of the stage, on the column's centre. No face, name or centred screen stands over it.
+  const emptyLayout = () => {
+    require(!document.querySelector('.ra-empty, .ra-hero, .ra-hi, .ra-slot, .ra-notice'), 'no start screen of its own exists');
+    const stage = [...document.querySelectorAll('.page-agent .mb-chat:not([hidden]) .ra-stage')].find(visible);
+    require(stage, 'the conversation stage is shown');
+    const scroll = stage.querySelector(':scope > .ra-scroll'), dock = stage.querySelector(':scope > .ra-dock'), composer = dock?.querySelector(':scope > .composer');
+    require(visible(scroll) && visible(dock) && visible(composer), 'the thread, the dock and the composer in it are all shown');
+    require(!scroll.querySelector('.thread > *'), 'the thread holds no line');
+    const box = stage.getBoundingClientRect(), at = composer.getBoundingClientRect(), mid = at.left + at.width / 2;
+    require(at.bottom > box.bottom - 80 && at.bottom <= box.bottom + 1, `the composer is docked at the bottom of the stage (${Math.round(at.bottom)} of ${Math.round(box.bottom)})`);
+    require(at.top > box.top + box.height / 2, `and is in its lower half, not centred (${Math.round(at.top)} of ${Math.round(box.top)}..${Math.round(box.bottom)})`);
+    require(Math.abs(mid - (box.left + box.width / 2)) <= box.width * 0.25 + 1, 'on the stage column, not pushed aside');
+    require(![...stage.querySelectorAll('.ra-scroll .av, .ra-scroll h1, .ra-scroll h2')].some(visible), 'no big face or name stands over the empty thread');
+    return { stage, scroll, dock, composer };
+  };
   // The chief's crown (issue 327): one crown on the head of the slime that is painted, whichever engine draws it. `painted` is the drawing
   // that is seen (the vector, or the cel a strip shows), so a second crown in the dark rim or in a hidden drawing is not counted away.
   const crownIssues = surface => {
@@ -4376,9 +4392,9 @@ export function checkRendered(name, context = {}) {
     require(face && face.style.getPropertyValue('--slime-color').toLowerCase() === '#3db5ff' && !panel.querySelector('.mb-panel-identity img'), "its face is the first blue slime");
     require(!panel.querySelector('[data-slot="conversations"]'), "its panel lists no conversations: it has the one, like every slime");
     require(data.conversations.filter(item => item.member_id === 0).length === 1 && !data.conversations.some(item => item.kind === 'quick'), "the fixture holds the one conversation, and no quick one");
-    const more = document.querySelector('[data-act="raphael-more"]'), share = document.querySelector('[data-act="share-member"]');
-    require(more && !more.hidden && visible(more) && more.getAttribute('aria-label') === '更多', "its ⋯ stands where a slime's share button does");
-    require(share.hidden && more.getBoundingClientRect().right > document.querySelector('.mb-head-c').getBoundingClientRect().right, "and the ⋯ is at the right of the header");
+    const share = document.querySelector('[data-act="share-member"]');
+    require(!document.querySelector('[data-act="raphael-more"]'), "it has no ⋯: nothing in its header clears its conversation");
+    require(share.hidden && ![...document.querySelectorAll('.mb-chat > .mb-head .ra-tools > *')].some(visible), "its share button is hidden and nothing stands in the header's right slot");
     require(document.querySelector('.tn[data-id="1"]') && document.querySelector('.tn[data-id="90"]'), "its typed work and its Alt+Space question are one thread");
     require(!document.querySelector('.conversation-caption') && !document.body.textContent.includes('請下達指示'), "the header names only Raphael and no greeting line stands in the page");
     require(!document.querySelector('.mb-pill .slime-crown'), "it wears no crown");
@@ -4395,7 +4411,7 @@ export function checkRendered(name, context = {}) {
     const panel = document.querySelector('.mb-det');
     require(visible(panel) && panel.querySelector('.mb-face-edit'), "its panel has a face to change, like every slime's");
     require(!panel.querySelector('[data-slot="conversations"]'), "and no list of conversations: it has the one");
-    require(document.querySelector('[data-act="raphael-more"]').hidden, "and no ⋯ of Raphael's: that is Raphael's header alone");
+    require(!document.querySelector('[data-act="raphael-more"]'), "and no ⋯ of Raphael's: nothing clears a conversation from its header");
     return { check: name, chief: id };
   }
   if (name === "no-slimes" || name === "no-chief") {
@@ -6566,13 +6582,8 @@ export function checkRendered(name, context = {}) {
   if(name === "no-naming") {
     require(!document.querySelector('.first-bot'),"no first Bot setup exists for an unconfigured empty thread");
     require(visible(document.querySelector('.page-agent .composer:not([hidden])')),"the ordinary composer is available immediately");
-    return (async () => {
-      const img=[...document.querySelectorAll('.ra-hero img')].find(visible);
-      await img.decode();
-      const size=img.getBoundingClientRect().width * devicePixelRatio;
-      require(img.naturalWidth >= size, "the empty conversation avatar has enough source pixels for its display size");
-      return {check:name,sourceWidth:img.naturalWidth,displayPixels:size};
-    })();
+    emptyLayout();
+    return {check:name};
   }
   if(name === "settings-alignment") {
     // Connect apps on its own uses its dialog's whole width; a settings pane keeps the 640 px measure.
@@ -6826,33 +6837,9 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.mb-det [data-slot="conversations"], .mb-det [data-conversation-new]'), "a member has no conversation list and nothing to add one");
     return { check: name };
   }
-  if (name === "raphael-clear-menu") {
-    const menu = document.querySelector('#app-popover'), more = document.querySelector('[data-act="raphael-more"]');
-    require(visible(menu) && visible(more) && menu.getBoundingClientRect().top >= more.getBoundingClientRect().bottom - 1, "the ⋯ opened its one menu under itself");
-    const items = [...menu.querySelectorAll('[data-pick]')];
-    require(items.length === 1 && items[0].dataset.pick === "clear" && items[0].textContent === "清除對話", "its one item is 清除對話");
-    require(items[0].classList.contains("danger") && getComputedStyle(items[0]).color !== getComputedStyle(menu).color, "and it is the red one");
-    require(!window.__look.calls.some(call => call.method === "conversations.clear"), "nothing clears from the menu alone");
-    return { check: name };
-  }
-  if (name === "raphael-clear-confirm") {
-    const dialog = document.querySelector('.mb-confirm');
-    require(visible(dialog) && dialog.querySelector('h2').textContent === '清除「拉斐爾」的紀錄？', "the shared red confirmation names Raphael's history");
-    require(dialog.querySelector('[data-dlg="delete"]').textContent === "清除對話", "the primary action clears the conversation");
-    require(!window.__look.calls.some(call => call.method === "conversations.clear"), "nothing clears before confirmation");
-    return { check: name, title: dialog.querySelector('h2').textContent };
-  }
-  if (name === "raphael-cleared") {
-    require(window.__look.calls.filter(call => call.method === "conversations.clear" && call.params.id === 1).length === 1, "the conversation is cleared exactly once");
-    require(window.__look.data.conversations.some(c => c.id === 1 && c.member_id === 0), "its identity remains");
-    require(!document.querySelector('.ra-col .tn[data-id="1"], .ra-col .tn[data-id="90"]'), "what was said is gone");
-    require(!document.body.textContent.includes('請下達指示'), "no greeting line stands in the page");
-    return { check: name };
-  }
   if (name === "conversation-empty") {
-    // The first .ra-empty in the document can be another conversation view's hidden one; any shown one counts.
-    const empties = [...document.querySelectorAll('.ra-empty')];
-    require(empties.some(visible), "the conversation shows its empty state");
+    // Raphael's or a slime's: the same ordinary layout with an empty thread, the composer docked at the bottom.
+    emptyLayout();
     require(!document.querySelector('.ra-col .tn, .ra-col .day, .ra-col .exchange-row'), "there are no turns, empty event lines or date separators");
     return { check: name };
   }
@@ -6869,7 +6856,7 @@ export function checkRendered(name, context = {}) {
     require(options.map(item => item.textContent).join("|").includes("建立第一隻史萊姆") && options.map(item => item.textContent).join("|").includes("看看設定"), "they are the first things to do");
     require(visible(card.querySelector("[data-owner-answer-input]")), "the owner's own answer is there");
     require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "nothing is put in the owner's mouth");
-    require(!document.body.textContent.includes('請下達指示') && !document.querySelector('.ra-empty:not([hidden])'), "neither the old greeting nor the empty page stands there");
+    require(!document.body.textContent.includes('請下達指示') && !document.querySelector('.ra-empty'), "neither the old greeting nor an empty page stands there");
     require(window.__look.calls.filter(call => call.method === "members.greet" && call.params.id === 0).length === 1, "the tour was asked for once");
     require(card.getBoundingClientRect().right <= document.querySelector(".page-agent .ra-scroll, .page-agent").getBoundingClientRect().right + 1, "the card stays inside the conversation");
     return { check: name, options: options.length };
@@ -6883,12 +6870,15 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "raphael-no-model") {
-    const notice = document.querySelector('.ra-notice');
-    require(visible(notice) && notice.textContent.includes("回答還沒選模型"), "the empty page says answers have no model yet");
-    const button = notice.querySelector('[data-model-missing="answer"]');
+    const { composer } = emptyLayout();
+    const line = document.querySelector('.ra-dock > .model-chips');
+    require(visible(line) && line.textContent.includes("回答還沒選模型"), "one line above the composer says answers have no model yet");
+    const button = line.querySelector('[data-model-missing="answer"]');
     require(visible(button) && button.textContent === "選擇模型", "with the one button that chooses it");
+    const gap = composer.getBoundingClientRect().top - line.getBoundingClientRect().bottom;
+    require(gap >= 0 && gap <= 24, `the line stands just above the composer (${Math.round(gap)}px)`);
+    require(line.getBoundingClientRect().height <= 48 && line.getBoundingClientRect().width <= composer.getBoundingClientRect().width + 1, "one quiet line, no wider than the composer");
     require(!document.body.textContent.includes('請下達指示') && !window.__look.calls.some(call => call.method === "members.greet" && call.params.id === 0), "no greeting stands there and the tour waits for a model");
-    require(visible(document.querySelector('.ra-hi')) && document.querySelector('.ra-hi').textContent === "拉斐爾" && visible(document.querySelector('.ra-hero .av, .ra-hero svg')), "Raphael's face and name stand above it");
     return { check: name };
   }
   if (["composer-voice-destination", "composer-voice-answer"].includes(name)) {
