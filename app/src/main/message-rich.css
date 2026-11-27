@@ -171,3 +171,7 @@
 .owner-message .message-text .owner-details { margin: 0.4em 0; }
 .owner-message .message-text .owner-details > summary { font-weight: var(--weight-medium); cursor: pointer; }
 .owner-message .message-text .owner-details > .details-body { padding-inline-start: 1.2em; }
+
+/* A highlight (`==words==`, the composer's highlight): the selection's fill, so it reads in both themes and is not a search hit (that is `mark[data-find-match]`). */
+.message-mark { padding: 0 0.12em; border-radius: var(--r-sm); background: var(--selection); color: var(--on-selection); }
+.owner-message .message-text .message-mark { background: color-mix(in srgb, currentColor 22%, transparent); color: inherit; }

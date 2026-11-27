@@ -171,8 +171,8 @@ function itemsTouched(state: EditorState): { pos: number; node: PMNode }[] {
 /** Makes the selected items tasks (unticked), or plain items again when they all are tasks; outside a list it makes the lines a list of tasks. */
 export function toggleTask({ state, tr, dispatch, commands }: CommandProps): boolean {
   let items = itemsTouched(state);
-  // The list the command below makes is in the transaction this one shares, and `state` reads it.
-  if (!items.length && commands.toggleBulletList()) items = itemsTouched(state);
+  // The list the command below makes is in the transaction this one shares; `state.tr` brings the state up to it.
+  if (!items.length && commands.toggleBulletList()) { void state.tr; items = itemsTouched(state); }
   const plain = items.length > 0 && items.every(item => item.node.attrs.checked !== null);
   if (dispatch) for (const { pos, node } of items) tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked: plain ? null : node.attrs.checked ?? false });
   return items.length > 0;

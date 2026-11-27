@@ -33,7 +33,10 @@
 .cmp-input pre code { padding: 0; background: transparent; font: inherit; }
 .cmp-input pre[data-language]::before { content: attr(data-language); position: absolute; top: 2px; inset-inline-end: var(--sp-2); color: var(--text-3); font: var(--fs-2xs)/1.6 var(--mono); pointer-events: none; }
 .cmp-input a.composer-link, .cmp-input .cmp-link, .cmp-input .cmp-skill { color: var(--link); text-decoration: none; }
-.cmp-input del { text-decoration-thickness: 1px; }
+.cmp-input :is(s, del), .cmp-input u { text-decoration-thickness: 1px; }
+.cmp-input u { text-underline-offset: 0.15em; }
+/* A highlight: the same fill a reply's `==words==` has (message-rich.css). */
+.cmp-input mark { padding: 0 0.12em; border-radius: var(--r-sm); background: var(--selection); color: var(--on-selection); }
 
 /* A task: its box stands where a bullet would. */
 .cmp-input li.cmp-task { list-style: none; position: relative; padding-inline-start: 0; }
@@ -64,10 +67,11 @@
 
 /* A table: the first row is the header. */
 .cmp-input table { display: block; max-width: 100%; margin: var(--sp-1) 0; overflow-x: auto; border-collapse: collapse; }
-.cmp-input td { min-width: 3em; padding: 0.1em 0.7em; border: 1px solid var(--edge); vertical-align: top; }
-.cmp-input tr:first-child > td { background: var(--surface-2); font-weight: var(--weight-semibold); }
-.cmp-input td[align="center"] { text-align: center; }
-.cmp-input td[align="right"] { text-align: end; }
+.cmp-input :is(td, th) { min-width: 3em; padding: 0.1em 0.7em; border: 1px solid var(--edge); vertical-align: top; }
+.cmp-input th { text-align: start; }
+.cmp-input tr:first-child > :is(td, th) { background: var(--surface-2); font-weight: var(--weight-semibold); }
+.cmp-input :is(td, th)[align="center"] { text-align: center; }
+.cmp-input :is(td, th)[align="right"] { text-align: end; }
 
 /* A mention: its mark stands where the @ is (the @ keeps its width, unseen), then the name. */
 .cmp-input .mention-slot { position: relative; display: inline-block; width: 0; height: 1lh; vertical-align: top; }

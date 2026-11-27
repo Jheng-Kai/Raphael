@@ -191,15 +191,18 @@ const MathBlock = Node.create({
 
 /** The extensions that make the field's document: its nodes, its marks, its history. */
 export function composerExtensions(): AnyExtension[] {
+  // TipTap hands a key to the extension that comes last first. A block's shortcut has to win over a mark's where ProseMirror's
+  // keymap reads one for the other (Ctrl+Shift+B is a quote, and falls back to Ctrl+B, bold, for a keymap that has no quote), so
+  // the marks come first. Their order is also the order their marks nest when they are written.
   return [
+    LinkMark, BoldMark, ItalicMark, UnderlineMark, StrikeMark, HighlightMark, CodeMark,
+    UndoRedo,
     Document, Paragraph, Text,
     HardBreak.configure({ keepMarks: false }),
     Heading.configure({ levels: [1, 2, 3, 4, 5, 6] }),
     Blockquote, BulletList, NumberedList, Item, CodeBlockWithLanguage, Divider,
     Table.configure({ resizable: false, HTMLAttributes: {} }), TableRow, cellOf(TableHeader), cellOf(TableCell),
     Details, Summary, MathInline, MathBlock,
-    LinkMark, BoldMark, ItalicMark, UnderlineMark, StrikeMark, HighlightMark, CodeMark,
-    UndoRedo,
   ];
 }
 

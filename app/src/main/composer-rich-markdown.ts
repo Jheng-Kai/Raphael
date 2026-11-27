@@ -420,7 +420,9 @@ function textChunks(tok: Tok, context: Context, hazard: number, final: boolean):
   for (let i = 0; i < text.length; i++) {
     const ch = text[i]!;
     if (context.level === 0 && addresses.some(([start, end]) => i >= start && i < end)) continue;
-    const escape = i === hazard || (ch === "<" && /^<\/?(details|summary|u)\b/i.test(text.slice(i, i + 10)))
+    const escape = i === hazard || (ch === "<" && /^<\/?(details|summary)\b/i.test(text.slice(i, i + 10)))
+      // An underline's tag is words until it reads as one (a closing tag after it): the first written form that does not read back as the words escapes it.
+      || (ch === "<" && context.level > 0 && /^<\/?u\b/i.test(text.slice(i, i + 4)))
       || (ch === "\\" && (i === text.length - 1 ? !final : PUNCTUATION.test(text[i + 1]!)))
       || (context.level > 0 && ESCAPABLE[context.level]!.test(ch))
       || (context.cell && ch === "|");
