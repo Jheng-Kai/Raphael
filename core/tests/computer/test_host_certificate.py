@@ -829,6 +829,21 @@ MTLS_NATIVE = pytest.mark.skipif(sys.platform not in ("darwin", "win32") or not 
                                         "and the sites of mtls_fixture.py (the workflow of the pull request)")
 
 
+def describe_windows(handles):
+    """What the Windows windows are (class, title, place), for a failure to say."""
+    import ctypes
+    from ctypes import wintypes
+    user = ctypes.WinDLL("user32")
+    rows = []
+    for window in handles:
+        name, title, rect = ctypes.create_unicode_buffer(256), ctypes.create_unicode_buffer(256), wintypes.RECT()
+        user.GetClassNameW(window, name, 256)
+        user.GetWindowTextW(window, title, 256)
+        user.GetWindowRect(window, ctypes.byref(rect))
+        rows.append((window, name.value, title.value, (rect.left, rect.top, rect.right, rect.bottom)))
+    return rows
+
+
 def onscreen_windows(pid):
     """The windows of the process that are on the Mac's screen (not minimized, not hidden), or None without Quartz."""
     try:
@@ -899,12 +914,16 @@ async def test_native_chrome_chooses_a_client_certificate_by_itself_and_no_windo
         assert browser.shown
         if (found := await windows()) is not None:
             assert found, "the owner's window is on the screen"  # and Chrome's own chooser, which is a window of its own
+            if sys.platform == "win32":
+                print(f"WINDOWS while the owner chooses: {describe_windows(found)}", flush=True)
+        # The owner chooses or cancels in the chooser and presses Done: here the page is left, which closes the chooser.
+        await browser.command(again, "Page.navigate", {"url": "about:blank"})
         await browser.tuck_away(again)
         member = await browser.new_tab(2, tmp_path, 11)
         await browser.activate(member)
         await browser.activate(again)
         if (found := await windows()) is not None:
             # Nothing is on the screen after the owner is done, nor for a new member window or a selected one.
-            assert found == [], f"windows on the screen: {found}"
+            assert found == [], f"windows on the screen: {describe_windows(found) if sys.platform == 'win32' else found}"
     finally:
         await browser._stop()
