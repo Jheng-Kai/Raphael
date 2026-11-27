@@ -38,12 +38,12 @@ export function bandPlan({ where, frame, measure, composerTop, windowHeight, hea
   if (where === "top" && measure.scrollY === 0 && Number.isFinite(headGap)) points.push({ name: "the header's row", x: headGap, y: frame.top + 6 });
   // The window's foot, beside the composer and under the page: the page's colour runs down to the window's last pixel.
   points.push({ name: "the window's foot", x: frame.left + 4, y: windowHeight - 4 });
-  return { points, problems, reference: { name: "the page's corner", x: frame.left + 2, y: frame.top + 2 } };
+  return { points, problems };
 }
 
-/** What is wrong with the pixels read at the plan's places, against the colour the page paints (its own, or, with none, the page's corner). */
-export function bandProblems(plan, measure, pixels, reference) {
-  const expected = rgb(measure.canvas) ?? reference;
+/** What is wrong with the pixels read at the plan's places, against the colour the page paints (its own, or, with none, the area's own behind it: `ground`). */
+export function bandProblems(plan, measure, pixels, ground) {
+  const expected = rgb(measure.canvas) ?? ground;
   const problems = [...plan.problems];
   for (const [index, point] of plan.points.entries()) {
     const seen = pixels[index];
@@ -55,6 +55,26 @@ export function bandProblems(plan, measure, pixels, reference) {
   return problems;
 }
 
+/**
+ * Nothing a person can press may stand under what floats over the page (R-PAGE-16): the composer and the answer line over its foot, the
+ * header's buttons and the window's own over its head. The zones are measured in the app, in the frame's own coordinates, and the page itself is
+ * asked what it has under them (checks.mjs `checkFrame("page-covered")`). `where` is "top" or "end" (what the page's normal flow has there: at its
+ * top nothing may stand under the header's buttons, at its end nothing under the composer) or "stuck" (only what is fixed or sticky, which never
+ * scrolls clear: a rail one window tall with its buttons at its foot, a bar at an edge).
+ */
+export async function pageCovered(page, frame, where, checkFrame) {
+  const zones = await page.evaluate(() => {
+    const box = document.querySelector(".pgv-frame-box iframe")?.getBoundingClientRect();
+    if (!box) return null;
+    const named = (name, element) => { const rect = element?.getBoundingClientRect(); return rect && rect.width > 0 && rect.height > 0 ? { name, side: name === "the composer" || name === "the answer line" ? "foot" : "head", left: rect.left - box.left, top: rect.top - box.top, right: rect.right - box.left, bottom: rect.bottom - box.top } : null; };
+    return [named("the composer", document.querySelector(".ra-stage.is-page > .ra-dock .composer")), named("the answer line", document.querySelector(".pgv-status:not([hidden]) > *")),
+      named("the arrow", document.querySelector(".mb-head [data-page-back]")), named("the page's pill", document.querySelector(".mb-head .pgv-pill")),
+      ...[...document.querySelectorAll(".mb-head .ra-tools > *")].map(tool => named("a header tool", tool)), named("the window's buttons", document.querySelector(".window-chrome .window-controls"))].filter(Boolean);
+  });
+  if (!zones) throw new Error("page-covered: no page stands open in the conversation's place");
+  return frame.evaluate(checkFrame, "page-covered", { zones, where });
+}
+
 /** Reads a real capture of the window at the plan's places. `page` is the app's page, `frame` the page's own frame. */
 export async function pageBand(page, frame, where, checkFrame) {
   const measure = await frame.evaluate(checkFrame, "page-band-measure");
@@ -63,7 +83,7 @@ export async function pageBand(page, frame, where, checkFrame) {
     const line = document.querySelector(".pgv-status:not([hidden]) > *")?.getBoundingClientRect();
     const back = document.querySelector(".mb-head [data-page-back]")?.getBoundingClientRect(), pill = document.querySelector(".mb-head .pgv-pill")?.getBoundingClientRect();
     const headGap = back && pill && pill.left - back.right >= 12 ? (back.right + pill.left) / 2 : undefined;
-    return box && composer && { frame: { left: box.left, top: box.top, right: box.right, bottom: box.bottom }, composerTop: Math.min(composer.top, line?.top ?? Infinity), windowHeight: innerHeight, ratio: devicePixelRatio, headGap };
+    return box && composer && { frame: { left: box.left, top: box.top, right: box.right, bottom: box.bottom }, composerTop: Math.min(composer.top, line?.top ?? Infinity), windowHeight: innerHeight, ratio: devicePixelRatio, headGap, ground: getComputedStyle(document.querySelector(".pgv-page")).backgroundColor };
   });
   if (!place) throw new Error("page-band: no page stands open in the conversation's place");
   const plan = bandPlan({ where, frame: place.frame, measure, composerTop: place.composerTop, windowHeight: place.windowHeight, headGap: place.headGap });
@@ -73,9 +93,8 @@ export async function pageBand(page, frame, where, checkFrame) {
     const canvas = document.createElement("canvas"); canvas.width = image.width; canvas.height = image.height;
     const context = canvas.getContext("2d", { willReadFrequently: true }); context.drawImage(image, 0, 0);
     return points.map(point => Array.from(context.getImageData(Math.min(image.width - 1, Math.round(point.x * ratio)), Math.min(image.height - 1, Math.round(point.y * ratio)), 1, 1).data).slice(0, 3));
-  }, shot, [...plan.points, plan.reference], place.ratio);
-  const reference = read.pop();
-  const problems = bandProblems(plan, measure, read, reference);
+  }, shot, plan.points, place.ratio);
+  const problems = bandProblems(plan, measure, read, rgb(place.ground));
   const result = { check: "page-band", where, canvas: measure.canvas, foot: measure.foot, head: measure.head, points: plan.points.map((point, index) => ({ at: point.name, x: Math.round(point.x), y: Math.round(point.y), seen: read[index] })) };
   if (problems.length) throw Object.assign(new Error(`page-band ${where}: ${problems.join("; ")}`), { assertion: { ...result, problems } });
   return result;

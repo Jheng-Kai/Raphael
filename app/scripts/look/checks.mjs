@@ -13373,7 +13373,7 @@ export function checkRendered(name, context = {}) {
  * Browser assertions run inside a page frame (the `frame-check` step): a member's HTML page is another origin, so the app's own checks
  * cannot read it. Self-contained, as `checkRendered` is: it is sent to the frame as text.
  */
-export function checkFrame(name) {
+export function checkFrame(name, args) {
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
   const style = (selector, pseudo) => getComputedStyle(document.querySelector(selector), pseudo);
   const dark = getComputedStyle(document.documentElement).colorScheme === "dark";
@@ -13449,6 +13449,27 @@ export function checkFrame(name) {
       firstTop: Math.min(...flow.map(element => element.getBoundingClientRect().top)), lastBottom: Math.max(...flow.map(element => element.getBoundingClientRect().bottom)),
       innerHeight, scrollY: Math.round(scrollY), scrollMax: Math.max(0, document.documentElement.scrollHeight - innerHeight), foot: parseFloat(getComputedStyle(document.documentElement).paddingBottom) || 0, head: parseFloat(getComputedStyle(document.documentElement).paddingTop) || 0 };
   }
+  // R-PAGE-16: nothing a person can press stands under what floats over the page. `args.zones` are the places of the composer, the answer line, the
+  // header's buttons and the window's own, in this frame's coordinates (page-band.mjs `pageCovered`). What the page's own flow has under them is
+  // judged at the end it is read to (`where`: the head at its "top", the foot at its "end"); what is fixed or sticky never scrolls clear, so it is
+  // judged against both whatever the end ("stuck" judges only it).
+  if (name === "page-covered") {
+    const { zones, where } = args, clickable = "a[href], button, input:not([type=hidden]), select, textarea, summary, [role=button], [role=link], [onclick], [tabindex]:not([tabindex=\"-1\"])";
+    const stuck = element => { for (let at = element; at && at.nodeType === 1; at = at.parentElement) { const position = getComputedStyle(at).position; if (position === "fixed" || position === "sticky") return true; } return false; };
+    const hidden = [];
+    for (const element of document.querySelectorAll(clickable)) {
+      const rect = element.getBoundingClientRect(), style = getComputedStyle(element);
+      if (!(rect.width > 0 && rect.height > 0) || style.visibility === "hidden" || style.display === "none" || style.pointerEvents === "none" || element.disabled) continue;
+      if (rect.bottom <= 0 || rect.top >= innerHeight) continue;
+      const fixed = stuck(element), judged = zones.filter(zone => fixed || (where === "top" && zone.side === "head") || (where === "end" && zone.side === "foot"));
+      for (const zone of judged) {
+        const across = Math.min(rect.right, zone.right) - Math.max(rect.left, zone.left), down = Math.min(rect.bottom, zone.bottom) - Math.max(rect.top, zone.top);
+        if (across >= 4 && down >= 4) hidden.push(`${element.tagName.toLowerCase()}${element.id ? "#" + element.id : ""}「${(element.textContent || element.getAttribute("aria-label") || "").trim().slice(0, 16)}」${fixed ? " (fixed to the window)" : ""} under ${zone.name} (${Math.round(across)} x ${Math.round(down)} px)`);
+      }
+    }
+    require(hidden.length === 0, `something to press is covered: ${hidden.join("; ")}`);
+    return { check: name, where, zones: zones.map(zone => zone.name) };
+  }
   // R-PAGE-10: the frame is the page's own window, as in a browser: a rail one window tall and sticky stays while the article scrolls, and its
   // buttons at its foot are in the window, which runs to the window's foot (the app's own check, `page-rail`, measures that end).
   if (name === "page-rail") {
@@ -13458,8 +13479,13 @@ export function checkFrame(name) {
     require(document.documentElement.scrollHeight > innerHeight * 2, `the page is much taller than its window: ${document.documentElement.scrollHeight} of ${innerHeight}`);
     for (const id of ["hide", "copy"]) {
       const button = document.getElementById(id).getBoundingClientRect();
-      require(button.top >= rect.top && button.bottom <= innerHeight + 0.5 && button.bottom > innerHeight - 80 && button.width > 40, `the button ${id} is in the window, at the rail's foot: ${Math.round(button.top)}-${Math.round(button.bottom)} of ${innerHeight}`);
+      // R-PAGE-16: the rail is as tall as the window (its background runs to the edge) and what stands at its foot floats above what the window keeps there.
+      const foot = parseFloat(getComputedStyle(document.documentElement).paddingBottom) || 0;
+      require(foot > 40 && button.top >= rect.top && button.bottom <= innerHeight - foot + 0.5 && button.bottom > innerHeight - foot - 80 && button.width > 40, `the button ${id} is above the room the composer keeps, at the rail's foot: ${Math.round(button.top)}-${Math.round(button.bottom)} of ${innerHeight}, foot ${foot}`);
     }
+    // R-PAGE-16: stuck at the window's top, the rail takes the room the header's buttons keep as its own padding, so its first words stand clear under them.
+    const head = parseFloat(getComputedStyle(document.documentElement).paddingTop) || 0;
+    require(head > 30 && document.querySelector(".rail b").getBoundingClientRect().top >= head - 1, `the rail's first words stand below the header's buttons: ${Math.round(document.querySelector(".rail b").getBoundingClientRect().top)} against ${head}`);
     const hide = document.getElementById("hide").getBoundingClientRect(), copy = document.getElementById("copy").getBoundingClientRect();
     require(hide.bottom <= copy.top + 1, "the two buttons stand one over the other");
     require(document.documentElement.scrollWidth <= innerWidth + 1, "nothing runs out sideways");

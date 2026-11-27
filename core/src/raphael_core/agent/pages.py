@@ -216,14 +216,62 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
   // The page has the keys once the owner pressed in it: Escape there goes back to the conversation as it does outside,
   // unless it only drops an input method's candidate (WebKit, on macOS, marks that Escape with keyCode 229 alone).
   addEventListener('keydown', event => { if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing && event.keyCode !== 229) post('escape', {}); });
+  // The room the window keeps over the page (R-PAGE-11, R-PAGE-16): the composer at the foot and the header's buttons at the head. It is the
+  // root's own padding, which is page and canvas alike, so the page's first line stands clear under the buttons and its last clear above the
+  // composer, and nothing but the page's own background shows in either. A fixed or sticky part of the page that reaches into either room
+  // (a rail one window tall with its buttons at its foot, a bar at the top or the bottom) is moved clear of it too, or it would stand under the
+  // composer for good: a part as tall as the window takes the room as its own padding, so its background still runs to the edge, and a smaller
+  // one moves by it.
+  let foot = 0, head = 0, moved = [], settle = 0;
+  const lift = () => {
+    settle = 0;
+    // What was moved is put back first, so that each pass reads the page as the page made it.
+    for (const [element, was] of moved) for (const name in was) element.style[name] = was[name];
+    moved = [];
+    const root = document.documentElement.style;
+    root.paddingTop = head ? head + 'px' : '';
+    root.paddingBottom = foot ? foot + 'px' : '';
+    if ((!foot && !head) || !document.body) return;
+    let seen = 0;
+    for (const element of document.body.querySelectorAll('*')) {
+      if (++seen > 4000) break;
+      const style = getComputedStyle(element);
+      if (style.position !== 'fixed' && style.position !== 'sticky') continue;
+      const box = element.getBoundingClientRect(), was = {}, tall = box.height >= innerHeight * 0.6;
+      if (!(box.width > 0 && box.height > 0)) continue;
+      const take = (edge, room, reaches) => {
+        if (!reaches) return;
+        if (tall) {
+          const side = edge === 'bottom' ? 'paddingBottom' : 'paddingTop';
+          if (!('boxSizing' in was)) { was.boxSizing = element.style.boxSizing; element.style.boxSizing = 'border-box'; }
+          was[side] = element.style[side];
+          element.style[side] = (parseFloat(style[side]) || 0) + room + 'px';
+        } else if (style[edge] !== 'auto') {
+          was[edge] = element.style[edge];
+          element.style[edge] = (parseFloat(style[edge]) || 0) + room + 'px';
+        }
+      };
+      take('bottom', foot, foot > 0 && box.bottom > innerHeight - foot && box.top < innerHeight);
+      take('top', head, head > 0 && box.top < head && box.bottom > 0);
+      if (Object.keys(was).length) moved.push([element, was]);
+    }
+  };
+  const settleSoon = () => { if (!settle && (foot || head)) settle = setTimeout(lift, 120); };
+  addEventListener('DOMContentLoaded', () => {
+    settleSoon();
+    new MutationObserver(settleSoon).observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden']});
+  }, {once: true});
+  addEventListener('load', settleSoon, {once: true});
+  addEventListener('resize', settleSoon);
+  // A sticky part reaches a room only once it sticks, as the page is read down to it.
+  addEventListener('scroll', settleSoon, {passive: true});
   addEventListener('message', event => {
     const data = event.data, own = event.source === parent && data && data.raphaelPage === 1;
     if (own && data.type === 'scroll-to' && Number.isFinite(data.y)) scrollTo(0, Math.max(0, data.y));
-    // The room the window keeps over the page (R-PAGE-11, R-PAGE-16): the composer at the foot and the header's buttons at the head. It
-    // is the root's own padding, which is page and canvas alike, so the page's first line stands clear under the buttons and its last
-    // clear above the composer, and nothing but the page's own background shows in either.
     if (own && (data.type === 'foot' || data.type === 'head') && Number.isFinite(data.y)) {
-      document.documentElement.style[data.type === 'foot' ? 'paddingBottom' : 'paddingTop'] = Math.max(0, Math.min(2000, Math.round(data.y))) + 'px';
+      const room = Math.max(0, Math.min(2000, Math.round(data.y)));
+      if (data.type === 'foot') foot = room; else head = room;
+      lift();
     }
   });
   // A style sheet the page loads from another host holds all of it back while it comes: nothing is drawn and the page's own

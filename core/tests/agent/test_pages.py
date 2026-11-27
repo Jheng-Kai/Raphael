@@ -982,18 +982,41 @@ def test_the_window_paints_no_background_of_its_own_on_a_page():
     assert "color-scheme:dark" in document(page, "dark") and "color-scheme:light" in document(page, "light")
 
 
-def test_the_helper_says_nothing_of_its_background_and_takes_the_room_under_the_composer():
-    # R-PAGE-11: the frame is the page's window to the window's foot and the composer floats over it, so nothing is painted
-    # behind the composer's row and the page's own background is never reported. The window tells the page how much of its foot
-    # the composer covers (`foot`): the root's own bottom padding, so the page scrolls its last line clear and the canvas
-    # (the page's own background) runs under the composer.
+def test_the_helper_says_nothing_of_its_background_and_takes_the_room_over_the_page():
+    # R-PAGE-11, R-PAGE-16: the frame is the page's window from the window's top edge to its foot and the header's buttons and the
+    # composer float over it, so nothing is painted behind them and the page's own background is never reported. The window tells the
+    # page how much of its head and foot they cover (`head`, `foot`): the root's own padding, so the page's first line stands clear
+    # under the buttons, its last clear above the composer, and its canvas (its own background) runs under both.
     from raphael_core.agent.pages import _HELPER
     assert "post('background'" not in _HELPER and "getComputedStyle(root).backgroundColor" not in _HELPER
     assert "own && (data.type === 'foot' || data.type === 'head') && Number.isFinite(data.y)" in _HELPER
-    assert "style[data.type === 'foot' ? 'paddingBottom' : 'paddingTop'] = Math.max(0, Math.min(2000, Math.round(data.y))) + 'px';" in _HELPER
+    assert "const room = Math.max(0, Math.min(2000, Math.round(data.y)));" in _HELPER
+    assert "root.paddingTop = head ? head + 'px' : '';" in _HELPER and "root.paddingBottom = foot ? foot + 'px' : '';" in _HELPER
     # Only the window that holds the page may say it.
     assert "own = event.source === parent && data && data.raphaelPage === 1;" in _HELPER
     # The helper is a Python string: a backslash in it would be an escape of Python's, not of the page's script.
+    assert "\\" not in _HELPER
+
+
+def test_the_helper_moves_a_fixed_or_sticky_part_clear_of_the_composer_and_the_header():
+    # R-PAGE-16: a rail one window tall (sticky, its buttons at its foot) or a bar at an edge is fixed to the window, so the room the
+    # window keeps would cover it for good. A part as tall as the window takes the room as its own padding (its background still runs to the
+    # edge, what stands at its foot floats clear), a smaller one moves by it; what was moved is put back first at every pass, so
+    # the pass reads the page as the page made it and the page's own inline styles come back when the window is gone.
+    from raphael_core.agent.pages import _HELPER
+    lifting = _HELPER[_HELPER.index("const lift = () => {"):_HELPER.index("const settleSoon")]
+    assert "style.position !== 'fixed' && style.position !== 'sticky'" in lifting
+    assert "tall = box.height >= innerHeight * 0.6" in lifting
+    assert "element.style.boxSizing = 'border-box'" in lifting and "side = edge === 'bottom' ? 'paddingBottom' : 'paddingTop'" in lifting
+    assert "take('bottom', foot, foot > 0 && box.bottom > innerHeight - foot && box.top < innerHeight);" in lifting
+    assert "take('top', head, head > 0 && box.top < head && box.bottom > 0);" in lifting
+    assert "else if (style[edge] !== 'auto')" in lifting
+    # What was moved is put back before anything is read again.
+    assert lifting.index("for (const [element, was] of moved)") < lifting.index("querySelectorAll('*')")
+    # It runs when the window says a room, when the page has loaded and when the page changes or the window is resized.
+    assert "addEventListener('resize', settleSoon)" in _HELPER and "new MutationObserver(settleSoon)" in _HELPER
+    # A sticky part reaches a room only once it sticks, as the page is read down to it.
+    assert "addEventListener('scroll', settleSoon, {passive: true})" in _HELPER
     assert "\\" not in _HELPER
 
 

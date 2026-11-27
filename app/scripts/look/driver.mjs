@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { assertStableClick, stableSnapshot, stableControls } from "./stable-click.mjs";
 import { checkFrame, checkRendered } from "./checks.mjs";
-import { pageBand } from "./page-band.mjs";
+import { pageBand, pageCovered } from "./page-band.mjs";
 import { idleCost, paintedSlime, slimeBoard, slimeParts, slimePointer, slimeSharp } from "./slime-board.mjs";
 import { eventStorm } from "./event-storm.mjs";
 import { placesProblems, slimePlaces } from "./slime-places.mjs";
@@ -543,6 +543,8 @@ export async function perform(page, step, evidenceDirectory) {
     // What the screen shows around a page's content (R-PAGE-10, R-PAGE-11): no band of the window's own colour above it (`where: "top"`) or below it
     // (`"end"`, the page read to its end), the page's last line clear of the composer, and the page's colour down to the window's foot.
     case "page-band": return pageBand(page, await waitForPageFrame(page), step.where, checkFrame);
+    // Nothing the page offers to press stands under the composer or the header's buttons (R-PAGE-16), read in the frame against their places.
+    case "page-covered": return pageCovered(page, await waitForPageFrame(page), step.where, checkFrame);
     case "frame-expect": {
       const deadline = Date.now() + 8000;
       for (;;) {

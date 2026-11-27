@@ -40,6 +40,8 @@ export const frameExpect = (text, scrollAtLeast) => ({ action: "frame-expect", .
 export const frameCheck = name => ({ action: "frame-check", name });
 // What the screen shows above ("top") or below ("end") an open page's content, read from a real capture (page-band.mjs).
 export const pageBand = where => ({ action: "page-band", where });
+// Nothing the page offers to press stands under the composer or the header's buttons: at its "top", at its "end", or what is "stuck" to the window.
+export const pageCovered = where => ({ action: "page-covered", where });
 export const scroll = selector => ({ action: "scroll", selector });
 export const waitScrollEnd = selector => ({ action: "wait-scroll-end", selector });
 export const rightClick = selector => ({ action: "right-click", selector });

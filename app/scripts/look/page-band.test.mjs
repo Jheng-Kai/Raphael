@@ -50,7 +50,7 @@ it("a band of the window's own colour above, below or beside the page is the fai
   expect(bandProblems(plan, measure, [[245, 241, 227], page], page)).toEqual([]);
   expect(bandProblems(plan, measure, [black, page], page)[0]).toMatch(/above the content shows rgb\(10, 10, 10\) where the page paints rgb\(247, 241, 227\)/);
   expect(bandProblems(plan, measure, [page, black], page)[0]).toMatch(/window's foot shows rgb\(10, 10, 10\)/);
-  // A page that paints nothing of its own is judged against its own corner: every place shows the one colour.
+  // A page that paints nothing of its own is judged against the area's own colour behind it: every place shows that one colour.
   const bare = { ...measure, canvas: null };
   expect(bandProblems(plan, bare, [black, black], black)).toEqual([]);
   expect(bandProblems(plan, bare, [[255, 255, 255], black], black)).toHaveLength(1);
