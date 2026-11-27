@@ -32,8 +32,6 @@
   --layout-workspace-max: calc(55 * var(--sp-6));
   --fs-2xs: 12px; --fs-xs: 13px; --fs-sm: 14px; --fs-md: 15px; --fs-lg: 18px; --fs-h1: 22px;
   --weight-regular: 400; --weight-medium: 500; --weight-semibold: 500;
-  /* Bold in written words (a message, a reply, the composer): the interface stays at 500, `**words**` must read as bold. */
-  --weight-bold: 600;
   --r-sm: 8px; --r-md: 12px; --r-lg: 12px; --r-pill: 999px;
   /* Controls are slim: a button's height hugs its
      words (「上下高度會剛好貼齊文字」), every button and every menu row takes its height from these and nowhere else

@@ -2373,7 +2373,7 @@ shortcut never fires on a value written into the field; `paste(selector, { html,
 - `composer-rich-bubble-lists`, `composer-rich-bubble-blocks`: sent messages drawn again from their finished turns (short, wrapping and
   nested numbered lists, numbers past 9, tasks, a quote first, only code) stand on the bubble's own padding; every number has room,
   inner bullets are hollow and hug their item, and task boxes are the composer's in the bubble's colours (R-COMPOSER-RICH-06).
-- `composer-rich-bubble-marks`: sent bold (600, against the words' 400), italic, strike, code, an address, a table, an open toggle, a
+- `composer-rich-bubble-marks`: sent bold, italic, strike, code, an address, a table, an open toggle, a
   display equation and a divider, each in the bubble's words colour; the divider is never the browser's grey.
 - `composer-rich-room`, `composer-rich-docs`: a group's composer takes the same shortcuts; a Google Docs copy keeps its nested list.
 

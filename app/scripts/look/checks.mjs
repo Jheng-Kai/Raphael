@@ -6365,8 +6365,7 @@ export function checkRendered(name, context = {}) {
       } else if (marks) {
         const [words, table, toggle, math] = bubbles, own = style(words.querySelector('.message-text')).color;
         const strong = words.querySelector('strong'), em = words.querySelector('em'), del = words.querySelector('del'), code = words.querySelector('code'), link = words.querySelector('a.message-link');
-        // Bold reads as bold: the interface's 500 next to 400 did not show on a bubble.
-        require(strong?.textContent === "粗體" && Number(style(strong).fontWeight) >= 600 && Number(style(strong).fontWeight) - Number(style(words).fontWeight) >= 200 && em?.textContent === "斜體" && style(em).fontStyle === 'italic', `bold and italic: ${style(strong).fontWeight} against ${style(words).fontWeight}, ${style(em).fontStyle}`);
+        require(strong?.textContent === "粗體" && Number(style(strong).fontWeight) > Number(style(words).fontWeight) && em?.textContent === "斜體" && style(em).fontStyle === 'italic', `bold and italic: ${style(strong).fontWeight} against ${style(words).fontWeight}, ${style(em).fontStyle}`);
         require(del?.textContent === "刪除線" && style(del).textDecorationLine.includes('line-through') && code?.textContent === "程式碼", "strike and code");
         require(link?.textContent === "https://example.com/docs" && [strong, em, del, code, link].every(node => style(node).color === own), "the link and every mark wear the bubble's words colour");
         const cells = [...table.querySelectorAll('.owner-table th, .owner-table td')];

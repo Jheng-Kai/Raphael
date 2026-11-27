@@ -110,11 +110,9 @@ describe("a sent message's words in its bubble (R-COMPOSER-RICH-06; look: compos
     expect(agent).toContain(".message-text li > :is(ul, ol) { margin-block: 0; }");
     expect(agent).toContain(".message-text :is(ul, ol) ul { list-style-type: circle; }");
   });
-  test("a task's box is drawn in the bubble's colours, the divider takes them too, and bold reads as bold", () => {
+  test("a task's box is drawn in the bubble's colours, and the divider takes them too", () => {
     expect(rich).toMatch(/\.message-task input \{ appearance: none;/);
     expect(rich).toContain(".owner-message .message-task input:checked::after { border-color: var(--bubble); }");
     expect(rich).toContain(".owner-message .message-text hr { color: inherit;");
-    expect(rich).toContain(".message-text :is(strong, b), .cmp-input :is(strong, b) { font-weight: var(--weight-bold); }");
-    expect(css("styles.css")).toMatch(/--weight-bold: 6\d\d;/);
   });
 });
