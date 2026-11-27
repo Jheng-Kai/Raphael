@@ -1,5 +1,6 @@
 // What the helpers around the composer's field (the @ chips, the menus' anchor, the history walk) may ask of it beyond the words,
 // without loading the editor: composer-rich-field.ts makes the field and puts this handle on it.
+import type { Editor } from "@tiptap/core";
 import type { EditorView } from "prosemirror-view";
 
 /** A stretch of the words drawn as a chip by whoever knows what it is (mention-field.ts): an address, a skill, a mention. */
@@ -11,10 +12,14 @@ export interface RichChip {
 
 export interface RichField {
   readonly view: EditorView;
+  /** The TipTap editor that holds it, for what floats over it (composer-rich-toolbar.ts). */
+  readonly editor: Editor;
   /** Where the caret would stand at an offset of the text, in the page's coordinates. */
   caretRect(offset: number): DOMRect;
   /** The chips to draw over the words; drawn again at every change of the words. */
   setChips(chips: readonly RichChip[]): void;
+  /** Tells the field what Mod+K opens: the link editor of the words selected. */
+  onLink(open: () => boolean): void;
   destroy(): void;
 }
 

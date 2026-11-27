@@ -1,8 +1,7 @@
 // The parts of the field that are more than a tag: a toggle's arrow, a task's box, an equation drawn by KaTeX.
 import type { Node as PMNode } from "prosemirror-model";
-import { Selection, TextSelection } from "prosemirror-state";
+import { TextSelection } from "prosemirror-state";
 import type { EditorView, NodeView } from "prosemirror-view";
-import { composerNodes as N } from "./composer-rich-schema";
 import { mathHTML } from "./math-html";
 import { t } from "./i18n";
 
@@ -26,7 +25,7 @@ function press(element: HTMLElement, act: () => void): void {
 const reaches = (event: Event, ...controls: (HTMLElement | undefined)[]): boolean => controls.some(element => element?.contains(event.target as Node));
 
 /** A toggle: the summary's line with its arrow, and what is under it while it is open. */
-class ToggleView implements NodeView {
+export class ToggleView implements NodeView {
   dom = document.createElement("div");
   contentDOM = this.dom;
   constructor(private node: PMNode) { this.dom.className = "cmp-toggle"; this.draw(); }
@@ -44,7 +43,7 @@ class ToggleView implements NodeView {
   }
 }
 
-class SummaryView implements NodeView {
+export class SummaryView implements NodeView {
   dom = document.createElement("div");
   contentDOM = document.createElement("div");
   private arrow = control("span", "cmp-toggle-arrow");
@@ -79,7 +78,7 @@ class SummaryView implements NodeView {
     this.view.focus();
   }
   update(node: PMNode): boolean {
-    if (node.type !== N.summary) return false;
+    if (node.type.name !== "summary") return false;
     queueMicrotask(() => this.label());
     return true;
   }
@@ -88,7 +87,7 @@ class SummaryView implements NodeView {
 }
 
 /** An item of a list: a plain one is the browser's, a task has its box. */
-class ItemView implements NodeView {
+export class ItemView implements NodeView {
   dom = document.createElement("li");
   contentDOM: HTMLElement;
   private box?: HTMLElement;
@@ -126,7 +125,7 @@ class ItemView implements NodeView {
 }
 
 /** An inline equation: one unit, drawn; Backspace after it puts its source back (composer-rich-field.ts). */
-class MathInlineView implements NodeView {
+export class MathInlineView implements NodeView {
   dom = control("span", "cmp-math");
   constructor(private node: PMNode) { this.draw(); }
   private draw(): void {
@@ -144,7 +143,7 @@ class MathInlineView implements NodeView {
 }
 
 /** A display equation: the LaTeX the owner writes, and the equation drawn under it. */
-class MathBlockView implements NodeView {
+export class MathBlockView implements NodeView {
   dom = document.createElement("div");
   contentDOM = document.createElement("div");
   private shown = control("div", "cmp-math-shown");
@@ -168,14 +167,3 @@ class MathBlockView implements NodeView {
   stopEvent(event: Event): boolean { return reaches(event, this.shown); }
   ignoreMutation(mutation: { target: Node }): boolean { return !this.contentDOM.contains(mutation.target); }
 }
-
-export const composerNodeViews = {
-  details: (node: PMNode) => new ToggleView(node),
-  summary: (_node: PMNode, view: EditorView, position: Position) => new SummaryView(view, position),
-  list_item: (node: PMNode, view: EditorView, position: Position) => new ItemView(node, view, position),
-  math_inline: (node: PMNode) => new MathInlineView(node),
-  math_block: (node: PMNode) => new MathBlockView(node),
-};
-
-/** The caret at the end of the toggle's title, for when its arrow closes what the caret was in. */
-export const endOfTitle = (doc: PMNode, at: number): Selection => TextSelection.create(doc, at);
