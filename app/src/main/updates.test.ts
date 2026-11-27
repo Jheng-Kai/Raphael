@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from "vitest";
 import * as api from "./api";
-import { installedUpdateNotice, updateHTML } from "./updates";
+import { updateHTML } from "./updates";
 import { mountUpdateNotice } from "./update-notice";
 import { mountNewerDataUpdate } from "./missing";
 import { toaster } from "./ui";
@@ -11,17 +11,11 @@ vi.mock("./api", () => ({ updateControl: vi.fn() }));
 vi.mock("./ui", async original => ({ ...await original<typeof import("./ui")>(), toaster: { info: vi.fn() } }));
 afterEach(() => { vi.useRealTimers(); document.body.replaceChildren(); vi.clearAllMocks(); vi.restoreAllMocks(); setLocale("zh-TW"); });
 
-it("keeps the installation receipt until the owner can see its one notice", async () => {
-  let hidden = true;
-  vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
-  vi.mocked(api.updateControl).mockResolvedValue({ state:"idle", version:"", notes:"", error:"", installed:"1.1.0" });
-  await installedUpdateNotice();
+it("has no toast for an update that finished installing (R-TOAST-01)", async () => {
+  const updates = await import("./updates");
+  expect(Object.keys(updates)).not.toContain("installedUpdateNotice");
   expect(api.updateControl).not.toHaveBeenCalled();
-  hidden = false;
-  document.dispatchEvent(new Event("visibilitychange"));
-  await vi.waitFor(() => expect(toaster.info).toHaveBeenCalledOnce());
-  document.dispatchEvent(new Event("visibilitychange"));
-  expect(api.updateControl).toHaveBeenCalledExactlyOnceWith("receipt");
+  expect(toaster.info).not.toHaveBeenCalled();
 });
 
 it("renders escaped release notes and a disabled background check without making requests", () => {

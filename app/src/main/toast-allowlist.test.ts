@@ -23,10 +23,20 @@ const failureKeys = [
 
 // The result lives outside the current view, or the message asks the owner to review it.
 const unseenKeys = [
-  "cards.templateLinkCopied", "chat.quotaLow", "chat.quotaReset", "common.keyPasteHint",
-  "conn.connected", "conn.relogged", "conn.revokeInApp", "keychain.asked", "mail.updated", "mcp.testOk",
-  "models.filled", "page.report.downloads", "page.report.saved", "picker.replaced",
-  "rooms.deleted", "settings.085", "update.installed",
+  "chat.quotaLow", "chat.quotaReset", "common.keyPasteHint",
+  "conn.revokeInApp", "mail.updated", "mcp.testOk", "picker.replaced",
+  "rooms.deleted", "settings.085",
+];
+
+// Toasts that were removed because they only repeated what the screen shows (R-TOAST-01). Their words stay out of the
+// catalogs and their keys out of the sources: a toast that comes back must be argued for in the lists above, not slip in.
+const removedKeys = [
+  "cards.templateLinkCopied", // the card shows the link and its copy button
+  "conn.connected", "conn.relogged", // the app's own card shows it is connected
+  "keychain.asked", // the press that asked again is its own answer
+  "models.filled", // the choices on screen show the models a connected source filled
+  "page.report.downloads", "page.report.saved", // the file is shown selected in its folder
+  "update.installed", // the About page shows the version
 ];
 
 // These notices contain a recovery, navigation or undo action.
@@ -193,4 +203,18 @@ test("toast messages use only the allowlisted keys and existing message producer
     visit(source);
   }
   expect(unexpected, "A new toast needs a reason the current view cannot show its result").toEqual([]);
+});
+
+test("the toasts that only repeated what the screen shows stay removed", () => {
+  const files = readdirSync(main, { recursive: true, encoding: "utf8" }).map(path => path.replace(/\\/g, "/")).filter(path => path.endsWith(".ts") && !path.endsWith(".test.ts"));
+  const comeBack: string[] = [];
+  for (const file of files) {
+    const code = readFileSync(join(main, file), "utf8");
+    for (const key of removedKeys) {
+      // A catalog defines it, or a source names it as a message.
+      if (new RegExp(`["'\`]${key.replace(/\./g, "\\.")}["'\`]`).test(code)) comeBack.push(`${file}: ${key}`);
+    }
+  }
+  expect(comeBack, "A removed toast came back: R-TOAST-01 lists the only reasons for a toast").toEqual([]);
+  for (const key of removedKeys) expect(allowedKeys.has(key), key).toBe(false);
 });

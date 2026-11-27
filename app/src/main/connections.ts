@@ -1413,7 +1413,6 @@ export function createConnections(host: ConnectionsHost): Connections {
     login = null;
     if (result.connected) {
       loginError = null;
-      if (!host.visible() && !dialogOpen()) toaster.info(t(again ? "conn.relogged" : "conn.connected", { p0: name }));
     } else if (result.error !== "cancelled") {
       // Closing or replacing a page discards its pending failure as well as its visible one.
       if (!fromDialog || open === fromDialog) loginError = { target: key, kind: result.error ?? "error" };

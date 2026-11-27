@@ -1425,7 +1425,7 @@ npm run look -- opener-toggle-connect-apps opener-toggle-settings opener-toggle-
 ## A member shared by one link
 
 R-SHARE-01. With the owner's share service set (`SHARE_URL`, share-template/), the template card's primary button is 複製連結: the core
-sends the recipe to the service and keeps the link and its key; the page copies the link and says 已複製連結. The shared card shows its
+sends the recipe to the service and keeps the link and its key; the page copies the link, and no toast says so (R-TOAST-01): the card shows it. The shared card shows its
 link, 複製連結 again (nothing is sent) and 停止分享. With no service the card offers 儲存檔案 as primary and 查看內容, including legacy published cards. Whoever opens the link
 sees the service's preview page and downloads the .raphael-member file, which opens in the import review.
 

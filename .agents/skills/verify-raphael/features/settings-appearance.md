@@ -529,8 +529,8 @@ npm run look -- keychain-refused keychain-asked --theme both --width 1120,720,19
 
 `keychain-refused` replays the shell's event twice and checks one toast with the exact words, its status role,
 its one button beside or under the words, the toast inside the window and clear of the composer, and that
-nothing is asked again before the press. `keychain-asked` presses it: the core is asked once, the toast goes and
-the note of what happens next stands (on a Mac it names Always Allow). The core's door has pytest (`core/tests/test_keychain.py`), the toast vitest
+nothing is asked again before the press. `keychain-asked` presses it: the core is asked once, the toast goes and nothing more is said (R-TOAST-01).
+It says no word after it. The core's door has pytest (`core/tests/test_keychain.py`), the toast vitest
 (`keychain-refused.test.ts`), the shell's pass-through cargo (`commands.rs`). The real Keychain's attribute
 read is not reached by any test: it was checked by hand on a Mac with the Keychain's user interaction turned off,
 so no question could be shown.
