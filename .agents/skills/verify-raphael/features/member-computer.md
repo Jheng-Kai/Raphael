@@ -2525,11 +2525,16 @@ text tests and the host Computer scenario cover it; no screen shows it.
 R-COMP-CERT-01. Chrome's certificate chooser needs a window, so a certificate step starts Raphael's
 Chrome once more where the owner sees it, keeps every member's tab (same identity, set up and opened
 again, session cookies carried), and leaves that Chrome running with its window out of the way once
-the owner presses Done. It is the background Chrome again only when Chrome starts anew. Core:
+the owner presses Done. That Chrome outlives the app (quit or update leave it running, noted in the
+profile; the next start takes it over, its old pages closed but one blank one), so the certificate
+still works after a restart; it is the background Chrome again only when that Chrome is gone. Core:
 `tests/computer/test_host_certificate.py` (the decision, the rebinding with two members' tabs on the
 Mac and Windows branches, the failure and busy-tab cases, and one native Chrome test that runs on this
 Windows PC: hidden desktop, then a window on the owner's own desktop, then out of the way, then hidden
-again at the next start). App: `computer-card.test.ts`, `desktop-timeline.test.ts`.
+again at the next start) and `tests/computer/test_host_shown_chrome.py` (leaving it running at quit,
+taking it over at the next start, stale and gone Chromes, and a native Chrome test: quit the app side,
+start again, the same Chrome and its in-memory cookie). App: `computer-card.test.ts`,
+`desktop-timeline.test.ts`.
 
 ```powershell
 npm run look -- desktop-host-certificate-card desktop-host-certificate --theme both --width 1120,720,1920x1080
@@ -2539,4 +2544,6 @@ The card and the larger view say that a Chrome window opened on the screen and n
 (`memberComputer.certificate`, all fifteen languages; `--locale` shows one). Not proved offline: the
 chooser itself, the window on a Mac's screen and its minimized state (does a minimized Chrome keep
 painting the tabs the Computer view streams), the Windows window coming to the front, and a real site
-that requires a certificate; they need a Mac and such a site.
+that requires a certificate; they need a Mac and such a site. The Mac's survival of the app quit (a
+plain subprocess in its own session, taken over by its process id) is not run here either; Windows's is
+(the native test, and a Chrome made to leave the app's job).
