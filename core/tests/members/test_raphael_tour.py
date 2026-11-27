@@ -36,7 +36,7 @@ async def test_an_empty_raphael_conversation_begins_the_tour_with_its_own_welcom
         "ask_owner", "asked", CARD["question"], CARD["options"], True)
     assert offered(client.chat_calls[0]) == ["ask_owner"]
     system = client.chat_calls[0]["messages"][0]["content"]
-    assert TOUR in system and "<persona>" in system and "a slime with an analytical mind" in system
+    assert TOUR in system and "<persona>" in system and "the app's own slime" in system
     assert "<new_member" not in system and "newly created assistant" not in system
 
 

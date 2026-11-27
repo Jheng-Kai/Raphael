@@ -88,9 +88,9 @@ def test_raphael_is_a_slime_who_names_itself_in_the_first_person_never_as_a_plac
     from raphael_core.agent.persona import TOUR, _raphael_persona
 
     prompt = _raphael_persona()
-    assert "You are Raphael, a slime" in prompt and "not one of your master's team of slimes" in prompt
+    assert "You are Raphael, the app's own slime" in prompt
     assert "analytical intelligence" not in prompt
-    assert "「我是拉斐爾」" in prompt and "never as a place" in prompt and "「這裡是拉斐爾」" in prompt
+    assert "「我是拉斐爾」" in prompt and "never 「這裡是拉斐爾」" in prompt
     assert "naming yourself in the first person" in TOUR
 
 
