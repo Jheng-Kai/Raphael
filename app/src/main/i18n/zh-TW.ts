@@ -45,7 +45,7 @@ export const zhTW = {
   "memberComputer.setup": "請幫我設定隔離電腦（Docker）。",
   "memberComputer.certificate": "螢幕上開了一個 {p0} 視窗，請在那裡選擇憑證，再按「{p1}」。",
   "memberComputer.certificateAuto": "正在用你的憑證登入 {p0}。",
-  "memberComputer.certificateAutoKeychain": "正在用你的憑證登入 {p0}。如果 macOS 詢問 Chrome 能否使用，請選「一律允許」。",
+  "memberComputer.certificateAutoKeychain": "正在用你的憑證登入 {p0}。如果 macOS 詢問 Chrome 能否使用，請選「永遠允許」。",
   "memberComputer.certificateUnmatched": "Chrome 無法自己為這個網站選擇憑證。螢幕上開了一個 {p0} 視窗，請在那裡選擇憑證，再按「{p1}」。",
   "memberComputer.certificateRefused": "電腦不允許 Chrome 使用這張憑證。螢幕上開了一個 {p0} 視窗，請在那裡選擇憑證並在詢問時允許，再按「{p1}」。",
   "memberComputer.verification": "請在 {p0} 輸入驗證碼。",
