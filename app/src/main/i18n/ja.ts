@@ -1,3 +1,4 @@
+import { tourJa } from "./tour-catalogs";
 import { navJa } from "./nav-catalogs";
 import { homeJa } from "./home-catalogs";
 import { reviewJa } from "./review-catalogs";
@@ -2100,4 +2101,5 @@ export const ja = {
   "report.allWellNoLimit": "《告。全システム正常。》",
   "usage.weeklyOpus": "週間枠 · Opus",
   "usage.weeklySonnet": "週間枠 · Sonnet",
+  ...tourJa,
 } satisfies Messages;

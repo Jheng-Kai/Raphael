@@ -1,3 +1,4 @@
+import { tourPtBR } from "./tour-catalogs";
 import type { Messages } from "./zh-TW";
 
 export const ptBR = {
@@ -2286,4 +2287,5 @@ export const ptBR = {
   "report.allWellNoLimit": "《Aviso. Tudo certo.》",
   "usage.weeklyOpus": "Limite semanal · Opus",
   "usage.weeklySonnet": "Limite semanal · Sonnet",
+  ...tourPtBR,
 } satisfies Messages;

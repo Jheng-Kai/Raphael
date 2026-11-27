@@ -19,7 +19,7 @@ const MAP = {
   fileDown: "file-down", fileArchive: "file-archive", fileText: "file-text", gauge: "gauge", gridPlus: "grid-2x2-plus",
   alert: "circle-alert", success: "circle-check", volume: "volume-2", volumeOff: "volume-x",
   app: "blocks", slash: "square-slash",
-  hand: "hand", scroll: "scroll-text", zap: "zap", warning: "triangle-alert", unplug: "unplug",
+  hand: "hand", scroll: "scroll-text", zap: "zap", warning: "triangle-alert", unplug: "unplug", compass: "compass",
   // The composer's formats (composer-rich-toolbar.ts).
   bold: "bold", italic: "italic", underline: "underline", strike: "strikethrough", codeInline: "code-xml", highlight: "highlighter", unlink: "unlink",
   heading1: "heading-1", heading2: "heading-2", heading3: "heading-3", bullets: "list", numbers: "list-ordered", tasks: "list-todo", quote: "quote",

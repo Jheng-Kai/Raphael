@@ -1,3 +1,4 @@
+import { tourTr } from "./tour-catalogs";
 import type { Messages } from "./zh-TW";
 
 export const tr = {
@@ -2286,4 +2287,5 @@ export const tr = {
   "report.allWellNoLimit": "《Bildirim. Her şey yolunda.》",
   "usage.weeklyOpus": "Haftalık limit · Opus",
   "usage.weeklySonnet": "Haftalık limit · Sonnet",
+  ...tourTr,
 } satisfies Messages;

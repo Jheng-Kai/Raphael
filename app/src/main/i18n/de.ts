@@ -1,3 +1,4 @@
+import { tourDe } from "./tour-catalogs";
 import type { Messages } from "./zh-TW";
 
 export const de = {
@@ -2286,4 +2287,5 @@ export const de = {
   "report.allWellNoLimit": "《Hinweis. Alles in Ordnung.》",
   "usage.weeklyOpus": "Wochenlimit · Opus",
   "usage.weeklySonnet": "Wochenlimit · Sonnet",
+  ...tourDe,
 } satisfies Messages;

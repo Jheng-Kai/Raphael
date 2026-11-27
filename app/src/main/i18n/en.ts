@@ -1,3 +1,4 @@
+import { tourEn } from "./tour-catalogs";
 import { navEn } from "./nav-catalogs";
 import { homeEn } from "./home-catalogs";
 import { reviewEn } from "./review-catalogs";
@@ -2100,4 +2101,5 @@ export const en = {
   "report.allWellNoLimit": "《Notice. All is well.》",
   "usage.weeklyOpus": "Weekly limit · Opus",
   "usage.weeklySonnet": "Weekly limit · Sonnet",
+  ...tourEn,
 } satisfies Messages;
