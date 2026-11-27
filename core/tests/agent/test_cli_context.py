@@ -77,8 +77,8 @@ def test_a_codex_model_starts_from_codex_window_before_it_reports_its_own():
     assert window == KNOWN_CONTEXT_TOKENS["codex"] >= 200_000
     document = "Step. " * 8_000  # a 48 KB SKILL.md
     assert document in fresh_user(document, (), (), RECOVER, "records", window=window, reserve=40_000)
-    with pytest.raises(ValueError, match="context_overflow"):  # what the 64K default left beside a 40 KB system prompt
-        fresh_user(document, (), (), RECOVER, "records", window=None, reserve=40_000)
+    with pytest.raises(ValueError, match="context_overflow"):  # what the old 64K guess left beside a 40 KB system prompt
+        fresh_user(document, (), (), RECOVER, "records", window=64_000, reserve=40_000)
 
 
 async def test_a_codex_members_first_turn_after_a_start_reaches_codex_with_a_long_skill(monkeypatch, tmp_path):
@@ -95,6 +95,24 @@ async def test_a_codex_members_first_turn_after_a_start_reaches_codex_with_a_lon
     result = await rig.loop.run()
     assert result.final == "Done with the skill." and rig.loop.failure is None
     assert len(rig.calls) == 1 and request in rig.calls[0]["user"]
+
+
+async def test_a_brain_whose_window_is_unknown_is_asked_and_never_refused_on_a_guess(monkeypatch, tmp_path):
+    """A CLI whose window Raphael has no figure for (Antigravity, any newer agent) was measured against the 64K default and a
+    long request was refused by Raphael itself, never asked. With no known window the brain itself decides; an overflow it
+    reports goes through the usual recovery."""
+    async def play(loop, attempt):
+        yield Event("final", "Done.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain="gemini")
+    request = "/weekly-report this week\n\n" + "Follow this step of the skill. " * 1500  # a 46 KB request
+    rig.loop.system = "Keep the owner's scope. " * 1250  # a 30 KB system prompt
+    rig.loop.user = rig.loop.owner_text = request
+    result = await rig.loop.run()
+    assert result.final == "Done." and rig.loop.failure is None
+    assert len(rig.calls) == 1 and request in rig.calls[0]["user"]
+    with pytest.raises(ValueError, match="context_overflow"):  # a known window still refuses what cannot fit
+        fresh_user(request, (), (), RECOVER, "records", window=8_000)
 
 
 def test_the_fresh_budget_grows_with_the_models_window_and_leaves_room_for_the_turn():

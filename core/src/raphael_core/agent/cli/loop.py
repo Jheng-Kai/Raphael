@@ -34,7 +34,7 @@ from ..policy import CONFIRM_TIMEOUT_S, EXPIRED_NOTE
 from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
 from .context import (KNOWN_CONTEXT_TOKENS, context_tokens, fresh_user, line_hashes, resumed_user,
-                      should_compact, window_tokens)
+                      should_compact)
 from .process import secure_directory
 from .native_diagnostics import capture as native_capture
 from . import records
@@ -852,7 +852,10 @@ class CliLoop:
                 or KNOWN_CONTEXT_TOKENS.get((brain_ref(self.model) or ("",))[0]))
 
     def _fresh_user(self):
-        window = window_tokens(self._usage.get("context_window"), self._context_state.get("window"), self._context_window)
+        # The window the model reported or is known to hold; None when nothing is known, and then the brain itself decides
+        # whether the request fits (a 64K guess refused long requests no model was asked about).
+        window = next((value for value in (self._usage.get("context_window"), self._context_state.get("window"), self._context_window)
+                       if type(value) is int and value > 0), None)
         self._context_window = window
         user = fresh_user(self.owner_text, self.attachments,
             [message["content"] for message in self.tool_messages if message["role"] == "user"],
