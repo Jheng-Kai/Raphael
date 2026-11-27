@@ -40,9 +40,9 @@ def openssl():
     return found or r"C:\Program Files\Git\usr\bin\openssl.exe"
 
 
-def run(*argv, check=True):
+def run(*argv, check=True, environment=None):
     result = subprocess.run([str(item) for item in argv], capture_output=True, text=True,
-                            env={**os.environ, "MSYS_NO_PATHCONV": "1", "MSYS2_ARG_CONV_EXCL": "*"})
+                            env={**os.environ, "MSYS_NO_PATHCONV": "1", "MSYS2_ARG_CONV_EXCL": "*", **(environment or {})})
     if check and result.returncode:
         raise SystemExit(f"{argv[0]} failed ({result.returncode}): {result.stderr.strip() or result.stdout.strip()}")
     return result
@@ -115,7 +115,11 @@ def thumbprint(pem):
 
 
 def powershell(script):
-    return run("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
+    # Windows PowerShell with its own modules: a PowerShell 7 parent leaves a module path it cannot load them from.
+    system = os.environ.get("SystemRoot", r"C:\Windows")
+    modules = rf"{system}\system32\WindowsPowerShell1.0\Modules"
+    return run(rf"{system}\System32\WindowsPowerShell1.0\powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script,
+               environment={"PSModulePath": modules})
 
 
 def main():
