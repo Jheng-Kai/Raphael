@@ -482,6 +482,15 @@ async def test_every_start_of_a_chrome_writes_the_recorded_origins_before_it_lau
     assert seen == [False, True]
 
 
+@pytest.mark.parametrize(("system", "seconds"), [("darwin", 60), ("win32", 15), ("linux", 15)])
+def test_the_page_waits_a_minute_where_the_keychain_may_ask_the_owner_and_a_quarter_of_that_where_nothing_is_asked(
+        monkeypatch, system, seconds):
+    monkeypatch.setattr(host_browser.sys, "platform", system)
+    assert host_browser.auto_wait_s() == seconds
+    monkeypatch.setattr(host_browser, "AUTO_WAIT_S", 0.05)  # a test's own short wait wins everywhere
+    assert host_browser.auto_wait_s() == 0.05
+
+
 def tab_at(fake, tmp_path, url="https://ef.example.test:8443/", requested=""):
     gate = fake.add("gate", 1, tmp_path, url)
     gate.requested = requested

@@ -269,6 +269,9 @@ AUTO_ORIGINS = 64  # origins kept; the oldest go first
 # How long a page gets to load once Chrome is told to choose the certificate by itself. macOS may ask the owner whether Chrome may
 # use the certificate's key meanwhile, and a Chrome that finds nothing to choose never answers.
 AUTO_WAIT_S = 60
+# Where nothing asks the owner anything while Chrome chooses (Windows), the page loads in about three seconds after Chrome is
+# started again (measured on a real Windows Chrome), so a page still waiting after this is waiting for a certificate that is not there.
+AUTO_WAIT_NO_PROMPT_S = 15
 # The value of the setting: one filter with nothing in it, which matches every certificate Chrome has to offer.
 AUTO_SETTING = {"filters": [{}]}
 DOWNLOADS = Path(".raphael") / "downloads"  # where a page's download is placed in the member's work folder (#331)
@@ -591,6 +594,12 @@ def page_url(value):
     except ValueError:
         pass
     raise BrowserError("browser_url")
+
+
+def auto_wait_s():
+    """How long the page that asked gets once Chrome is told to choose by itself: a minute on a Mac, where the keychain may ask
+    the owner whether Chrome may use the key meanwhile, and a quarter of that elsewhere, where nothing is asked."""
+    return AUTO_WAIT_S if sys.platform == "darwin" else min(AUTO_WAIT_S, AUTO_WAIT_NO_PROMPT_S)
 
 
 def certificate_origin(url):
@@ -1486,7 +1495,7 @@ class HostBrowser:
             if navigation is None:
                 raise BrowserError("browser_tab_changed")
             try:
-                async with asyncio.timeout(AUTO_WAIT_S):
+                async with asyncio.timeout(auto_wait_s()):
                     result = await navigation
             except TimeoutError:
                 result = {"errorText": "net::ERR_SSL_CLIENT_AUTH_CERT_NEEDED"}
