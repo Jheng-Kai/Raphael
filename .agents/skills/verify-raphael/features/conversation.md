@@ -1694,7 +1694,7 @@ narrow column: the fields, then what 測試連線 found right under them, then t
 The test runs on the typed values with nothing saved (the mock `providers.test` answers a local server's two models, and refuses a key
 spelled `look-refused-key`); the page where a key is made is plain blue text on the key field's label line. `settings-provider-editor`
 (OpenAI, key typed, tested), `settings-provider-editor-refused` (one line, no models), `settings-provider-editor-local` (LM Studio, no
-key, tested before it is saved), `settings-provider-editor-saved` (a saved server lists its models, 移除 at the left) and the guide's
+key, tested before it is saved), `settings-provider-editor-saved` (a saved server lists its models, is tested as it stands, 移除 at the left and 再新增一個 a framed button) and the guide's
 `onboarding-provider-editor` run the `provider-editor` and `provider-editor-tested` checks: a narrow dialog, every field as wide as the
 column, the foot closing the dialog, no sentence about saving first, an empty list or 64K, and the result and the models under the last field.
 

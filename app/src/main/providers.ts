@@ -125,7 +125,7 @@ function dialogHTML(v: ProvidersView, lead = ""): string {
     // One column: the fields, what the test found right under them, then the way to add another. The actions are in the foot.
     `<div class="pv-body"><div class="pv-setup">` + fields + (v.error ? `<p class="note" role="alert">${esc(errorText(v.error))}</p>` : "") +
     `<div class="pv-feedback">${feedbackHTML(v)}</div><div class="pv-models-host">${modelsHTML(v)}</div>` +
-    (provider && allowsMultiple(kind) ? btn(esc(t("providers.another")), "pv-link", ` data-pv="another" data-k="pv-another"${disabled}`) : "") +
+    (provider && allowsMultiple(kind) ? btn(esc(t("providers.another")), "", ` data-pv="another" data-k="pv-another"${disabled}`) : "") +
     `</div></div>` +
     `<div class="pv-footer">` +
     (v.open.id ? btn(esc(t("providers.remove")), "danger", ` data-pv="remove" data-k="pv-remove"${disabled}`) : "") +
