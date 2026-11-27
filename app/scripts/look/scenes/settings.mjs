@@ -266,6 +266,18 @@ export default [
   scene("onboarding-service-waiting", "A tile waiting for its sign-in keeps its words inside it in every language", [...named, click('[data-ob="next"]'), wait('[data-ob-services] .ob-tile'), click('[data-item="linear"][data-ob="conn-login"]'), wait('[data-item="linear"] [data-ob="conn-cancel"]'), check("onboarding-services")], { onboarding: true, pluginsConnecting: true }),
   scene("onboarding-abilities", "First-run step 4: the abilities as Settings › 工具's rows, each saying what it uses, with its switch", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-svc="toggle"][data-id="read"]'), wait('[data-svc="toggle"][data-id="read"][aria-checked="false"]'), check("onboarding-abilities")], { onboarding: true }),
   scene("onboarding-abilities-choice", "First-run step 4: an ability opens its choice of service in the card, as in Settings", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-svc="open"][data-id="search"]'), wait('.ob-card #svc-dialog .svc-srv')], { onboarding: true }),
+  // Every slime of the guide answers a real press with the sidebar's squish: down under the button, back when it is let go (slime-press).
+  { ...scene("onboarding-slime-press", "First-run: every slime of the guide is pushed down by a press and springs back: the one being made, a slime of the picker, and the three floating by the title of every later step; with reduced motion none squishes", [
+    click('[data-ob="next"]'), wait('#ob-first-name'), click('.ob-first-picker [data-slime-tab="red"]'), wait('.ob-first-picker [data-slime-character="horns-red"]'),
+    { action: "slime-press", selectors: ['.ob-first-face .av', '.ob-first-picker [data-slime-character="horns-red"]'] },
+    { action: "slime-press", still: true, selectors: ['.ob-first-face .av'] },
+    type('#ob-first-name', '小藍'), wait('.ob-foot [data-ob="next"]:not([disabled])'), click('[data-ob="next"]'), wait('[data-ob-tools] .ob-tile'),
+    { action: "slime-press", selectors: [1, 2, 3].map(n => `.ob-floaters .ob-fl:nth-child(${n})`) },
+    click('[data-ob="next"]'), wait('#ob-conn'),
+    { action: "slime-press", selectors: [1, 2, 3].map(n => `.ob-floaters .ob-fl:nth-child(${n})`) },
+    click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'),
+    { action: "slime-press", selectors: [1, 2, 3].map(n => `.ob-floaters .ob-fl:nth-child(${n})`) },
+  ], { onboarding: true }), motion: true },
   scene("onboarding-slime-crown", "First-run step 1: the first slime in a brown headband slime wears one crown on its head, large", [click('[data-ob="next"]'), wait('#ob-first-name'), type('#ob-first-name', '小藍'), click('.ob-first-picker [data-slime-tab="brown"]'), click('.ob-first-picker [data-slime-character="headband-brown"]'), wait('.ob-first-face .slime-surface[style*="#8E7254"]'), check('chief-crown')], { onboarding: true }),
   scene("after-onboarding", "Finishing the guide opens the conversation of the slime the owner named, the app's start", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-ob="next"]'), wait(".page-agent:not([hidden]) .conversation-trigger"), wait('.mb-col .mb-chief[aria-current="true"]'), check("sidebar-shell"), check("first-slime-named")], { onboarding: true }),
 ];

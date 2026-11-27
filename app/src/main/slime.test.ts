@@ -925,6 +925,20 @@ test("slime.css holds a picture still against every rule that could move it", ()
   expect(css).toContain(":active .slime-surface:not([data-slime-still]) {");
 });
 
+test("every slime of the first-run guide gives the sidebar's own squish, which a picture's rule would otherwise stop", () => {
+  // The sidebar's two timings, read from its rules: the spring back of the surface and the push down of a press.
+  const springBack = css.match(/^\.slime-surface \{[^}]*?transition: (scale 480ms linear\([^)]*\));/m)?.[1];
+  const pushDown = css.match(/^:is\(\.mb-row[^{]*\):active \.slime-surface:not\(\[data-slime-still\]\) \{ scale: ([^;]*); transition: ([^;]*); \}/m);
+  expect(springBack).toBeTruthy();
+  expect(pushDown).toBeTruthy();
+  // The guide's rules sit in the motion-allowed block, so reduced motion keeps the picture still as it always did.
+  const block = css.match(/@media \(prefers-reduced-motion: no-preference\) \{\r?\n([^]*?)\r?\n\}/)?.[1] ?? "";
+  expect(block).toContain(`.ob .slime-surface[data-slime-still] { transition: ${springBack} !important; }`);
+  // Every kind of slime the guide draws is pressed: the face being made and the ones floating by a title, and each picker button.
+  expect(block).toContain(`.ob :is(.mb-preset, .mb-av-slime):active .slime-surface[data-slime-still] { scale: ${pushDown![1]}; transition: ${pushDown![2]} !important; }`);
+  expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^]*?\.slime-surface \{ transform: none !important; translate: none !important; rotate: none !important; scale: none !important; \}/);
+});
+
 test("a roster read hands a face on screen over before the redraw, so the redraw keeps it", () => {
   document.body.innerHTML = slimeFaceHTML({ id: 311 }, 40, "", true);
   expect(stateIn(document.body)).toBe("idle");

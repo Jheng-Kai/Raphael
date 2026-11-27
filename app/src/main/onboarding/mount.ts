@@ -713,6 +713,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     }
   }, { signal });
 
+  // A slime of the guide that is not a choice (the one being made, the ones floating by a title) is pressed to be squished
+  // and nothing more: the press leaves the focus where it is, a name being typed included (slime.css plays the squish).
+  root.addEventListener("mousedown", (e) => {
+    if (!destroyed && (e.target as Element | null)?.closest?.(".ob-fl, .ob-first-face")) e.preventDefault();
+  }, { signal });
+
   // The key is sent by Enter or 貼上 only, never by leaving the field (see keyfield.ts).
   root.addEventListener("keydown", (e) => {
     if (destroyed) return;

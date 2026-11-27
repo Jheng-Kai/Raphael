@@ -586,6 +586,49 @@ export async function perform(page, step, evidenceDirectory) {
       }
       return { check: "press-feedback", evidence };
     }
+    // A slime of the guide pressed with the real mouse: its surface is pushed down while the button is held and springs back when it
+    // is let go (slime.css, the sidebar's own squish), and the press reaches it (nothing lies over it). With `still` the window
+    // asks for reduced motion and the slime stays as it was. The page stays on the step it was on.
+    case "slime-press": {
+      const evidence = [];
+      const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+      if (step.still) await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+      try {
+        for (const selector of step.selectors) {
+          const element = await visible(selector);
+          try {
+            const box = await element.boundingBox(), x = box.x + box.width / 2, y = box.y + box.height / 2;
+            const read = () => element.evaluate((node, x, y) => {
+              const surface = node.matches(".slime-surface") ? node : node.querySelector(".slime-surface");
+              const style = getComputedStyle(surface), at = document.elementFromPoint(x, y);
+              const [wide, high = wide] = style.scale.split(" ").map(value => (value === "none" ? 1 : Number(value)));
+              return { wide, high, step: document.querySelector("#ob")?.dataset.step, reached: !!at && (node === at || node.contains(at)), surface: surface.hasAttribute("data-slime-still") };
+            }, x, y);
+            await page.mouse.move(x, y);
+            await sleep(120);
+            const rest = await read();
+            await page.mouse.down();
+            let pressed;
+            try { await sleep(260); pressed = await read(); } finally { await page.mouse.up(); }
+            await sleep(900);
+            const after = await read();
+            if (!pressed.reached) throw new Error(`The press does not reach the slime: ${selector}`);
+            if (step.still) {
+              if (Math.abs(pressed.wide - rest.wide) > 0.01 || Math.abs(pressed.high - rest.high) > 0.01) throw new Error(`A slime squishes under reduced motion: ${selector} ${JSON.stringify(pressed)}`);
+            } else {
+              if (Math.abs(rest.wide - 1) > 0.01 || Math.abs(rest.high - 1) > 0.01) throw new Error(`A slime is not at rest before the press: ${selector} ${JSON.stringify(rest)}`);
+              if (!(pressed.wide > 1.08 && pressed.high < 0.88)) throw new Error(`A slime does not squish under the press: ${selector} ${JSON.stringify(pressed)}`);
+              if (Math.abs(after.wide - 1) > 0.01 || Math.abs(after.high - 1) > 0.01) throw new Error(`A slime does not spring back after the press: ${selector} ${JSON.stringify(after)}`);
+            }
+            if (!step.picks && after.step !== rest.step) throw new Error(`A press on a slime moved the guide from ${rest.step} to ${after.step}: ${selector}`);
+            evidence.push({ selector, rest, pressed, after });
+          } finally { await element.dispose(); }
+        }
+      } finally {
+        if (step.still) await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
+      }
+      return { check: "slime-press", evidence };
+    }
     case "composer-measure-start": {
       await page.evaluate(() => {
         const tasks=[];

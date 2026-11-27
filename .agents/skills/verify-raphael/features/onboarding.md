@@ -99,7 +99,7 @@ state.
 ## Driving it with look
 
 ```powershell
-npm run look -- onboarding onboarding-slime onboarding-tools onboarding-back-hover onboarding-back-focus settings-owner onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- onboarding onboarding-slime onboarding-tools onboarding-back-hover onboarding-back-focus settings-owner onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice onboarding-slime-press after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 Keep the welcome and each step's PNGs, the contact sheet and the report. Each scene presses the
@@ -128,6 +128,15 @@ The look mock signs no one in to ChatGPT, has all three command-line tools ready
 OpenRouter key set; `integrations.connect` is cancelled there, so only a managed app proves a
 completed sign-in. Credentials, real browser logins, command-line sign-in and native persistence
 remain separate checks.
+
+## Every slime answers a press
+
+R-GUIDE-01: each slime of the guide (the one being made, each picker slime, the three floating by a title) is pushed down
+by a press and springs back, as the sidebar's slimes do (`slime.css`, "a squish that follows the press and the release";
+the guide's pictures are given back only the transition their still rule stopped, in the motion-allowed block, so reduced
+motion keeps them still). A floating slime and the large one only squish: they take no focus and change no step. Scene
+`onboarding-slime-press` (motion on) presses each with the real mouse (`slime-press` in driver.mjs: scale while held, back
+after, the press reaches the slime, the step unchanged) and once more with reduced motion, where nothing squishes.
 
 ## UI audit regression coverage
 

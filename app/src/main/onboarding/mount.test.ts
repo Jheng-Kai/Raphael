@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { navInputs, pressLayer } from "../test-support/nav-layer-input";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -630,5 +632,59 @@ describe("the first slime is a real member, and the chief of staff", () => {
     await press('[data-ob="next"]');
     expect(api.membersCreate).not.toHaveBeenCalled();
     expect(root.dataset.step).toBe("slime");
+  });
+});
+
+describe("every slime of the guide answers a press", () => {
+  const pressDown = (selector: string): MouseEvent => {
+    const target = root.querySelector<HTMLElement>(selector);
+    if (!target) throw new Error(`nothing to press: ${selector}`);
+    const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    target.dispatchEvent(event);
+    return event;
+  };
+
+  test("the one being made and the ones floating by a title are pressed for the squish alone: the focus stays and nothing else happens", async () => {
+    await open();
+    await press('[data-ob="next"]');
+    nameFirst("Mochi");
+    const field = root.querySelector<HTMLInputElement>("#ob-first-name")!;
+    field.focus();
+    expect(pressDown(".ob-first-face .slime-surface").defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(field);
+    await press(".ob-first-face .slime-surface");
+    expect(root.dataset.step).toBe("slime");
+    expect(api.membersCreate).not.toHaveBeenCalled();
+    await press('[data-ob="next"]');
+    expect(root.dataset.step).toBe("tools");
+    for (const step of ["tools", "services", "abilities"]) {
+      expect(root.dataset.step).toBe(step);
+      const floaters = root.querySelectorAll(".ob-fl .slime-surface");
+      expect(floaters, step).toHaveLength(3);
+      for (const floater of floaters) {
+        const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+        floater.dispatchEvent(down);
+        expect(down.defaultPrevented, step).toBe(true);
+        floater.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      }
+      await flush();
+      expect(root.dataset.step, step).toBe(step);
+      if (step !== "abilities") await press('[data-ob="next"]');
+    }
+    expect(done).not.toHaveBeenCalled();
+  });
+
+  test("a press on a picker slime still chooses it, and is not held back", async () => {
+    await open();
+    await press('[data-ob="next"]');
+    expect(pressDown('.ob-first-picker [data-slime-character="horns-red"]').defaultPrevented).toBe(false);
+    await press('.ob-first-picker [data-slime-character="horns-red"]');
+    expect(root.querySelector('.ob-first-picker [data-slime-character="horns-red"]')!.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  test("the stylesheet lets a press reach a floating slime, though its decoration takes no pointer", () => {
+    const css = readFileSync(resolve(__dirname, "../styles.css"), "utf8");
+    expect(css).toMatch(/\.ob-floaters \{[^}]*pointer-events: none;/);
+    expect(css).toMatch(/\.ob-fl \{[^}]*pointer-events: auto;/);
   });
 });
