@@ -574,7 +574,7 @@ class PluginSets:
             if name.casefold() not in taken:
                 left.append(part)
                 continue
-            error, package = taken_by(self.conn, SHARED, name, manifest["name"])
+            error, package = taken_by(self.conn, SHARED, name, manifest["name"], incoming_version=manifest["version"], incoming_source=source)
             if previous:
                 raise error
             refused = refused or error
@@ -701,7 +701,7 @@ class PluginSets:
                 raise MemberError("source", "download differs from the listed plugin version")
             source, target = f"github:{marketplace}/{name}", plugin["target"]
         elif isinstance(source, str) and source.startswith("local:"):
-            source, files, identity = await asyncio.to_thread(self._local_plugin_snapshot, source)
+            source, files, identity = await asyncio.to_thread(self._local_plugin_snapshot, source, set_id is not None)
         else:
             from .skill_github import fetch_plugin
 
@@ -713,18 +713,22 @@ class PluginSets:
                                              expected_id=set_id, require_new=require_new, required_skill=required_skill,
                                              enabled=enabled, skill=skill, identity=identity)
 
-    def _newest_version(self, source):
-        """The folder a local plugin is read from: the newest installed version of a plugin the CLIs cache, or the folder
-        itself when it is anywhere else."""
+    def _newest_version(self, source, *, update=True):
+        """The folder a local plugin is read from. The CLIs cache a plugin as cache/<market>/<plugin>/<version>. A version
+        folder that was named is the plugin imported (`update=False`) and is read exactly; an update (`update=True`) follows
+        the cache to its newest version, as does the plugin's own folder, which names none. A folder anywhere else is read
+        as it is."""
         from .skill_sources import local_path
 
         try:
             folder, root = location(self.skill_home, source)
         except MemberError:
             return local_path(source)
-        if root.name != "cache" or len(folder.relative_to(root).parts) != 3:
+        depth = len(folder.relative_to(root).parts) if root.name == "cache" else 0
+        if depth not in (2, 3) or depth == 3 and not update:
             return local_path(source)
-        versions = [p for p in directories(folder.parent, [MAX_DISCOVERY_ENTRIES]) if (p / ".claude-plugin/plugin.json").is_file()]
+        plugin = folder if depth == 2 else folder.parent
+        versions = [p for p in directories(plugin, [MAX_DISCOVERY_ENTRIES]) if (p / ".claude-plugin/plugin.json").is_file()]
         if not versions:
             raise MemberError("not_found", "no installed version of that plugin", reason="source", file=str(folder))
         return max(versions, key=lambda p: (version_key(p.name), p.stat().st_mtime_ns))
@@ -733,10 +737,10 @@ class PluginSets:
         """Install a source that is a plugin of any kind (skill_layouts.PluginTree): its whole tree is the set."""
         return await self._install_set_async(tree.source, tree.files, access=access, require_new=True, identity=tree.identity)
 
-    def _local_plugin_snapshot(self, source):
+    def _local_plugin_snapshot(self, source, update=False):
         from .skill_layouts import folder_is_plugin, normalized
 
-        folder = self._newest_version(source)
+        folder = self._newest_version(source, update=update)
         if not folder_is_plugin(folder):
             raise MemberError("not_found" if not folder.exists() else "source",
                               f"{folder} is not a plugin: it has no .claude-plugin/plugin.json",

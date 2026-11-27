@@ -354,6 +354,23 @@ def exec_args(target, command, *, interactive=False, detached=False, env=()):
             "-e", "CUA_DRIVER_RS_TELEMETRY_ENABLED=0", *(part for name in env for part in ("-e", name)), target.name, *command]
 
 
+def trust_args(target):
+    """The shell command that makes git trust the folders the computer mounts. A mounted project (and the skills library)
+    belongs to the PC's user, which the computer sees as root, while commands run as `cua`: git then refuses every
+    command in it ("detected dubious ownership"). `safe.directory` in cua's own `~/.gitconfig` is read by an app command
+    (`exec_args` sets `HOME`) and by the desktop's terminal alike, and it is written again on each preparation, so it
+    holds for a computer made again and reaches one made before this was. Named: each project's root, the skills folder
+    and each repository directly inside it. No wildcard, nothing outside the mounts; an entry already there is not added
+    twice."""
+    script = ('add() { git config --global --get-all safe.directory | grep -qxF -- "$1" '
+              '|| git config --global --add safe.directory "$1"; }; status=0; '
+              'for dir in "$@"; do add "$dir" || status=$?; done; '
+              f'for dir in {SKILLS}/*/; do if test -e "${{dir}}.git"; then add "${{dir%/}}" || status=$?; fi; done; '
+              'exit "$status"')
+    paths = [destination for destination, _ in target.projects]
+    return exec_args(target, ["sh", "-c", script, "sh", *([SKILLS] if target.library and not target.remote else []), *paths])
+
+
 def move_window_args(target, window_id):
     from .seat_view import rectangle
     x, y, _, _ = rectangle(target.screen, target.screens)
@@ -1668,6 +1685,7 @@ class LocalVm:
                     for name in ("context", "meetings", "projects"):
                         bound_folder(target.shared / name)
                 await self._wallpaper(target)
+                await self.trust_folders(target)
                 await self.clear_scratch(target)
                 return state
             if not repaired and state["state"] == "running" and not self.unit_held(target) and self.unit_active(target) <= 1 and not self.unit_active(target, excluding=target.key) and not self.unit_busy(target, excluding=target.key):
@@ -1815,6 +1833,18 @@ class LocalVm:
             self.fitted[key] = size
         except (OSError, TimeoutError, VmError):
             logger.warning("The shared computer's size could not be checked")
+
+    async def trust_folders(self, target):
+        """Make git trust the mounted projects and skills (`trust_args`) each time the computer is prepared. A failure is
+        logged and never stops the computer."""
+        try:
+            result = await self.run_for(target, trust_args(target), timeout=30)
+            if result.code == 0:
+                return
+            detail = (result.stderr or "").strip()[-300:] or f"exit {result.code}"
+        except (OSError, TimeoutError, VmError) as error:
+            detail = str(error) or type(error).__name__
+        logger.warning("A computer's mounted folders could not be made trusted for git: %s", detail)
 
     async def clear_scratch(self, target):
         """Clear a running computer's old scratch (`scratch_args`) when it is prepared, and at most once a day after

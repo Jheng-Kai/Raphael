@@ -44,17 +44,38 @@ def restore_file(backup, path):
     backup.rename(path)
 
 
-def taken_by(conn, member, stored, incoming=""):
+def told_apart(held, new):
+    """What tells two packages of one name apart: the first of their (version, source) that both have and that differs,
+    else the first each has."""
+    for one, other in zip(held, new):
+        if one and other and one != other:
+            return one, other
+    return next((one for one in held if one), ""), next((other for other in new if other), "")
+
+
+def taken_by(conn, member, stored, incoming="", *, incoming_version="", incoming_source="", own_key=None):
     """A name that is taken, as a refusal, and the package that holds it. A switched-off skill keeps its name (#313), so the
     owner is told where it is and that it is off, to remove that one skill. `incoming` is the package that brings the
-    other skill of that name, when it has one of its own: both sides are named."""
+    other skill of that name, when it has one of its own: both sides are named. Two packages can go by one name (a plugin
+    imported again from another version folder): each is then named with its version, or its source when the version is
+    the same or unknown, so the owner can tell which is which. `own_key` is the package the other skill is in already, when it
+    is not a package that comes in (a rename), so a name shared with itself is not two packages."""
     row = conn.execute(
-        "SELECT s.enabled, p.enabled AS package_enabled, COALESCE(t.name,p.name) AS package FROM member_skills s "
+        "SELECT s.enabled, s.package_key, p.enabled AS package_enabled, COALESCE(t.name,p.name) AS package, t.version AS version, "
+        "COALESCE(t.source,p.source) AS source FROM member_skills s "
         "LEFT JOIN skill_packages p ON p.key=s.package_key LEFT JOIN skill_sets t ON t.id=s.set_id "
         "WHERE s.member_id=? AND s.name=? COLLATE NOCASE", (member, stored)).fetchone()
     text = f"a skill named {stored} already exists"
     package = row["package"] if row and row["package"] else ""
     off = bool(package and (not row["enabled"] or row["package_enabled"] == 0))
+    if package and row["package_key"] != own_key and (package.casefold() == incoming.casefold() or conn.execute(
+            "SELECT COUNT(*) FROM skill_packages WHERE name=? COLLATE NOCASE", (package,)).fetchone()[0] > 1):
+        held_detail, new_detail = told_apart(*(tuple(part.removeprefix("local:") for part in parts)
+                                               for parts in ((row["version"] or "", row["source"] or ""), (incoming_version, incoming_source))))
+        # What only repeats the name (an upload is its own file name) tells nothing.
+        held_detail, new_detail = (detail if detail.casefold() != package.casefold() else "" for detail in (held_detail, new_detail))
+        package = f"{package} ({held_detail})" if held_detail else package
+        incoming = f"{incoming} ({new_detail})" if incoming and new_detail else incoming
     if package:
         text += f' in the package "{package}"'
         if off:
@@ -230,7 +251,7 @@ class SkillPackages:
             stored = stored_skill_name(slug, skill_plugin(text, skill_source))
             if stored.casefold() in taken:
                 if slug == skill_metadata(text)[0]:
-                    error, package = taken_by(self.conn, member, stored, incoming)
+                    error, package = taken_by(self.conn, member, stored, incoming, incoming_source=source)
                     if not skipping:
                         raise error
                     refused = refused or error
@@ -482,7 +503,7 @@ class SkillPackages:
         held = self.conn.execute("SELECT id FROM member_skills WHERE member_id=? AND name=? COLLATE NOCASE AND id<>?",
                                  (SHARED, stored_skill_name(slug, ""), skill_id)).fetchone()
         if held:
-            raise taken_by(self.conn, SHARED, slug, row["name"])[0]
+            raise taken_by(self.conn, SHARED, slug, row["name"], own_key=key)[0]
         _, text = self.cap.document(SHARED, skill_id)
         path = self.cap.homes.home(SHARED) / "skills" / str(skill_id) / "SKILL.md"
         info = self.cap._package_info_at(path)

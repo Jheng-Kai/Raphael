@@ -134,6 +134,26 @@ async def test_set_reimport_preserves_skill_ids_and_grants_and_removal_cascades(
     assert not rig.service.packages.list()
 
 
+async def test_a_version_folder_that_is_named_imports_exactly_that_version(rig, tmp_path):
+    cap = rig.service.capabilities
+    older = local(cap, tmp_path, "1.0.0")
+    newer = local(cap, tmp_path, "2.0.0")
+    result = await cap.import_plugin("local:" + str(older), access="all")
+    assert result["version"] == "1.0.0" and result["source"] == "local:" + str(older)
+    assert cap.skills(0)
+    # Only an update follows the cache to its newest version.
+    again = await cap.import_plugin(set_id=result["id"])
+    assert again["id"] == result["id"] and again["version"] == "2.0.0" and again["source"] == "local:" + str(newer)
+
+
+async def test_a_plugin_folder_of_the_cache_without_a_version_imports_its_newest_version(rig, tmp_path):
+    cap = rig.service.capabilities
+    older = local(cap, tmp_path, "1.0.0")
+    newer = local(cap, tmp_path, "2.0.0")
+    result = await cap.import_plugin("local:" + str(older.parent), access="all")
+    assert result["version"] == "2.0.0" and result["source"] == "local:" + str(newer)
+
+
 async def test_invalid_set_update_leaves_existing_documents_and_grants(rig, tmp_path):
     cap = rig.service.capabilities
     folder = local(cap, tmp_path)
