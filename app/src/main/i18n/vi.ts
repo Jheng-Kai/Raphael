@@ -840,8 +840,6 @@ export const vi = {
   "chooser.downloadUse": "Tải xuống và dùng",
   "chooser.selection": "Đã chọn:",
   "chooser.effort": "Mức suy luận",
-  "conversations.clear": "Xóa cuộc trò chuyện",
-  "conversations.clearConfirm": "Xóa lịch sử của “{p0}”?",
   "chooser.favorites": "Yêu thích",
   "chooser.all": "Tất cả mô hình",
   "chooser.rail": "Nhà cung cấp",

@@ -840,8 +840,6 @@ export const it = {
   "chooser.downloadUse": "Scarica e usa",
   "chooser.selection": "Selezionato:",
   "chooser.effort": "Impegno di ragionamento",
-  "conversations.clear": "Cancella conversazione",
-  "conversations.clearConfirm": "Cancellare la cronologia di “{p0}”?",
   "chooser.favorites": "Preferiti",
   "chooser.all": "Tutti i modelli",
   "chooser.rail": "Fornitori",

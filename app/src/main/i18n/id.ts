@@ -840,8 +840,6 @@ export const id = {
   "chooser.downloadUse": "Unduh dan gunakan",
   "chooser.selection": "Terpilih:",
   "chooser.effort": "Upaya penalaran",
-  "conversations.clear": "Hapus percakapan",
-  "conversations.clearConfirm": "Bersihkan riwayat “{p0}”?",
   "chooser.favorites": "Favorit",
   "chooser.all": "Semua model",
   "chooser.rail": "Penyedia",

@@ -1,8 +1,6 @@
 // Each member has one conversation, Raphael included: its quick questions (Alt+Space) are turns of it. What the pages
-// share about conversations is here: which one opens, when it changed, how long ago, and the one way to clear it.
-import * as api from "./api";
+// share about conversations is here: which one opens, when it changed and how long ago.
 import { t } from "./i18n";
-import { confirmDelete } from "./member-dialogs";
 import "./conversations.css";
 
 export interface ConversationInfo {
@@ -27,15 +25,4 @@ export function relativeTime(ms: number, now = Date.now()): string {
   if (minutes < 60) return t("conversations.minutes", { p0: minutes });
   if (minutes < 1440) return t("conversations.hours", { p0: Math.floor(minutes / 60) });
   return t("conversations.days", { p0: Math.floor(minutes / 1440) });
-}
-
-/**
- * Clears everything said in a conversation, after the shared red confirmation: false when the owner said no. The
- * conversation itself stays (the core keeps its identity) and every window of the member reads it again.
- */
-export async function clearConversation(memberId: number, conversationId: number, name: string): Promise<boolean> {
-  if (!(await confirmDelete(name, { clearHistory: true }))) return false;
-  await api.core("conversations.clear", { id: conversationId });
-  conversationChange(memberId);
-  return true;
 }

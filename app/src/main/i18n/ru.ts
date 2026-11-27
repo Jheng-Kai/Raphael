@@ -840,8 +840,6 @@ export const ru = {
   "chooser.downloadUse": "Скачать и использовать",
   "chooser.selection": "Выбрано:",
   "chooser.effort": "Усилие рассуждения",
-  "conversations.clear": "Очистить разговор",
-  "conversations.clearConfirm": "Очистить историю «{p0}»?",
   "chooser.favorites": "Избранное",
   "chooser.all": "Все модели",
   "chooser.rail": "Провайдеры",

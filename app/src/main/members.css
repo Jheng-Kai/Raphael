@@ -127,10 +127,6 @@
 .sys { align-self: center; display: inline-flex; align-items: center; gap: var(--sp-1); max-width: 100%; font-size: var(--pa-sys); color: var(--text-3); }
 .sys .av { --av: var(--pa-sys-face) !important; }
 .sys b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-semibold); color: var(--text-2); }
-/* a member's empty thread: its face and its name */
-.ra-empty.is-member .ra-hero { width: var(--pa-hero-m); height: var(--pa-hero-m); }
-.ra-empty.is-member .ra-hero .av { --av: var(--pa-hero-m) !important; }
-.ra-empty.is-member .ra-hi { font: 500 var(--fs-lg)/1.5 var(--display); letter-spacing: 0; }
 
 /* ---------- the details panel ---------- */
 /* The panel reaches the window's top: its own head is its top row, the window's buttons at its right (`--pa-top`). */

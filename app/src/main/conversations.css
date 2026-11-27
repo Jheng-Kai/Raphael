@@ -41,8 +41,7 @@
 .mb-chat > .ra-find { margin-top: calc(var(--pa-top) + var(--row-hang) + var(--sp-2)); }
 .mb-chat > .ra-find:not([hidden]) + .ra-stage { --row-lead: 40px; }
 .mb-chat .ra-scroll { mask-image: linear-gradient(to bottom, transparent calc(var(--row-lead) - 36px), var(--text) var(--row-lead)); padding-top: var(--row-lead); scroll-padding-top: var(--row-lead); }
-/* The empty and waiting states are centred in what the row leaves. */
-.mb-chat .ra-empty { padding-top: calc(var(--row-lead) + var(--sp-4)); }
+/* The waiting state is centred in what the row leaves. */
 .mb-chat .ra-wait { padding-top: calc(var(--row-lead) + var(--sp-5)); }
 /* A waiting question's row (pending-questions.ts) stands first in the stage, which reaches the window's top: it takes the lead the
    thread gives up, so it stands below the top row, never under the pill where a press would open the member's details. With the
@@ -84,7 +83,7 @@
 .page-agent .btn.peer-close:active:not(:disabled) { background: var(--pressed); }
 @keyframes peer-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) { .mb-chat > .peer-chat { animation: none; } }
-.quota-chips { display: grid; gap: var(--sp-1); width: 100%; max-width: var(--pa-colw); margin: 0 auto var(--sp-2); }
+.quota-chips, .model-chips { display: grid; gap: var(--sp-1); width: 100%; max-width: var(--pa-colw); margin: 0 auto var(--sp-2); }
 .quota-chip { padding: var(--sp-1) var(--sp-3); font-size: var(--fs-2xs); border-radius: var(--r-sm); color: var(--text-2); background: var(--surface-2); display: flex; gap: var(--sp-1); align-items: center; }
 .quota-chip .i { width: 16px; height: 16px; }
 /* A CLI's lost sign-in (R-CLI-SIGNIN-06): the same quiet line, read as a warning, with its one button at the end. */

@@ -549,8 +549,6 @@ export const zhTW = {
   "chooser.downloadUse": "下載並使用",
   "chooser.selection": "選擇：",
   "chooser.effort": "思考程度",
-  "conversations.clear": "清除對話",
-  "conversations.clearConfirm": "清除「{p0}」的紀錄？",
   "chooser.favorites": "我的最愛",
   "chooser.all": "所有模型",
   "chooser.rail": "供應商",

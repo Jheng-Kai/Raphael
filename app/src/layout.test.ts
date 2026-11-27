@@ -104,6 +104,6 @@ describe("no sideways scrolling", () => {
     expect(ruleFor(mainRules, ".mb-row-t b").some((r) => /text-overflow:\s*ellipsis/.test(r.body))).toBe(true);
     expect(ruleFor(mainRules, ".mb-rt-main span").some((r) => /text-overflow:\s*ellipsis/.test(r.body))).toBe(true);
     expect(ruleFor(mainRules, ".mb-chip .chip-x").some((r) => /flex:\s*none/.test(r.body))).toBe(true);
-    expect(ruleFor(mainRules, ".ra-hi").some((r) => /overflow-wrap:\s*anywhere/.test(r.body))).toBe(true);
+    expect(ruleFor(mainRules, ".ra-none").some((r) => /overflow-wrap:\s*anywhere/.test(r.body))).toBe(true);
   });
 });

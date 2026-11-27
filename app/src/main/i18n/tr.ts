@@ -840,8 +840,6 @@ export const tr = {
   "chooser.downloadUse": "İndir ve kullan",
   "chooser.selection": "Seçilen:",
   "chooser.effort": "Akıl yürütme çabası",
-  "conversations.clear": "Görüşmeyi temizle",
-  "conversations.clearConfirm": "“{p0}” geçmişi temizlensin mi?",
   "chooser.favorites": "Favoriler",
   "chooser.all": "Tüm modeller",
   "chooser.rail": "Sağlayıcılar",
