@@ -80,15 +80,15 @@ export default [
     const ready = [member(1), wait('.page-agent .thread > li:nth-child(8)')];
     // What a drag may cost (R-PERF-25): a style write restyles the elements that read the width, a hundred or so, where the width held on
     // the root or the page restyled the whole window (1,000 to 1,500 elements) for each move; and no more than a few frames are later than 50 ms.
-    const probe = step => ({ action: "resize-probe", limits: step.edge ? { recalcElementsPerWrite: 300, framesOver50: 8, wholeSteps: 0 } : {}, ...step });
+    const probe = step => ({ action: "resize-probe", limits: step.edge ? { recalcElementsPerWrite: 300, framesOver50: 8, wholeSteps: 0, ...(step.everyWord ? { wordsMoved: 0 } : {}) } : {}, ...step });
     return [
-      scene("sidebar-resize-smooth", "Dragging the list's edge draws every frame and no word shakes", [...ready, wide(probe({ edge: ".side-edge", dx: -100, moves: 100, watch: words }))], { longThread: true }),
+      scene("sidebar-resize-smooth", "Dragging the list's edge draws every frame and no word shakes: while the edge is held no word moves up or down, the conversation keeping its lines until it is let go", [...ready, wide(probe({ edge: ".side-edge", dx: -100, moves: 100, watch: words, everyWord: true }))], { longThread: true }),
       // The same drags over the busy conversation of the typing scene (hundreds of long turns, the last of them drawn): what a width change
       // costs the thread grows with the words in it, and the frames must still be drawn.
       scene("sidebar-resize-busy", "Dragging the list's edge over a long, busy conversation draws every frame", [{ action: "wait", selector: '.page-agent:not([hidden]) .thread [data-id="10399"]' }, wide(probe({ edge: ".side-edge", dx: 120 }))], { typingPerformance: "Analyst" }),
       scene("panel-resize-busy", "Dragging the details panel's edge over a long, busy conversation draws every frame", [{ action: "wait", selector: '.page-agent:not([hidden]) .thread [data-id="10399"]' }, { action: "open-details" }, probe({ edge: ".page-agent .det-edge", dx: -140 })], { typingPerformance: "Analyst" }),
       scene("sidebar-toggle-smooth", "Folding the list to its rail and back draws every frame", [...ready, wide(probe({ toggle: "sidebar", watch: words }))], { longThread: true }),
-      scene("panel-resize-smooth", "Dragging the details panel's edge draws every frame and no word shakes", [...ready, { action: "open-details" }, probe({ edge: ".page-agent .det-edge", dx: -140, moves: 140, watch: detailsWords })], { longThread: true }),
+      scene("panel-resize-smooth", "Dragging the details panel's edge draws every frame and no word shakes: while the edge is held no word moves up or down, the conversation keeping its lines until it is let go", [...ready, { action: "open-details" }, probe({ edge: ".page-agent .det-edge", dx: -140, moves: 140, watch: detailsWords, everyWord: true })], { longThread: true }),
       scene("panel-toggle-smooth", "Opening and closing the details panel draws every frame", [...ready, { action: "close-details-if-open" }, probe({ toggle: ".conversation-trigger", watch: words })], { longThread: true }),
     ];
   })(),

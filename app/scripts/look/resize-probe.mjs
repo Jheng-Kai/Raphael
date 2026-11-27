@@ -17,7 +17,7 @@ import { summarizeTrace } from "./drag-probe.mjs";
  * `toggle` instead of an edge opens and closes a pane (the list: "sidebar", the panel: a selector to press) and measures the same.
  * `limits` fails the step. Throws an error that carries `assertion`.
  */
-export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = [], limits = {}, ...rest }, directory) {
+export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = [], everyWord = false, limits = {}, ...rest }, directory) {
   // `LOOK_RESIZE_THROTTLE=4` slows the page's CPU four times, as a PC with a quarter of this one's speed.
   const throttle = Number(process.env.LOOK_RESIZE_THROTTLE) || rest.throttle || 1;
   await page.waitForFunction(() => {
@@ -49,7 +49,7 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
       await page.mouse.move(grip.x, grip.y);
       await new Promise(resolve => setTimeout(resolve, 400));
     }
-    await page.evaluate((sampled, watch) => {
+    await page.evaluate((sampled, watch, everyWord) => {
       const seen = window.__resize = { frames: [], loaf: [], longTasks: [], writes: 0, observerRuns: 0, samples: [], marks: [] };
       seen.tasks = new PerformanceObserver(list => { for (const entry of list.getEntries()) seen.longTasks.push(Math.round(entry.duration)); });
       seen.tasks.observe({ entryTypes: ["longtask"] });
@@ -65,12 +65,25 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
       // The page's own ResizeObserver callbacks are counted by `window.__resizeRuns` (runner.mjs wraps the class before the app's code runs).
       const nav = document.querySelector("#nav");
       const lines = node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size; };
+      // `everyWord`: besides the watched texts, every text the window shows is read each frame, by its height alone (a horizontal
+      // drag moves words sideways with their column, never up or down unless their own paragraph rewraps).
+      const words = everyWord ? [...document.querySelectorAll("body *")].filter(node => {
+        if (!(node instanceof HTMLElement) || node.closest("[hidden], [aria-hidden='true']")) return false;
+        if (![...node.childNodes].some(child => child.nodeType === 3 && child.textContent.trim())) return false;
+        const box = node.getBoundingClientRect();
+        return box.width > 0 && box.height > 0 && box.bottom > 0 && box.top < innerHeight && box.right > 0 && box.left < innerWidth;
+      }).slice(0, 400) : [];
+      seen.wordNames = words.map(node => `${node.tagName.toLowerCase()}${node.className && typeof node.className === "string" ? "." + node.className.trim().split(/\s+/).join(".") : ""} «${node.textContent.trim().slice(0, 24)}»`);
       const sample = () => {
-        const row = { nav: nav.getBoundingClientRect().width, text: [] };
+        const row = { nav: nav.getBoundingClientRect().width, pressed: !!seen.pressed, text: [], words: [] };
         for (const entry of watch) {
           const node = document.querySelector(entry.selector);
           const first = node?.getClientRects()[0], box = entry.ref ? document.querySelector(entry.ref)?.getBoundingClientRect() : null, ref = box ? (entry.refEdge === "right" ? box.right : box.left) : 0;
           row.text.push(first ? { x: first.left, y: first.top, ref, lines: entry.lines ? lines(node) : 1 } : null);
+        }
+        for (const node of words) {
+          const first = node.isConnected ? node.getClientRects()[0] : null;
+          row.words.push(first ? [Math.round(first.top * 100) / 100, lines(node)] : null);
         }
         seen.samples.push(row);
       };
@@ -91,7 +104,7 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
       seen.beat = beat;
       const tick = now => { if (!seen.frameLoop) return; seen.frames.push(now - last); last = now; if (beat) { flip = !flip; beat.style.width = flip ? "2px" : "1px"; } requestAnimationFrame(tick); };
       requestAnimationFrame(tick);
-    }, sampled, watch);
+    }, sampled, watch, everyWord);
 
     const before = await read();
     if (toggle) {
@@ -104,10 +117,12 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
       const { x, y } = grip;
       await page.evaluate(() => window.__resize.marks.push(window.__resize.frames.length));
       await page.mouse.down();
+      // The frames of the press: what the words do while the hand holds the edge (`everyWord`).
+      await page.evaluate(() => { window.__resize.pressed = true; });
       // A hand: a frame between two moves; out by `dx`, and back to where it began.
       for (let step = 1; step <= moves; step++) { await page.mouse.move(x + dx * step / moves, y); await new Promise(resolve => setTimeout(resolve, 16)); }
       for (let step = moves - 1; step >= 0; step--) { await page.mouse.move(x + dx * step / moves, y); await new Promise(resolve => setTimeout(resolve, 16)); }
-      await page.evaluate(() => window.__resize.marks.push(window.__resize.frames.length));
+      await page.evaluate(() => { window.__resize.marks.push(window.__resize.frames.length); window.__resize.pressed = false; });
       await page.mouse.up();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
@@ -122,14 +137,14 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
     const seen = await page.evaluate(() => {
       const seen = window.__resize;
       seen.tasks.disconnect(); seen.mutations.disconnect(); seen.frameObserver?.disconnect(); seen.observer?.disconnect(); seen.beat?.remove(); seen.frameLoop = false;
-      return { frames: seen.frames, loaf: seen.loaf, longTasks: seen.longTasks, writes: seen.writes, observerRuns: (window.__resizeRuns ?? 0) - seen.runsBefore, samples: seen.samples, marks: seen.marks, end: seen.end };
+      return { frames: seen.frames, loaf: seen.loaf, longTasks: seen.longTasks, writes: seen.writes, observerRuns: (window.__resizeRuns ?? 0) - seen.runsBefore, samples: seen.samples, wordNames: seen.wordNames, marks: seen.marks, end: seen.end };
     });
     return { before, after, events, seen };
   };
 
   const timed = await pass(false);
   await new Promise(resolve => setTimeout(resolve, 300));
-  const sampledPass = watch.length ? await pass(true) : null;
+  const sampledPass = watch.length || everyWord ? await pass(true) : null;
   if (throttle > 1) await client.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   await client.detach();
 
@@ -191,6 +206,21 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
     // The steps of a part of a pixel of the texts that must move by whole pixels (`whole`: the reading column's, centred in its pane).
     const wholeSteps = perText.reduce((sum, entry, at) => sum + (watch[at].whole ? entry.fractionalFrames : 0), 0);
     Object.assign(result, { sampledFrames: rows.length, shake, fractional, wholeSteps, rewraps, perText });
+    if (everyWord) {
+      // A horizontal drag moves words sideways with their column and never up or down: every word that moved up or down in a
+      // frame of the press (a line it gained or lost, or one gained above it) is counted, with how often and how far it went.
+      // The one setting of the lines when the edge is let go is not the press's.
+      const moved = (sampledPass.seen.wordNames ?? []).map((name, at) => {
+        let frames = 0, most = 0, prev = null;
+        for (const row of rows) {
+          const now = row.pressed ? row.words?.[at] : null;
+          if (now && prev && Math.abs(now[0] - prev[0]) > 0.01) { frames++; most = Math.max(most, Math.abs(now[0] - prev[0])); }
+          prev = now;
+        }
+        return { name, frames, most: Math.round(most * 100) / 100 };
+      }).filter(word => word.frames).sort((a, b) => b.frames - a.frames);
+      Object.assign(result, { wordsWatched: sampledPass.seen.wordNames?.length ?? 0, wordsMoved: moved.length, moved: moved.slice(0, 20) });
+    }
   }
   const problems = [];
   for (const [name, limit] of Object.entries(limits)) if (result[name] > limit) problems.push(`${name} ${JSON.stringify(result[name])} > ${limit}`);

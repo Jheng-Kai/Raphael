@@ -41,7 +41,11 @@ export function repaintView(scroller: HTMLElement, slack = 4): () => void {
  * nudged place once.
  */
 export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4, repaint = IS_MAC): () => void {
-  let width = scroller.clientWidth;
+  // The width that sets the lines is the column's: a scroller made wider or narrower beside a column at its widest, or around one
+  // whose width a drag holds (`holdLines`), sets the same lines, and its place needs nothing.
+  const column = scroller.querySelector<HTMLElement>(":scope > .ra-col") ?? scroller;
+  const lineWidth = (): number => scroller.clientWidth && column.clientWidth;
+  let width = lineWidth();
   let anchor: HTMLElement | null = null, offset = 0, bottom = true;
   const take = (): void => {
     // A scroller that is not drawn (the settings page over it) reads as empty, so as "at the bottom": its place is kept.
@@ -57,7 +61,7 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
   let frame = 0, settle = 0, cancelNudge = (): void => {};
   const paint = (): void => { cancelNudge(); cancelNudge = repaintView(scroller, slack); };
   const resized = (): void => {
-    const now = scroller.clientWidth;
+    const now = lineWidth();
     // Not drawn: the width it had stays the one to compare with when it is drawn again, and the place it had with it.
     if (!now || now === width) return;
     width = now;
@@ -80,10 +84,30 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
   // A thread made wider is shorter: the place read can lie past its new end, and the browser clamps it to the bottom with a
   // scroll that may come before the width is reported (the details panel closed). That scroll is the width change, not the
   // owner's: the place read before it is the one kept.
-  const scrolled = (): void => { if (scroller.clientWidth && scroller.clientWidth !== width) resized(); else take(); };
+  const scrolled = (): void => { const now = lineWidth(); if (now && now !== width) resized(); else take(); };
   scroller.addEventListener("scroll", scrolled, { passive: true });
   const observer = typeof ResizeObserver === "function" ? new ResizeObserver(resized) : null;
   observer?.observe(scroller);
+  if (column !== scroller) observer?.observe(column);
   take();
   return () => { scroller.removeEventListener("scroll", scrolled); observer?.disconnect(); clearTimeout(settle); cancelNudge(); };
+}
+
+/**
+ * While a pane's edge is dragged, every conversation keeps the lines it had when the edge was taken: its column holds that
+ * width, centred on a whole pixel and cut by its pane where the pane is narrower, so no word rewraps and none moves up or down
+ * as the pane changes. Letting go gives the column back to its pane: its lines are set once for the width the pane was left
+ * at, and `keepReadingPlace` keeps the reading place across that one change. Returns the letting go.
+ */
+export function holdLines(root: ParentNode = document): () => void {
+  const held = [...root.querySelectorAll<HTMLElement>(".ra-scroll > .ra-col")].filter(column => column.isConnected && column.getClientRects().length > 0);
+  for (const column of held) {
+    const width = column.getBoundingClientRect().width;
+    column.style.width = `${width}px`;
+    column.style.maxWidth = "none";
+    column.style.marginInline = `max(0px, round(down, calc((100% - ${width}px) / 2), 1px)) 0`;
+  }
+  return () => {
+    for (const column of held) for (const name of ["width", "max-width", "margin-inline"]) column.style.removeProperty(name);
+  };
 }
