@@ -649,7 +649,14 @@ export async function perform(page, step, evidenceDirectory) {
       // same button in the list and on the rail.
       await click('#nav .sidebar-account');
       await visible('#app-popover.account-menu');
-      if (step.item) await click(`#app-popover.account-menu [data-account="${step.item}"]`);
+      if (step.item) {
+        await click(`#app-popover.account-menu [data-account="${step.item}"]`);
+        // The pressed row is gone with the menu, but the pointer stays where it was: on a 720 window that is over the composer's
+        // permission button, which then wore its hover fill in every capture after (and the judge read it as a fill at rest).
+        // The pointer leaves for the middle of the window's top edge, above the header, over nothing that wears a hover.
+        const viewport = page.viewport();
+        await page.mouse.move(Math.round((viewport?.width ?? 1120) / 2), 1);
+      }
       break;
     }
     case "member-column": {
