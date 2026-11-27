@@ -45,7 +45,7 @@ export interface TourView {
   destroy(): void;
 }
 
-const SLIME = 56;
+const SLIME = 64;
 export const HOP_MS = 300;
 
 export function createView(on: (pressed: Pressed) => void): TourView {
@@ -64,12 +64,20 @@ export function createView(on: (pressed: Pressed) => void): TourView {
   let placed: Box | null = null;
   let leaving: ReturnType<typeof setTimeout> | undefined;
 
-  root.addEventListener("click", event => {
+  // A press on the tour is the tour's alone. The window's dismissals (Settings close on a press outside them, menus too) listen at the
+  // document in the capture phase, so the tour takes its events one step earlier, at the window, and lets nothing past.
+  const own = (event: Event): void => {
+    if (!(event.target instanceof Node) || !root.contains(event.target)) return;
+    event.stopPropagation();
+    if (event.type === "wheel") { if (model?.mode === "step") event.preventDefault(); return; }
+    if (event.type !== "click") return;
     const target = event.target as Element;
     const button = target.closest<HTMLElement>("[data-tour]");
     if (button) { if (!(button as HTMLButtonElement).disabled) on(button.dataset.tour as Pressed); return; }
     if (model?.mode === "bye" && target.closest(".tour-bubble")) on("dismiss");
-  });
+  };
+  const owned = ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "contextmenu", "dblclick", "auxclick", "wheel"];
+  for (const type of owned) window.addEventListener(type, own, { capture: true, passive: false });
 
   function content(next: ViewModel): string {
     const caps = next.keys?.length ? `<div class="tour-keys">${keys(next.keys)}</div>` : "";
@@ -138,7 +146,7 @@ export function createView(on: (pressed: Pressed) => void): TourView {
       root.classList.add("is-leaving");
       leaving = setTimeout(done, 220);
     },
-    destroy() { clearTimeout(leaving); root.remove(); },
+    destroy() { clearTimeout(leaving); for (const type of owned) window.removeEventListener(type, own, true); root.remove(); },
   };
 }
 

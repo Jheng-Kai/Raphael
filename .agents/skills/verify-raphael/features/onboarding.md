@@ -121,6 +121,36 @@ is before the primary in the tab order). Native proof needs an authorized fresh 
 steps, relaunch and verify onboarding stays dismissed and the chosen tools, services and switches
 persist. Keep sanitized readback and stop the owned dev process.
 
+## Raphael's guided tour of the window
+
+After the first-run guide Raphael (its blue slime, drawn as the account menu draws it, no crown: the crown is the chief's, R-RAPHAEL-UI-04) springs out of the
+account button at the bottom left and asks whether the newcomer wants a tour, with how many minutes it takes (R-TOUR-01). The code is `app/src/main/tour/`
+(`tour.ts` the state, `view.ts` the dim, cut-out, slime and bubble, `steps.ts` what each step points at, `place.ts` where the group stands, `tour.css`), wired
+in `main.ts` at the guide's `onDone` (the one call of `offerOnce()`) and from the account menu's 導覽 entry (`AppContext.startTour`). The words are `tour.*`
+(`i18n/tour-catalogs.ts`, fifteen languages); the offer is remembered in the device setting `tour_offered`.
+
+- **The offer** (`tour-offer`, `tour-offer-remembered`, `tour-offer-later`, `tour-offer-escape`): the scenes go through the real guide (the fixture's
+  `tourOffer` leaves the setting off; every other onboarding scene is told it was already offered, so that they are unchanged). Raphael stands over the account
+  button with one bubble and two buttons, 之後再說 and 開始; nothing is dimmed or blocked. 之後再說 and Escape turn it into the goodbye line.
+- **The walk** (R-TOUR-02, R-TOUR-03), begun through the account menu's 導覽 from the app's own start: `tour-composer`, `tour-team`, `tour-apps`,
+  `tour-permission`, `tour-model`, `tour-usage`, `tour-skills`, `tour-safety`, `tour-keys` are steps 1 to 9. Each draws a dim with one rounded cut-out on the
+  target, Raphael beside it and a bubble with the count, 上一步, 下一步 (完成 on the last) and a ×. The Settings steps open Settings at 用量, 團隊技能 and 安全 and
+  cut the dialog out whole, Raphael in its lower right; the last step points at nothing and draws the keys that ask Raphael as caps, from the shortcut
+  settings. `tour-back` goes back out of Settings, `tour-end` is 完成 (the goodbye, window working again), `tour-end-closed` the goodbye fading, `tour-escape`
+  and `tour-close` end the walk from inside Settings and from the ×, `tour-hop` runs with motion allowed (Raphael lands beside the next target after 300 ms).
+- **The checks** (`tour-offer`, `tour-bye`, `tour-step-<id>`, `tour-closed`, `tour-closed-window` in `checks.mjs`) measure: Raphael and the bubble inside the window
+  and clear of the caption strip, the bubble on the floating surface and at most 300 px, controls no taller than the control tokens, plain words (no
+  exclamation mark, no title, at most two sentences), the cut-out equal to the target's box with its room and rounded, Raphael and the bubble beside the target and
+  not over it, the sidebar and the page inert, a surface over the whole window that takes a press on the dim, and Settings open at the step's tab or closed.
+- **Skipped steps** are covered by Vitest (`tour/tour.test.ts`): a target that is not on screen at this width is dropped and the count follows.
+
+```powershell
+npm run look -- tour-offer tour-offer-remembered tour-offer-later tour-offer-escape tour-composer tour-team tour-apps tour-permission tour-model tour-usage tour-skills tour-safety tour-keys tour-back tour-end tour-end-closed tour-escape tour-close tour-hop foot-account-menu raphael-entry foot-account-keys --theme both --width 1120,720,1920x1080
+```
+
+Native proof (not offline): a fresh `RAPHAEL_DATA_DIR`, finish the guide, see the offer once, restart and see it does not come again; the real Right Alt
+keys are read from `device.json`. Raphael's hop is a Web Animations API transform: a WKWebView check on a Mac is unverified.
+
 ## Gotchas
 
 Each scene begins fresh. The onboarding variant overrides the ordinary onboarded device setting.

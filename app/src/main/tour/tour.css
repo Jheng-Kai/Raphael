@@ -7,7 +7,7 @@
 .tour[data-dim="all"] .tour-catch { background: var(--scrim); }
 /* The cut-out is a box whose shadow is the dim; it moves with the step. */
 .tour-spot { position: absolute; box-shadow: 0 0 0 100vmax var(--scrim); pointer-events: none; transition: left 300ms ease, top 300ms ease, width 300ms ease, height 300ms ease, border-radius 300ms ease; }
-.tour-slime { position: absolute; width: 56px; height: 56px; transform-origin: 50% 100%; pointer-events: none; }
+.tour-slime { position: absolute; width: 64px; height: 64px; transform-origin: 50% 100%; pointer-events: none; }
 
 /* The bubble floats like a menu: the floating surface and its edge, controls filled with the control colour. */
 :where(.tour-bubble) {
@@ -18,9 +18,9 @@
 }
 /* As narrow as its words allow, never wider than 300 px or than the window less Raphael's room. */
 .tour-bubble { position: absolute; box-sizing: border-box; width: max-content; max-width: min(300px, calc(100% - 136px)); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--float-edge); border-radius: var(--r-md); background: var(--float); color: var(--text); box-shadow: var(--pop); font-size: var(--fs-sm); line-height: 1.5; pointer-events: auto; }
-.tour-text { margin: 0; overflow-wrap: anywhere; }
+.tour-text { margin: 0; overflow-wrap: anywhere; text-wrap: balance; }
 .tour[data-mode="step"] .tour-text { padding-inline-end: var(--sp-4); }
-.tour-x { position: absolute; top: var(--sp-1); inset-inline-end: var(--sp-1); }
+.tour-bubble .tour-x { position: absolute; top: var(--sp-1); inset-inline-end: var(--sp-1); }
 .tour-keys { margin-top: var(--sp-2); }
 .tour-keys .keys { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--text-3); }
 .tour-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin-top: var(--sp-3); }

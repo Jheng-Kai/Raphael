@@ -48,7 +48,7 @@ export default [
     [...menuWithNumber, click('#app-popover [data-account="usage"]'), wait("#app-submenu"), click('#app-submenu [data-account="manage"]'), wait('.modal-scrim [data-pane="usage"][aria-current="page"]'), wait('.modal-scrim [data-usage-tab="overview"][aria-selected="true"]'), waitGone("#app-popover")], tight),
   scene("foot-account-keys", "The face opens the menu from the keyboard, the arrows move through its rows, Escape closes it and returns the focus to the face",
     [focus("#nav .sidebar-account"), key("Enter"), wait("#app-popover.account-menu"), check("foot-account-focus-0"), key("ArrowDown"), check("foot-account-focus-1"), key("ArrowDown"), key("ArrowDown"), check("foot-account-focus-3"),
-      key("ArrowDown"), check("foot-account-focus-0"), key("Escape"), waitGone("#app-popover"), check("foot-account-keys")], tight),
+      key("ArrowDown"), key("ArrowDown"), key("ArrowDown"), check("foot-account-focus-0"), key("Escape"), waitGone("#app-popover"), check("foot-account-keys")], tight),
   scene("foot-usage-keys", "ArrowRight on 用量 opens its submenu with the focus on 管理用量, and Escape closes the submenu alone",
     [focus("#nav .sidebar-account"), key("Enter"), wait('#app-popover [data-account="usage"]'), key("ArrowRight"), wait("#app-submenu"), check("foot-account-focus-manage"), key("Escape"), waitGone("#app-submenu"), check("foot-account-focus-0"), key("Escape"), waitGone("#app-popover"), check("foot-account-keys")], tight),
   scene("foot-account-outside", "A press anywhere outside the menu, inside the conversation too, closes it with its submenu",

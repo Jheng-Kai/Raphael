@@ -71,7 +71,7 @@ const key = (name: string, init: KeyboardEventInit = {}): KeyboardEvent => {
   window.dispatchEvent(event);
   return event;
 };
-const settle = (ms = 600): Promise<void> => vi.advanceTimersByTimeAsync(ms);
+const settle = async (ms = 600): Promise<void> => { await vi.advanceTimersByTimeAsync(ms); };
 const begin = async (h: Harness): Promise<void> => { h.tour.start(); await settle(); };
 
 let reduced = true;
@@ -196,7 +196,7 @@ test("the permission step names the chip's own word, and the model's words are t
   expect(words()).toContain("Manual");
 });
 
-test("the cut-out follows the target's box and the group stands beside it; the dim takes every press", async () => {
+test("the cut-out follows the target's box and the group stands beside it, and the dim takes every press", async () => {
   const h = harness();
   await begin(h);
   const spot = document.querySelector<HTMLElement>(".tour-spot")!;
@@ -266,7 +266,7 @@ test("Settings steps open their tab, switch it by its own button and close Setti
   expect(h.calls.filter(call => call.startsWith("pane"))).toEqual(["pane skills", "pane safety"]);
   await press("next");
   expect(words()).toBe(t("tour.keys"));
-  expect(h.calls.at(-1)).toBe("close settings");
+  expect(h.calls[h.calls.length - 1]).toBe("close settings");
   expect(document.querySelector(".modal-scrim")).toBeNull();
   // Back into Settings, and out of it by the way back to the composer's steps.
   await press("back");
@@ -303,7 +303,7 @@ test("Escape and the × end the tour: the window works again and Raphael says wh
     const h = harness();
     await begin(h);
     await press("next"); await press("next"); await press("next"); await press("next"); await press("next");
-    expect(h.calls.at(-1)).toBe("go settings usage");
+    expect(h.calls[h.calls.length - 1]).toBe("go settings usage");
     await end();
     expect(document.getElementById("nav")!.inert).toBe(false);
     expect(document.getElementById("main")!.inert).toBe(false);
@@ -354,7 +354,7 @@ test("Raphael hops between the steps in 300 ms unless the window asks for less m
     expect(first).toBeGreaterThan(0);
     await press("next");
     expect(animate.mock.calls.length).toBeGreaterThan(first);
-    const hop = animate.mock.calls.at(-1) as unknown as [{ transform: string }[], { duration: number }];
+    const hop = animate.mock.calls[animate.mock.calls.length - 1] as unknown as [{ transform: string }[], { duration: number }];
     expect(hop[1].duration).toBe(300);
     expect(hop[0].length).toBeGreaterThanOrEqual(3);
   } finally { delete (HTMLElement.prototype as unknown as { animate?: unknown }).animate; }
@@ -385,4 +385,18 @@ test("a change of language redraws the step's line in the new one", async () => 
   await settle(50);
   expect(words()).toBe(t("tour.composer"));
   expect(words()).toMatch(/スライム/);
+});
+
+test("a press on the tour never reaches the window's own dismissals: Settings stay open under the walk", async () => {
+  const h = harness();
+  await begin(h);
+  const heard = vi.fn();
+  for (const type of ["pointerdown", "pointerup", "mousedown", "click", "contextmenu"]) document.addEventListener(type, heard);
+  for (const target of [".tour-catch", ".tour-bubble", '.tour [data-tour="next"]']) {
+    for (const type of ["pointerdown", "pointerup", "mousedown", "contextmenu"]) document.querySelector(target)!.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true }));
+  }
+  document.querySelector<HTMLElement>(".tour-catch")!.click();
+  document.querySelector<HTMLElement>(".tour-bubble")!.click();
+  expect(heard).not.toHaveBeenCalled();
+  for (const type of ["pointerdown", "pointerup", "mousedown", "click", "contextmenu"]) document.removeEventListener(type, heard);
 });

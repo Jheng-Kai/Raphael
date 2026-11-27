@@ -274,6 +274,9 @@ export function createTour(host: TourHost): Tour {
     if (unlisten.length) return;
     window.addEventListener("keydown", walkKey, true);
     window.addEventListener("keydown", quietKey);
+    // Settings give their own tab the focus as they open; the walk takes it back, so that Enter and the arrows stay the bubble's.
+    const keepFocus = (event: FocusEvent): void => { if (phase === "step" && view && !view.contains(event.target as Node)) view.focusPrimary(); };
+    document.addEventListener("focusin", keepFocus);
     let frame = 0;
     const reflow = (): void => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => view?.reflow()); };
     window.addEventListener("resize", reflow);
@@ -281,6 +284,7 @@ export function createTour(host: TourHost): Tour {
     unlisten = [
       () => window.removeEventListener("keydown", walkKey, true),
       () => window.removeEventListener("keydown", quietKey),
+      () => document.removeEventListener("focusin", keepFocus),
       () => { cancelAnimationFrame(frame); window.removeEventListener("resize", reflow); },
       language,
     ];
