@@ -23,7 +23,8 @@
 .cmp-input li { padding-inline-start: 0.15em; }
 .cmp-input li > :is(ul, ol) { margin: 0; }
 
-.cmp-input blockquote { padding-inline-start: var(--sp-3); border-inline-start: 3px solid var(--edge); color: var(--text-2); }
+/* The bar is a step brighter than a reply's (`--edge`): on the composer's dark panel that one is not seen. */
+.cmp-input blockquote { padding-inline-start: var(--sp-3); border-inline-start: 3px solid var(--line-focus); color: var(--text-2); }
 .cmp-input hr { border: 0; border-top: 1px solid var(--edge); margin: var(--sp-2) 0; }
 .cmp-input hr.ProseMirror-selectednode { border-top-color: var(--focus); }
 

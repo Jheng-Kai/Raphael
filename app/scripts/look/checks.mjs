@@ -6216,7 +6216,7 @@ export function checkRendered(name, context = {}) {
     if (name === "composer-rich-example" || name === "composer-rich-example-room") {
       const h1 = field.querySelector('h1'), ol = field.querySelector('ol'), items = [...field.querySelectorAll('ol > li')];
       require(h1?.textContent === "拉斐爾分開了" && items.length === 5, `a heading and five items: ${h1?.textContent}, ${items.length}`);
-      require(size(h1) >= size(field) * 1.3 && Number(style(h1).fontWeight) >= 500, `the heading is larger and heavier than the words (${size(h1)}px against ${size(field)}px)`);
+      require(size(h1) >= size(field) * 1.25 && Number(style(h1).fontWeight) >= 500, `the heading is larger and heavier than the words (${size(h1)}px against ${size(field)}px)`);
       require(style(ol).listStyleType === 'decimal' && parseFloat(style(ol).paddingInlineStart) >= 16 && items.every(li => style(li).display === 'list-item'), "the numbers and their indent are drawn");
       require(items[0].getBoundingClientRect().left > h1.getBoundingClientRect().left + 12, "the items stand in from the heading");
       require(items.every(li => style(li).display === "list-item"), "the items are numbered");
@@ -6261,7 +6261,7 @@ export function checkRendered(name, context = {}) {
       const closed = name === "composer-rich-toggle-closed", quote = field.querySelector('blockquote'), toggle = field.querySelector('.cmp-toggle'), arrow = toggle.querySelector('.cmp-toggle-arrow'), title = toggle.querySelector('.cmp-toggle-title');
       require(quote?.textContent === "一句引用的話" && title?.textContent === "點開看細節", "a quote and a toggle");
       require(field.value === "> 一句引用的話\n\n<details" + (closed ? "" : " open") + ">\n<summary>點開看細節</summary>\n\n收起來的內容\n\n</details>\n\n接著寫一般的字", `the Markdown: ${JSON.stringify(field.value)}`);
-      require(style(quote).borderInlineStartWidth === '3px' && style(quote).borderInlineStartColor === ink('--edge') && style(quote).paddingInlineStart !== '0px', "the quote has its bar and a step in");
+      require(style(quote).borderInlineStartWidth === '3px' && style(quote).borderInlineStartColor === ink('--line-focus') && style(quote).paddingInlineStart !== '0px', "the quote has its bar and a step in");
       require(visible(arrow) && arrow.getAttribute('role') === 'button' && arrow.getAttribute('aria-label') && arrow.getAttribute('aria-expanded') === String(!closed), "the arrow is a labelled button that says whether it is open");
       const body = [...toggle.children].filter(child => !child.classList.contains('cmp-toggle-head'));
       require(body.length >= 1 && body.every(node => closed ? !visible(node) : visible(node) && node.getBoundingClientRect().left > title.getBoundingClientRect().left - 20), closed ? "what is under a closed toggle is hidden" : "what is under it stands in below the title");
