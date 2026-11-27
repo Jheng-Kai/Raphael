@@ -103,8 +103,22 @@ async def test_a_skill_with_scripts_and_references_lists_them_and_knows_its_own_
     place = str(next(path for path in held.iterdir() if (path / "scripts").is_dir()))
     assert f"Run {place}/scripts/make.sh" in text.replace("\\", "/") or f"Run {place.replace(chr(92), '/')}/scripts/make.sh" in text.replace("\\", "/")
     assert "- scripts/make.sh (10 B)" in text and "- assets/chart.bin (4.0 KB, binary)" in text
-    assert "references/style.md" not in text.split("Files of this skill")[1]  # carried above, not listed again
-    assert "Style notes" in text
+    # A reference is named like every other file and read when it is needed (Agent Skills' progressive disclosure).
+    assert "- references/style.md (11 B)" in text.split("Files of this skill")[1]
+    assert "Style notes" not in text
+
+
+async def test_a_slash_call_names_a_skills_references_and_carries_none_of_them(rig, tmp_path):
+    """Every reference under 8 KB was carried into the message: a skill of forty short references put 280 KB into one turn,
+    more than a Codex member could take. Codex, Claude Code and the Agent Skills format give the document when the skill is
+    used and leave its references to be read when the model needs them."""
+    references = {f"references/topic-{index:02}.md": b"Detail. " * 900 for index in range(40)}
+    folder = write(tmp_path / "guide", {"SKILL.md": document("guide").encode(), **references})
+    await rig.call("skills.library.import", {"source": f"local:{folder}"})
+    expanded = rig.service.capabilities.expand(0, "/guide plan it")
+    assert "Detail. Detail." not in expanded and len(expanded.encode("utf-8")) < 12_000
+    assert all(f"- references/topic-{index:02}.md (7.0 KB)" in expanded for index in range(40))
+    assert "skill_read" in expanded and "plan it" in expanded
 
 
 async def test_a_slash_call_does_not_read_every_file_of_the_skill(rig, tmp_path, monkeypatch):
