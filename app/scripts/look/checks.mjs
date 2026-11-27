@@ -6329,6 +6329,50 @@ export function checkRendered(name, context = {}) {
       require(field.querySelectorAll('ul ul > li').length === 2 && style(field.querySelector('ul ul')).listStyleType === 'circle' && field.querySelector('strong')?.textContent === "新鮮", "two levels of bullets, the inner ones hollow, and the bold word");
       return { check: name };
     }
+    if (name === "composer-rich-bubble-lists" || name === "composer-rich-bubble-blocks") {
+      // Each sent message is drawn again from its finished turn (SENT_LISTS, SENT_BLOCKS in rich-composer.mjs).
+      const lists = name === "composer-rich-bubble-lists", box = node => node.getBoundingClientRect();
+      const bubbles = (lists ? [700, 701, 702, 703] : [704, 705, 706, 707]).map(id => document.querySelector(`.tn[data-id="${id}"] .owner-message .bubble`));
+      require(bubbles.every(bubble => bubble?.querySelector('.message-text')), "every sent message is drawn in its bubble");
+      const measures = [];
+      for (const bubble of bubbles) {
+        const words = bubble.querySelector('.message-text'), first = words.firstElementChild, last = words.lastElementChild, pad = style(bubble);
+        // The words stand on the bubble's own padding, as one line of words does: a list, a quote or code adds no space at either end.
+        const above = box(first).top - box(bubble).top, below = box(bubble).bottom - box(last).bottom;
+        require(Math.abs(above - parseFloat(pad.paddingTop)) <= 1 && Math.abs(below - parseFloat(pad.paddingBottom)) <= 1, `the words stand on the bubble's padding: ${above.toFixed(1)} above and ${below.toFixed(1)} below, against ${pad.paddingTop} and ${pad.paddingBottom} (${first.tagName}…${last.tagName})`);
+        // Every number fits between the bubble's padding and its words, so none reaches the bubble's edge.
+        for (const ol of bubble.querySelectorAll('ol')) {
+          const items = [...ol.children].filter(item => item.tagName === 'LI'), start = Number(ol.getAttribute('start') ?? 1);
+          require(style(ol).listStyleType === 'decimal' && items.every(item => style(item).display === 'list-item'), "the items are numbered");
+          items.forEach((item, index) => {
+            const probe = document.createElement('span'); probe.textContent = `${start + index}.`; probe.style.cssText = 'position:absolute;white-space:pre'; ol.append(probe);
+            const marker = box(probe).width; probe.remove();
+            const room = box(item).left + parseFloat(style(item).paddingInlineStart) - box(bubble).left - parseFloat(pad.paddingLeft);
+            require(room >= marker + 2, `${start + index}. has room before its words: ${room.toFixed(1)} for ${marker.toFixed(1)}`);
+          });
+        }
+        measures.push({ above, below });
+      }
+      if (lists) {
+        const [short, afterWords, wrapping, nested] = bubbles;
+        require(short.querySelectorAll('ol > li').length === 3 && short.querySelector('ol li')?.textContent === "好", "three short numbered items");
+        require([...afterWords.querySelector('.message-text').children].map(node => node.tagName).join() === "P,OL,P" && afterWords.querySelectorAll('ol > li').length === 2, "words, two numbered items, words");
+        require(wrapping.querySelectorAll('ol > li').length === 3, "three wrapping items");
+        const inner = nested.querySelector('ol > li > ul');
+        require(inner && inner.children.length === 2 && style(inner).listStyleType === 'circle' && style(inner).marginTop === '0px' && style(inner).marginBottom === '0px', "the bullets inside an item are hollow and hug it");
+        require(box(inner.firstElementChild).left > box(nested.querySelector('ol > li')).left + 8 && nested.querySelectorAll('ol > li').length === 3, "they stand in under their item, and the numbers go on after them");
+      } else {
+        const [numbers, tasks, quote, code] = bubbles;
+        require(numbers.querySelector('ol')?.getAttribute('start') === "8" && numbers.querySelectorAll('ol > li').length === 4, "the numbers start at 8 and reach 11");
+        const own = style(tasks.querySelector('.message-text')).color, boxes = [...tasks.querySelectorAll('.message-task input')];
+        require(boxes.length === 2 && boxes.every(input => style(input).appearance === 'none' && style(input).borderTopColor === own), `each task's box is outlined in the bubble's words colour: ${boxes.map(input => style(input).borderTopColor)} / ${own}`);
+        require(style(boxes[1]).backgroundColor === own && !boxes[0].checked && style(boxes[0]).backgroundColor === 'rgba(0, 0, 0, 0)', "the done task's box is filled, the open one is empty");
+        require(boxes.every(input => Math.abs(box(input).width - size(input.closest('li'))) <= 2 && box(input).left >= box(tasks).left + parseFloat(style(tasks).paddingLeft) - 1), "each box is the size of the words, inside the bubble");
+        require(style(tasks.querySelector('li:not(.message-task)')).listStyleType === 'disc', "the plain item keeps its bullet");
+        require(quote.querySelector('.message-text > blockquote:first-child') && code.querySelector('.message-text > .owner-code:only-child'), "a bubble that starts with a quote, and one of only code");
+      }
+      return { check: name, measures };
+    }
     throw new Error(`${name}: unknown composer check`);
   }
   if (name === "composer-url-chip") {

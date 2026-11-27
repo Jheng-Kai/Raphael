@@ -2370,6 +2370,9 @@ shortcut never fires on a value written into the field; `paste(selector, { html,
 - `composer-rich-lists`, `composer-rich-quote-toggle`, `composer-rich-toggle-closed`, `composer-rich-code-math`,
   `composer-rich-marks`: every block and mark once, typed with its shortcut; the toggle's arrow closes what is under it.
 - `composer-rich-sent`: headings, a list, a quote, bold words and an equation go out as Markdown and every part is drawn in the bubble.
+- `composer-rich-bubble-lists`, `composer-rich-bubble-blocks`: sent messages drawn again from their finished turns (short, wrapping and
+  nested numbered lists, numbers past 9, tasks, a quote first, only code) stand on the bubble's own padding; every number has room,
+  inner bullets are hollow and hug their item, and task boxes are the composer's in the bubble's colours (R-COMPOSER-RICH-06).
 - `composer-rich-room`, `composer-rich-docs`: a group's composer takes the same shortcuts; a Google Docs copy keeps its nested list.
 
 Consumers of the field, each checked again on the new field: the mention chips (`mention-chip-*`, `mention-ime-*`, real input-method
@@ -2378,7 +2381,7 @@ events), the history walk (`composer-history-*`), a link in the words (`composer
 `card-send-failed`), and the line and the controls under it (`composer-opened-calm`, `composer-engaged`, `composer-plus-menu`).
 
 ```powershell
-npm run look -- composer-rich-example composer-rich-example-sent composer-rich-example-room composer-rich-list composer-rich-list-leave composer-rich-lists composer-rich-quote-toggle composer-rich-toggle-closed composer-rich-code-math composer-rich-marks composer-rich-sent composer-rich-room composer-rich-docs --theme both --width 1120,720,1920x1080
+npm run look -- composer-rich-example composer-rich-example-sent composer-rich-example-room composer-rich-list composer-rich-list-leave composer-rich-lists composer-rich-quote-toggle composer-rich-toggle-closed composer-rich-code-math composer-rich-marks composer-rich-sent composer-rich-bubble-lists composer-rich-bubble-blocks composer-rich-room composer-rich-docs --theme both --width 1120,720,1920x1080
 npm run look -- mention-chip-composer mention-chip-sent mention-ime-compose mention-ime-commit composer-history-recall composer-long-link composer-link-edit composer-opened-calm composer-engaged chat --theme both --width 1120,720,1920x1080
 ```
 
