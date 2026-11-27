@@ -109,7 +109,6 @@ class ItemView implements NodeView {
     this.dom.dataset.checked = String(checked);
     this.box.setAttribute("aria-checked", String(checked));
     this.box.setAttribute("aria-label", t("composer.task"));
-    this.box.innerHTML = checked ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>' : "";
   }
   private flip(): void {
     const at = this.position();

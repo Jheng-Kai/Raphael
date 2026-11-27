@@ -40,7 +40,7 @@
 .cmp-input li.cmp-task[data-checked="true"] > .cmp-task-box { border-color: var(--accent-text); background: var(--accent-text); }
 .cmp-input li.cmp-task[data-checked="true"] > .cmp-task-body { color: var(--text-2); text-decoration: line-through; text-decoration-thickness: 1px; }
 .cmp-input .cmp-task-body > ul, .cmp-input .cmp-task-body > ol { text-decoration: none; }
-.cmp-input .cmp-task-box svg { width: 0.75em; height: 0.75em; }
+.cmp-input li.cmp-task[data-checked="true"] > .cmp-task-box::after { content: ""; width: 0.28em; height: 0.52em; margin-top: -0.08em; border: solid var(--on-accent); border-width: 0 2px 2px 0; rotate: 45deg; }
 
 /* A toggle: the arrow and its title on one line, what it holds under it and a step in. */
 .cmp-input .cmp-toggle > :not(.cmp-toggle-head) { margin-inline-start: 1.4em; }
@@ -48,14 +48,13 @@
 .cmp-input .cmp-toggle-head { display: flex; align-items: flex-start; gap: var(--sp-1); }
 .cmp-input .cmp-toggle-arrow { flex: none; display: grid; place-items: center; box-sizing: border-box; width: 1.4em; height: 1.45em; margin-inline-start: -0.1em; border-radius: var(--r-sm); color: var(--text-3); cursor: pointer; }
 .cmp-input .cmp-toggle-arrow:hover { background: var(--hover); color: var(--text); }
-.cmp-input .cmp-toggle-arrow svg { width: 1em; height: 1em; transition: transform 0.12s ease; }
+.cmp-input .cmp-toggle-arrow svg { width: 16px; height: 16px; transition: transform 0.12s ease; }
 .cmp-input .cmp-toggle[data-open="true"] > .cmp-toggle-head .cmp-toggle-arrow svg { transform: rotate(90deg); }
 .cmp-input .cmp-toggle-title { flex: 1; min-width: 0; font-weight: var(--weight-medium); }
 
 /* An equation: inline it is one unit in the line, a block shows its LaTeX and, under it, the equation drawn. */
 .cmp-input .cmp-math { display: inline-block; border-radius: var(--r-sm); cursor: default; user-select: none; }
 .cmp-input .cmp-math.is-selected { background: var(--selection); }
-.cmp-input .cmp-math .katex { font-size: 1.05em; }
 .cmp-input .cmp-math-block { margin: var(--sp-1) 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); }
 .cmp-input .cmp-math-source { min-height: 1.6em; color: var(--text-2); font: var(--fs-xs)/1.6 var(--mono); white-space: pre-wrap; }
 .cmp-input .cmp-math-shown { margin-top: var(--sp-2); overflow-x: auto; text-align: center; user-select: none; }

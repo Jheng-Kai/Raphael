@@ -2317,7 +2317,7 @@ npm run look -- team-file-reply reply-local-links rich-chief rich-member rich-ro
 Links: a link in the composer and in a sent message shows its whole address in the link colour (`--link`, blue), never a shortened name; the field's words are the address itself, so copy, cut and send give the same text. `composer-url-chip` requires the whole address, the link colour, a matching field and copy and no sideways overflow; `composer-link-sent` requires the whole address to go out with the words after it, and `room-link-sent` also requires the group's sent message to show the whole address in the link colour (the member conversation's mock does not echo the sent bubble; message-content.test.ts covers its HTML). A bubble that wears a member's colour keeps its own words colour for a link so that it reads (R-UI-81); a neutral bubble shows the link colour. The look driver's `clipboard-paste` does the browser's default insertion of pasted words when no page code took the paste.
 
 
-## The composer writes Markdown, drawn as it will read (R-COMPOSER-01 to 05)
+## The composer writes Markdown, drawn as it will read (R-COMPOSER-RICH-01 to 05)
 
 Every composer (a member's conversation, a group, a side thread; `createChatComposer`, `composerHTML`) is a rich field, a
 ProseMirror editor mounted on `.cmp-input` (`composer-rich-field.ts`; schema, Markdown, paste and node views are

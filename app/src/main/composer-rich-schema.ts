@@ -2,7 +2,7 @@
 // spelling (composer-rich-markdown.ts), the one the members' replies are written in and the message renderer draws, so what is
 // sent is the same text a reply would be. A line is a paragraph: Shift+Enter starts the next one, an empty paragraph is a blank
 // line, which keeps every plain word exactly as it was typed.
-import { Fragment, Schema, type DOMOutputSpec, type Mark, type MarkSpec, type MarkType, type Node as PMNode, type NodeSpec, type NodeType } from "prosemirror-model";
+import { Fragment, Schema, type DOMOutputSpec, type MarkSpec, type MarkType, type Node as PMNode, type NodeSpec, type NodeType } from "prosemirror-model";
 import { messageUrl } from "./markdown-text";
 
 /** How a table column is aligned in its Markdown separator row. */
@@ -115,5 +115,3 @@ export const composerMarks = composerSchema.marks as Record<keyof typeof marks, 
 
 /** Whether a node is an empty paragraph: a blank line. */
 export const isBlankLine = (node: PMNode): boolean => node.type === composerNodes.paragraph && node.content.size === 0;
-/** A link mark whose words are its own address: written as the bare address, as people write one. */
-export const isBareLink = (mark: Mark, text: string): boolean => mark.type === composerMarks.link && mark.attrs.href === text;

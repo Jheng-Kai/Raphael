@@ -101,8 +101,8 @@ export function parseInline(text: string, marks: readonly Mark[] = [], depth = 0
         if (url) {
           flush();
           const label = text.slice(at + 1, middle);
-          if (label.trim() === "") out.push(S.text(url, withMark(marks, M.link!.create({ href: url })) as Mark[]));
-          else out.push(...parseInline(label, withMark(marks, M.link!.create({ href: url })), depth + 1));
+          if (label.trim() === "") out.push(S.text(url, withMark(marks, M["link"]!.create({ href: url })) as Mark[]));
+          else out.push(...parseInline(label, withMark(marks, M["link"]!.create({ href: url })), depth + 1));
           at = end; continue;
         }
       }
@@ -334,7 +334,7 @@ function tokensOf(parent: PMNode, start: number, flat: boolean): Tok[] {
   });
   // A link whose words are its own address is written as the bare address.
   for (let i = 0; i < list.length; i++) {
-    const link = list[i]!.marks.find(mark => mark.type === M.link);
+    const link = list[i]!.marks.find(mark => mark.type === M["link"]);
     if (!link || list[i]!.kind !== "text") continue;
     let end = i, text = "";
     while (end < list.length && list[end]!.kind === "text" && list[end]!.marks.some(mark => mark.eq(link))) text += list[end++]!.text;

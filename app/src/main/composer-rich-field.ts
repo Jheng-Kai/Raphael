@@ -22,6 +22,9 @@ import { messageUrl } from "./markdown-text";
 import "./composer-rich.css";
 
 const SILENT = "composer-rich:silent";
+/** The key the page keeps for itself: the editor would swallow it as it does Enter, and the page uses it to cancel a task and close a menu. */
+const PAGE_KEY = "Escape";
+const LINK = M["link"];
 const blank = (): PMNode => N.paragraph.create();
 
 /** A document, with the empty line after a last block that lets the caret go below it. */
@@ -210,7 +213,7 @@ function typingRules(): InputRule[] {
   const link = new InputRule(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)$/, (state, match, start, end) => {
     const href = messageUrl(match[2]);
     if (!href) return null;
-    return state.tr.replaceWith(start, end, S.text(match[1]!, [M.link.create({ href: match[2]! })])).removeStoredMark(M.link);
+    return state.tr.replaceWith(start, end, S.text(match[1]!, [LINK.create({ href: match[2]! })])).removeStoredMark(LINK);
   });
   return [
     textblockTypeInputRule(/^(#{1,6})\s$/, N.heading, match => ({ level: match[1]!.length })),
@@ -237,7 +240,7 @@ function typingRules(): InputRule[] {
 function linkOver(text: string, state: EditorState): Transaction | null {
   const { from, to, empty, $from, $to } = state.selection, address = text.trim();
   if (empty || /\s/.test(address) || !messageUrl(address) || $from.parent !== $to.parent || !$from.parent.inlineContent) return null;
-  return state.tr.addMark(from, to, M.link.create({ href: address }));
+  return state.tr.addMark(from, to, LINK.create({ href: address }));
 }
 
 /**
@@ -303,7 +306,7 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
     nodeViews: composerNodeViews,
     attributes: { class: "cmp-input", role: "textbox", "aria-multiline": "true", enterkeyhint: "send", autocapitalize: "off" },
     // Escape is the page's (it cancels a task, closes a menu): the editor would swallow it as it does Enter.
-    handleDOMEvents: { keydown: (_view, event) => event.key === "Escape" },
+    handleDOMEvents: { keydown: (_view, event) => event.key === PAGE_KEY },
     clipboardTextSerializer: slice => fragmentToMarkdown(slice.content),
     clipboardTextParser: (words, _context, plain) => plain || !looksLikeMarkdown(words) ? literalSlice(words) : markdownSlice(words),
     transformPastedHTML: normalizePastedHTML,
