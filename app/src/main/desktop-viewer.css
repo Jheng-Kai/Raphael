@@ -186,7 +186,7 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
   width: min(100cqw, max(0px, (100cqh - var(--desktop-foot) - var(--host-browser-toolbar-height, 0px)) * 1280 / 900));
   aspect-ratio: auto;
 }
-.desktop-panel[data-expanded] .desktop-caption { display: none; }
+.desktop-panel[data-expanded] .desktop-caption:not([data-certificate]) { display: none; }
 .desktop-panel[data-expanded] .desktop-screen { box-shadow: none; border-radius: var(--r-md); background: var(--desktop-frame-bg); }
 /* The skill review and the file changes take the screen's place, in a quiet box of its size that scrolls on its own. */
 .desktop-panel[data-expanded]:has(.desktop-review:not([hidden])) .desktop-screen { display: none; }

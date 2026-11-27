@@ -2553,14 +2553,14 @@ start again, the same Chrome and its in-memory cookie). App: `computer-card.test
 `desktop-timeline.test.ts`.
 
 ```powershell
-npm run look -- desktop-host-certificate-card desktop-host-certificate desktop-host-certificate-auto desktop-host-certificate-auto-keychain desktop-host-certificate-unmatched-card desktop-host-certificate-refused-card desktop-host-certificate-unmatched --theme both --width 1120,720,1920x1080
+npm run look -- desktop-host-certificate-card desktop-host-certificate desktop-host-certificate-auto desktop-host-certificate-auto-keychain desktop-host-certificate-auto-large desktop-host-certificate-unmatched-card desktop-host-certificate-refused-card desktop-host-certificate-unmatched --theme both --width 1120,720,1920x1080
 ```
 
 The card and the larger view say that a Chrome window opened on the screen and name the Done button
 (`memberComputer.certificate`, all fifteen languages; `--locale` shows one). When Chrome could not
 choose by itself they begin with one sentence of why (`memberComputer.certificateUnmatched` and
-`certificateRefused`, picked by the card's note code), and while it chooses the Computer view's status
-line says so (`memberComputer.certificateAuto`, with the macOS words in `certificateAutoKeychain` the
+`certificateRefused`, picked by the card's note code), and while it chooses the Computer view's caption under the page (also kept in the larger view)
+says so (`memberComputer.certificateAuto`, with the macOS words in `certificateAutoKeychain` the
 first time on a Mac). Not proved offline: the
 chooser itself, the window on a Mac's screen and its minimized state (does a minimized Chrome keep
 painting the tabs the Computer view streams), the Windows window coming to the front, and a real site

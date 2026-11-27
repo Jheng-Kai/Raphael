@@ -5446,10 +5446,10 @@ export function checkRendered(name, context = {}) {
   }
   if (name.startsWith("desktop-host-certificate-auto")) {
     // R-COMP-CERT-02: Chrome chooses the certificate itself, so nothing is asked of the owner: no card, no Done, no Chrome window
-    // to look for. The Computer view's status line says what happens (the site by name), and on a Mac the first time what macOS
-    // may ask and which button to press.
-    const keychain = name.endsWith(":keychain");
-    const line = [...document.querySelectorAll('[data-computer-state-text]')].filter(visible);
+    // to look for. The Computer view's caption under the page says what happens (the site by name), and on a Mac the first time
+    // what macOS may ask and which button to press.
+    const keychain = name.includes(":keychain");
+    const line = [...document.querySelectorAll('.desktop-caption[data-certificate]')].filter(visible);
     require(line.length === 1, `one line says Chrome is signing in (${line.length})`);
     const text = line[0].textContent.replace(/\s+/g, ' ').trim();
     require(text.includes('intranet.example.test') && !text.includes('{p'), `the line names the site and is whole: ${text}`);
@@ -5461,6 +5461,8 @@ export function checkRendered(name, context = {}) {
     require(!line[0].closest('.desktop-panel')?.hasAttribute('data-request'), 'the panel has no owner request');
     const box = line[0].getBoundingClientRect(), panel = line[0].closest('.desktop-panel').getBoundingClientRect();
     require(box.left >= panel.left - 0.5 && box.right <= panel.right + 0.5, 'the line stays inside the Computer panel');
+    require(line[0].scrollWidth <= line[0].clientWidth + 1, 'the line is whole, not cut');
+    require(name.includes(":large") === line[0].closest('.desktop-panel').hasAttribute('data-expanded'), 'the preview or the larger view as the scene says');
     return {check: name, words: text};
   }
   if (name.startsWith("desktop-host-certificate-why")) {
