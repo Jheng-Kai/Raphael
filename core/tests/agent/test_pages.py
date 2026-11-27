@@ -1020,6 +1020,27 @@ def test_the_helper_moves_a_fixed_or_sticky_part_clear_of_the_composer_and_the_h
     assert "\\" not in _HELPER
 
 
+def test_the_helper_says_the_pages_own_tone_and_fades_what_scrolls_under_the_window_in_the_pages_own_colour():
+    # R-PAGE-17: the window's own buttons stand over the page with no plate, drawn in ink that reads on the page's own ground, so the helper says
+    # its tone (light or dark by the luminance of the colour its root paints, else its body's, else the app's own colour behind the frame; mixed
+    # for a gradient, a picture or a translucent colour, which has no one ground). What scrolls under the header's buttons and the composer
+    # fades out in that same colour (two fixed, pointer-less layers, none when there is no one ground), never the app's black or white.
+    from raphael_core.agent.pages import _HELPER
+    ground = _HELPER[_HELPER.index("const ground = () => {"):_HELPER.index("const lin = ")]
+    assert "style.backgroundImage !== 'none'" in ground and "if (root.image || body.image) return null;" in ground
+    assert ground.index("getComputedStyle(element)") < ground.index("colorScheme === 'dark' ? [10, 10, 10] : [255, 255, 255]")
+    assert "(own.length > 3 && own[3] !== 1)" in ground
+    assert "!clear(root.numbers) ? root.numbers : !clear(body.numbers) ? body.numbers : null" in ground
+    shade = _HELPER[_HELPER.index("const shade = () => {"):_HELPER.index("const lift = () => {")]
+    assert "0.2126 * lin(colour[0]) + 0.7152 * lin(colour[1]) + 0.0722 * lin(colour[2]) > 0.179 ? 'light' : 'dark'" in shade
+    assert "post('tone', {tone})" in shade and "'mixed'" in shade
+    # A page opened again is told its tone again; it is read again after a press, a transition, a class or a theme change.
+    assert "tone = '';" in _HELPER
+    assert "addEventListener('click', settleSoon, true)" in _HELPER and "addEventListener('transitionend', settleSoon, true)" in _HELPER
+    assert "'data-theme'" in _HELPER
+    assert "\\" not in _HELPER
+
+
 async def test_the_page_a_window_gets_carries_the_helper_before_its_own_markup(conn):
     from raphael_core.agent.pages import _HELPER
     page = stored(conn, title="Daily lesson", html=LESSON)

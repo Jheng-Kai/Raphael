@@ -379,8 +379,13 @@ test("the page runs to the window's foot under a floating composer: the dock is 
   expect(css).toMatch(/\.pgv-head, \.pgv-foot \{[^}]*position: absolute;[^}]*visibility: hidden;[^}]*pointer-events: none;/);
   expect(css).toMatch(/\.pgv-foot \{[^}]*height: var\(--pgv-under, 0px\);/);
   expect(css).toMatch(/\.pgv-head \{[^}]*top: 0;[^}]*height: var\(--row-lead\);/);
-  // The window's own buttons stand over the page's head on a surface of their own (R-PAGE-16).
-  expect(css).toMatch(/\.window-controls \{[^}]*background: var\(--surface-2\);/);
+  // The window's own buttons stand over the page's head with no plate, in the ink the page's tone asks for, and a soft fill only under the pointer;
+  // a page of no one tone (a gradient or a picture) keeps the pill's surface for them (R-PAGE-17).
+  expect(css).toMatch(/:root\[data-page-tone="light"\] \.window-chrome \.window-button \{ color: var\(--caption-ink-on-light\); \}/);
+  expect(css).toMatch(/:root\[data-page-tone="dark"\] \.window-chrome \.window-button \{ color: var\(--caption-ink-on-dark\); \}/);
+  expect(css).toMatch(/\.window-button:not\(\.window-close\):hover[^{]*\{ background: color-mix\(in srgb, currentColor 14%, transparent\); \}/);
+  expect(css).toMatch(/\[data-page-tone="mixed"\] \.window-chrome\[data-conversation-caption\] \.window-controls \{[^}]*background: var\(--surface-2\);/);
+  expect(css).not.toMatch(/has\(\.mb-chat\[data-conversation-page\]\) \.window-chrome/);
   expect(css).toMatch(/\.ra-stage\.is-page \.rp-scroll \{[^}]*padding-bottom: var\(--pgv-under\);/);
   // The answer line floats just over the composer, on its own surface, and takes no pointer from the page.
   expect(css).toMatch(/\.pgv-status \{[^}]*position: absolute;[^}]*bottom: calc\(var\(--pgv-dock, 0px\) \+ var\(--sp-1\)\);[^}]*pointer-events: none;/);
@@ -538,6 +543,25 @@ test("the page is told how much of its foot the composer and of its head the hea
     vi.unstubAllGlobals();
     Watching.all = [];
   }
+});
+
+test("the window's buttons take the ink of the tone the page says: set while the page stands, cleared with it, never from a card or from anything else (R-PAGE-17)", async () => {
+  const { thread, frame, stage } = mount();
+  await flush();
+  loaded(frame);
+  const tone = (): string | undefined => document.documentElement.dataset.pageTone;
+  // A page still in its card is no tone of the window's.
+  fromFrame(frame, { raphaelPage: 1, type: "tone", tone: "dark" });
+  expect(tone()).toBeUndefined();
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  for (const good of ["light", "dark", "mixed"]) { fromFrame(frame, { raphaelPage: 1, type: "tone", tone: good }); expect(tone()).toBe(good); }
+  // Nothing else gets into the root's attributes: not a colour, a name, a number or nothing.
+  fromFrame(frame, { raphaelPage: 1, type: "tone", tone: "light" });
+  for (const bad of ["red", "rgb(0, 0, 0)", "light; x", 3, null, { tone: "dark" }]) { fromFrame(frame, { raphaelPage: 1, type: "tone", tone: bad }); expect(tone()).toBe("light"); }
+  // It goes with the page: put away, the window's buttons are the app's own again.
+  back().click();
+  expect(tone()).toBeUndefined();
+  expect(stage.classList.contains("is-page")).toBe(false);
 });
 
 test("what a page says its background is changes nothing in the window: no colour of the page's is painted behind it, so no band of another colour can stand beside it (R-PAGE-10)", async () => {

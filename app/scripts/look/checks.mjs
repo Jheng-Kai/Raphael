@@ -8817,9 +8817,17 @@ export function checkRendered(name, context = {}) {
     const headRoom = area.querySelector(":scope > .pgv-head"), header = pane.querySelector(":scope > .mb-head");
     require(headRoom && getComputedStyle(headRoom).visibility === "hidden" && headRoom.getBoundingClientRect().height >= arrow.bottom - areaBox.top - 1, "the room the header's buttons take at the head is only measured, and holds them");
     require(/^(transparent|rgba\(0, 0, 0, 0\))$/.test(getComputedStyle(header).backgroundColor), `the header is transparent over the page: ${getComputedStyle(header).backgroundColor}`);
-    // The window's own buttons stand over the page too, in a corner of a surface of their own, whatever the page's colour is (R-PAGE-16).
-    const caption = document.querySelector(".window-chrome .window-controls");
-    if (caption && visible(caption)) require(/^rgb\(/.test(getComputedStyle(caption).backgroundColor) && parseFloat(getComputedStyle(caption).borderBottomLeftRadius) > 0, `the window's buttons stand on a surface of their own: ${getComputedStyle(caption).backgroundColor}`);
+    // The window's own buttons stand over the page too (R-PAGE-16), with no plate of their own (R-PAGE-17) unless the page has no one ground: the page's helper
+    // says its tone, the window's buttons are drawn in the ink it asks for, and their pixels' contrast is read from the screen (the driver's `page-band`).
+    const caption = document.querySelector(".window-chrome .window-controls"), tone = document.documentElement.dataset.pageTone;
+    if (caption && visible(caption) && tone) {
+      const plate = getComputedStyle(caption).backgroundColor, ink = getComputedStyle(caption.querySelector(".window-button")).color;
+      require(["light", "dark", "mixed"].includes(tone), `the page's tone is told to the window: ${tone}`);
+      if (tone !== "mixed") require(/^(transparent|rgba\(0, 0, 0, 0\))$/.test(plate), `the window's buttons have no plate over a page of one tone (${tone}): ${plate}`);
+      else require(/^rgb\(/.test(plate), `over a page with no one ground the window's buttons keep a surface of their own: ${plate}`);
+      const channels = ink.match(/\d+/g).map(Number), brightness = (channels[0] * 299 + channels[1] * 587 + channels[2] * 114) / 1000;
+      require(tone === "mixed" || (tone === "light" ? brightness < 100 : brightness > 150), `the ink is the one the page's tone asks for: ${ink} on a ${tone} page`);
+    }
     // R-PAGE-11: it runs to the window's foot with the composer standing over it: the frame is the page's window all the way down, so no strip of
     // another colour stands under it, and the window paints nothing behind it (the page's own background is the only one).
     const { composerBox } = pageUnderComposer(stage, area);

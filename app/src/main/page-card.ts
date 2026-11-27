@@ -19,6 +19,14 @@ import { btn, esc, ico, toaster } from "./ui";
 const MIN_HEIGHT = 80, MAX_HEIGHT = 2400;
 /** The most of its foot or its head a page is told the window keeps over it (core agent/pages.py's helper takes no more). */
 const ROOM_LIMIT = 2000;
+/** What the page's helper says its own ground is: light, dark, or neither (a gradient or a picture). The window's own buttons are drawn in
+ *  ink that reads on it (R-PAGE-17); the attribute is on the root while a page stands, since the buttons are the window's, not the stage's. */
+type PageTone = "light" | "dark" | "mixed";
+const toneOf = (value: unknown): PageTone | null => (value === "light" || value === "dark" || value === "mixed" ? value : null);
+const showTone = (tone: PageTone | null): void => {
+  if (tone) document.documentElement.dataset.pageTone = tone;
+  else delete document.documentElement.dataset.pageTone;
+};
 const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
 /** How long a page asked for by its id waits for its card to be in the thread and ready. */
 const CARD_WAIT_MS = 10000;
@@ -128,6 +136,8 @@ interface Live {
   /** A changed page loading beside the one on screen, which it replaces once it is ready, and the height it says. */
   next: HTMLIFrameElement | null;
   nextHeight: number | null;
+  /** The tone the changed page says its ground is (R-PAGE-17), taken when it takes its place. */
+  nextTone: PageTone | null;
   /** A declined external link asks no more without a sure press. */
   refused: boolean;
 }
@@ -273,7 +283,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
   }
 
   function make(id: string, rev: number): Live {
-    const live = { id, rev, height: null, area: null, box: null, foot: 0, head: 0, footWatch: null, opened: null, ready: false, failed: null, drawTimer: undefined, expanded: false, reading: 0, next: null, nextHeight: null, refused: false } as unknown as Live;
+    const live = { id, rev, height: null, area: null, box: null, foot: 0, head: 0, footWatch: null, opened: null, ready: false, failed: null, drawTimer: undefined, expanded: false, reading: 0, next: null, nextHeight: null, nextTone: null, refused: false } as unknown as Live;
     live.frame = newFrame(live);
     frames.set(id, live);
     return live;
@@ -294,6 +304,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     live.next?.remove();
     live.opened = opened;
     live.nextHeight = null;
+    live.nextTone = null;
     const next = newFrame(live);
     live.next = next;
     next.removeAttribute("inert");
@@ -308,6 +319,8 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       live.frame = next;
       // The changed page says how tall it is (for its card).
       if (live.nextHeight !== null) { live.height = live.nextHeight; live.nextHeight = null; applyHeight(live); }
+      if (live.nextTone) showTone(live.nextTone);
+      live.nextTone = null;
       next.style.visibility = "";
       old.remove();
     };
@@ -454,11 +467,12 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
 
   window.addEventListener("message", event => {
     const live = event.source ? [...frames.values()].find(item => item.frame.contentWindow === event.source || item.next?.contentWindow === event.source) : undefined;
-    const data = event.data as { raphaelPage?: number; jsonrpc?: string; type?: string; text?: unknown; url?: unknown; height?: unknown; y?: unknown; state?: unknown } | null;
+    const data = event.data as { raphaelPage?: number; jsonrpc?: string; type?: string; text?: unknown; url?: unknown; height?: unknown; y?: unknown; tone?: unknown; state?: unknown } | null;
     if (!live || !data || typeof data !== "object") return;
     const loading = live.next !== null && live.next.contentWindow === event.source;
     // A changed page still loading says how tall it is before it takes its place.
     if (loading && data.raphaelPage === 1 && data.type === "height") live.nextHeight = clampHeight(data.height);
+    if (loading && data.raphaelPage === 1 && data.type === "tone") live.nextTone = toneOf(data.tone);
     // A page that speaks has been read and laid out, though its load may wait on a font or a picture from elsewhere that
     // never comes: its preview stands now, not when that load ends.
     if (!loading && (data.raphaelPage === 1 || data.jsonrpc === "2.0")) drawn(live);
@@ -470,7 +484,8 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     if (loading) return;
     // The page scrolls in its own window (R-PAGE-10): where the owner reads is what it says its scroll is, while it is open.
     if (data.type === "scroll") { if (live.expanded && Number.isFinite(data.y)) live.reading = Math.max(0, Math.round(Number(data.y))); return; }
-    if (data.type === "height") { heard(live, data.height); applyHeight(live); }
+    if (data.type === "tone") { const tone = toneOf(data.tone); if (tone && live.expanded) showTone(tone); }
+    else if (data.type === "height") { heard(live, data.height); applyHeight(live); }
     else if (data.type === "send" && placeText(live, data.text)) post(live, { raphaelPage: 1, type: "result", status: "placed" });
     else if (data.type === "open") openLink(live, data.url);
     // What the owner did on the page goes to the core, which serves it back when the page opens again (R-PAGE-14). The page
@@ -527,6 +542,8 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
         live.next?.remove();
         live.next = null;
         live.nextHeight = null;
+        live.nextTone = null;
+        showTone(null);
         // The card shows the top of the page again; where the owner was reading is kept for the next time.
         const home = cardOf(live)?.querySelector<HTMLElement>(".pg-body");
         if (home) moveFrame(live.frame, home);

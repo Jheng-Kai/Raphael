@@ -95,6 +95,8 @@
   --composer-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
   /* the window's close button under the pointer, and the delete question's button: Windows' red nudged to keep 3:1 on the floating surface, the same in both themes */
   --close: #c9301f; --on-close: #ffffff;
+  /* The window's own buttons over an open page are drawn in the ink the page's own ground asks for, whatever the app's theme is (page-view.css, R-PAGE-17). */
+  --caption-ink-on-light: #0a0a0a; --caption-ink-on-dark: #f5f5f5;
   /* What is drawn on a slime's colour: white, as its eyes are, in both themes. */
   --on-slime: #ffffff;
   /* Activity levels are one hue, the accent, from the empty day up: more reads as stronger. */

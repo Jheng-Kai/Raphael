@@ -222,7 +222,26 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
   // (a rail one window tall with its buttons at its foot, a bar at the top or the bottom) is moved clear of it too, or it would stand under the
   // composer for good: a part as tall as the window takes the room as its own padding, so its background still runs to the edge, and a smaller
   // one moves by it.
-  let foot = 0, head = 0, moved = [], settle = 0;
+  let foot = 0, head = 0, moved = [], settle = 0, tone = '';
+  // The page's own ground (R-PAGE-17): the colour its root paints, else its body's, else (it paints nothing) the app's own colour behind the
+  // frame, which follows the colour scheme. A page whose ground is not one opaque colour (a gradient, a picture, a translucent colour) has none.
+  const numbers = text => { const match = /^rgba?[(]([^)]*)[)]$/.exec(text); return match ? match[1].split(/[ ,/]+/).filter(Boolean).map(Number) : null; };
+  const ground = () => {
+    const paint = element => { const style = getComputedStyle(element); return {image: style.backgroundImage !== 'none', numbers: numbers(style.backgroundColor)}; };
+    const root = paint(document.documentElement), body = paint(document.body || document.documentElement);
+    if (root.image || body.image) return null;
+    const clear = list => !list || (list.length > 3 && list[3] === 0);
+    const own = !clear(root.numbers) ? root.numbers : !clear(body.numbers) ? body.numbers : null;
+    if (!own) return getComputedStyle(document.documentElement).colorScheme === 'dark' ? [10, 10, 10] : [255, 255, 255];
+    const colour = own.slice(0, 3);
+    return (own.length > 3 && own[3] !== 1) || colour.length < 3 || colour.some(Number.isNaN) ? null : colour.map(Math.round);
+  };
+  const lin = value => { value /= 255; return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4); };
+  // What the window's own buttons are drawn in over the page: its tone, light or dark (mixed when it has no one ground).
+  const shade = () => {
+    const colour = ground(), say = !colour ? 'mixed' : 0.2126 * lin(colour[0]) + 0.7152 * lin(colour[1]) + 0.0722 * lin(colour[2]) > 0.179 ? 'light' : 'dark';
+    if (say !== tone) { tone = say; post('tone', {tone}); }
+  };
   const lift = () => {
     settle = 0;
     // What was moved is put back first, so that each pass reads the page as the page made it.
@@ -231,6 +250,7 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
     const root = document.documentElement.style;
     root.paddingTop = head ? head + 'px' : '';
     root.paddingBottom = foot ? foot + 'px' : '';
+    shade();
     if ((!foot && !head) || !document.body) return;
     let seen = 0;
     for (const element of document.body.querySelectorAll('*')) {
@@ -259,10 +279,13 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
   const settleSoon = () => { if (!settle && (foot || head)) settle = setTimeout(lift, 120); };
   addEventListener('DOMContentLoaded', () => {
     settleSoon();
-    new MutationObserver(settleSoon).observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden']});
+    new MutationObserver(settleSoon).observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden', 'data-theme']});
   }, {once: true});
   addEventListener('load', settleSoon, {once: true});
   addEventListener('resize', settleSoon);
+  // A page that changes its own theme does it by a press, and its colours may come by a transition: its ground is read again after either.
+  addEventListener('click', settleSoon, true);
+  addEventListener('transitionend', settleSoon, true);
   // A sticky part reaches a room only once it sticks, as the page is read down to it.
   addEventListener('scroll', settleSoon, {passive: true});
   addEventListener('message', event => {
@@ -271,6 +294,8 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
     if (own && (data.type === 'foot' || data.type === 'head') && Number.isFinite(data.y)) {
       const room = Math.max(0, Math.min(2000, Math.round(data.y)));
       if (data.type === 'foot') foot = room; else head = room;
+      // A page opened again is told its tone again: the window clears it when the page is put away.
+      tone = '';
       lift();
     }
   });
