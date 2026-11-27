@@ -2,6 +2,7 @@
 // says what to show; this measures, places and moves. Nothing here knows what a step means.
 
 import { RAPHAEL_ID, faceHTML } from "../members";
+import { bindNavLayer } from "../nav-layers";
 import { btn, esc, iconButton, keys, reducedMotion, replay } from "../ui";
 import { placeGroup, type Box, type Placement, type Side } from "./place";
 import type { Spot } from "./steps";
@@ -61,6 +62,8 @@ export function createView(on: (pressed: Pressed) => void): TourView {
   const bubble = root.querySelector<HTMLElement>(".tour-bubble")!;
 
   let model: ViewModel | null = null;
+  // The walk owns the mouse's back and forward buttons while it lasts (Tour.navigate answers first, even with Settings open; this is the same owner for the layers).
+  bindNavLayer(bubble, () => on("back"), { active: () => model?.mode === "step", step: direction => { on(direction === "back" ? "back" : "next"); return true; } });
   let placed: Box | null = null;
   let leaving: ReturnType<typeof setTimeout> | undefined;
 

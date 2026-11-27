@@ -15,6 +15,9 @@ const registration = /\b(?:registerDismissal|bindNavLayer|openPopover|openDialog
 // functions do not create a dismissible layer. Full-page navigation uses the named page view.
 const keyOwners: Record<string, RegExp> = {
   "window-hotkeys.ts:handle": /voiceCapture/,
+  // The guided tour's keys end the walk (finish) or go between its steps; the walk owns navigation through bindNavLayer (tour/view.ts) and Tour.navigate.
+  "tour/tour.ts:walkKey": /finish\(\)/,
+  "tour/tour.ts:quietKey": /finish\(\)/,
   "safety-rules.ts:key": /cancelEdit\(\)/,
   // The address field's Escape puts the page's own address back, as a browser's does: a field edit, not a layer.
   "host-browser-toolbar.ts:mountHostBrowserToolbar": /address\.value = shownUrl\(\)/,

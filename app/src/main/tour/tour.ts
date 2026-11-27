@@ -6,6 +6,7 @@
 
 import { onLocaleChange, t } from "../i18n";
 import type { MessageKey } from "../i18n/zh-TW";
+import type { NavStep } from "../nav-history";
 import type { AppContext, DeviceSettings, PageId, PageArgument, SettingsPane } from "../types";
 import { reducedMotion } from "../ui";
 import { createView, type ButtonId, type Pressed, type TourView, type ViewModel } from "./view";
@@ -28,6 +29,8 @@ export interface Tour {
   start(): void;
   /** Whether the offer, a step or the goodbye is on screen. */
   active(): boolean;
+  /** The mouse's back and forward buttons (and Alt+arrows) while the walk is on: the previous and the next step, and nothing under the dim is navigated. False when there is no walk. */
+  navigate(direction: NavStep): boolean;
   /** Takes everything down at once (the window is closing, a test ends). */
   stop(): void;
 }
@@ -290,5 +293,11 @@ export function createTour(host: TourHost): Tour {
     ];
   }
 
-  return { offerOnce, start, active: () => phase !== "idle", stop };
+  function navigate(direction: NavStep): boolean {
+    if (phase !== "step") return false;
+    if (!entering) { if (direction === "back") press("back"); else if (at < list.length - 1) press("next"); }
+    return true;
+  }
+
+  return { offerOnce, start, active: () => phase !== "idle", navigate, stop };
 }

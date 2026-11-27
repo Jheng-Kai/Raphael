@@ -282,7 +282,7 @@ watchChipRows(document.body);
     stepping = true;
     try {
       stepPlace(direction, placeHistory, {
-        layer: direction => stepOpenLayer(direction) || !guide.hidden,
+        layer: direction => !!tour?.navigate(direction) || stepOpenLayer(direction) || !guide.hidden,
         leave: () => current === "agent" && agent.keepNavigationPlace(),
         exists: place => place.page === "member" || place.page === "room" ? agent.chatPlaceExists(place) : true,
         show(place) {

@@ -400,3 +400,22 @@ test("a press on the tour never reaches the window's own dismissals: Settings st
   expect(heard).not.toHaveBeenCalled();
   for (const type of ["pointerdown", "pointerup", "mousedown", "click", "contextmenu"]) document.removeEventListener(type, heard);
 });
+
+test("the mouse's back and forward buttons go between the steps while the walk is on, and navigate nothing under the dim", async () => {
+  const h = harness();
+  expect(h.tour.navigate("back")).toBe(false);
+  await begin(h);
+  expect(h.tour.navigate("forward")).toBe(true);
+  await settle();
+  expect(count()).toBe("2/9");
+  expect(h.tour.navigate("back")).toBe(true);
+  await settle();
+  expect(count()).toBe("1/9");
+  // At the first step back goes nowhere, and still the window under the dim is not navigated.
+  expect(h.tour.navigate("back")).toBe(true);
+  await settle();
+  expect(count()).toBe("1/9");
+  for (let i = 0; i < 12; i++) { h.tour.navigate("forward"); await settle(); }
+  expect(count()).toBe("9/9");
+  expect(h.tour.active()).toBe(true);
+});
