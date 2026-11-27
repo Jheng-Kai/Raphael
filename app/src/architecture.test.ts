@@ -46,6 +46,13 @@ it("mechanical rules link existing named tests", () => {
   }
 }, 60_000);
 
+it("no rule row holds a control character, which breaks the row for the tools that read it", () => {
+  // A "\f" written through a script once became a form feed inside a row, and the design judge read half a row.
+  const broken = ledger().split("\n").filter(line => /^\| R-/.test(line) && /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\x85\u2028\u2029]/.test(line))
+    .map(line => line.split("|")[1]!.trim());
+  expect(broken).toEqual([]);
+});
+
 it("a rule named in the code is in the ledger", () => {
   const known = new Set([...ledger().matchAll(/^(?:\| )?(R-[A-Z]+(?:-[A-Z]+)*-\d+)(?: \||:)/gm)].map(match => match[1]));
   const unknownOnPurpose = "R-UI-99"; // test_design_judge.py proves an unknown rule id is refused
