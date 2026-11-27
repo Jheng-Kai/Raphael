@@ -1310,7 +1310,7 @@ export const ptBR = {
   "composer.fmt.underline": "Sublinhado",
   "composer.fmt.strike": "Tachado",
   "composer.fmt.highlight": "Destacar",
-  "composer.fmt.link": "Link",
+  "composer.fmt.addLink": "Link",
   "composer.fmt.math": "Equação em linha",
   "composer.fmt.unlink": "Remover link",
   "composer.fmt.linkAddress": "Endereço do link",

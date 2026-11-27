@@ -1310,7 +1310,7 @@ export const th = {
   "composer.fmt.underline": "ขีดเส้นใต้",
   "composer.fmt.strike": "ขีดฆ่า",
   "composer.fmt.highlight": "ไฮไลต์",
-  "composer.fmt.link": "ลิงก์",
+  "composer.fmt.addLink": "ลิงก์",
   "composer.fmt.math": "สมการในบรรทัด",
   "composer.fmt.unlink": "ลบลิงก์",
   "composer.fmt.linkAddress": "ที่อยู่ลิงก์",

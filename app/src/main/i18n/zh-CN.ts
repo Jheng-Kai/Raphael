@@ -1310,7 +1310,7 @@ export const zhCN = {
   "composer.fmt.underline": "下划线",
   "composer.fmt.strike": "删除线",
   "composer.fmt.highlight": "高亮",
-  "composer.fmt.link": "链接",
+  "composer.fmt.addLink": "链接",
   "composer.fmt.math": "行内公式",
   "composer.fmt.unlink": "移除链接",
   "composer.fmt.linkAddress": "链接地址",

@@ -1310,7 +1310,7 @@ export const ko = {
   "composer.fmt.underline": "밑줄",
   "composer.fmt.strike": "취소선",
   "composer.fmt.highlight": "형광펜",
-  "composer.fmt.link": "링크",
+  "composer.fmt.addLink": "링크",
   "composer.fmt.math": "인라인 수식",
   "composer.fmt.unlink": "링크 제거",
   "composer.fmt.linkAddress": "링크 주소",

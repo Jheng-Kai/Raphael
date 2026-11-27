@@ -1310,7 +1310,7 @@ export const tr = {
   "composer.fmt.underline": "Altı çizili",
   "composer.fmt.strike": "Üstü çizili",
   "composer.fmt.highlight": "Vurgula",
-  "composer.fmt.link": "Bağlantı",
+  "composer.fmt.addLink": "Bağlantı",
   "composer.fmt.math": "Satır içi denklem",
   "composer.fmt.unlink": "Bağlantıyı kaldır",
   "composer.fmt.linkAddress": "Bağlantı adresi",

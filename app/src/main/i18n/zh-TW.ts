@@ -1018,7 +1018,7 @@ export const zhTW = {
   "composer.fmt.underline": "底線",
   "composer.fmt.strike": "刪除線",
   "composer.fmt.highlight": "螢光標記",
-  "composer.fmt.link": "連結",
+  "composer.fmt.addLink": "連結",
   "composer.fmt.math": "行內公式",
   "composer.fmt.unlink": "移除連結",
   "composer.fmt.linkAddress": "連結網址",

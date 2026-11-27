@@ -1019,7 +1019,7 @@ export const ja = {
   "composer.fmt.underline": "下線",
   "composer.fmt.strike": "取り消し線",
   "composer.fmt.highlight": "ハイライト",
-  "composer.fmt.link": "リンク",
+  "composer.fmt.addLink": "リンク",
   "composer.fmt.math": "インライン数式",
   "composer.fmt.unlink": "リンクを外す",
   "composer.fmt.linkAddress": "リンク先",

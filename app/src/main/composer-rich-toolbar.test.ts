@@ -120,7 +120,7 @@ describe("the bar over a selection", () => {
 });
 
 describe("how the bar closes", () => {
-  test("Escape closes it and is not the page's; the next Escape is", async () => {
+  test("Escape closes it, and is not the page's: the next Escape is", async () => {
     input.value = "a word b";
     await select("word");
     const seen = vi.fn();
@@ -174,14 +174,14 @@ describe("the link editor", () => {
     await select("word");
     const key = press("k", { ctrlKey: true });
     expect(key.defaultPrevented).toBe(true);
-    const form = bar()!.querySelector<HTMLFormElement>(".cmp-fmt-link")!;
+    const form = bar()!.querySelector<HTMLElement>(".cmp-fmt-link")!;
     expect(form.hidden).toBe(false);
     expect(bar()!.querySelector<HTMLElement>('[data-row="format"]')!.hidden).toBe(true);
     const address = form.querySelector<HTMLInputElement>("input")!;
     expect(document.activeElement).toBe(address);
     expect(form.querySelector<HTMLElement>('[data-bar="unlink"]')!.hidden).toBe(true);
     address.value = "example.com/docs";
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    address.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     expect(input.value).toBe("a [word](https://example.com/docs) b");
     expect(bar()!.querySelector<HTMLElement>('[data-row="format"]')!.hidden).toBe(false);
     expect(document.activeElement).toBe(host);
@@ -190,10 +190,10 @@ describe("the link editor", () => {
     input.value = "a word b";
     await select("word");
     press("k", { ctrlKey: true });
-    const form = bar()!.querySelector<HTMLFormElement>(".cmp-fmt-link")!, address = form.querySelector<HTMLInputElement>("input")!;
+    const form = bar()!.querySelector<HTMLElement>(".cmp-fmt-link")!, address = form.querySelector<HTMLInputElement>("input")!;
     for (const bad of ["", "two words", "javascript:alert(1)", "ftp://x.y/z"]) {
       address.value = bad;
-      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      address.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
       expect(address.getAttribute("aria-invalid"), bad).toBe("true");
       expect(input.value).toBe("a word b");
     }
@@ -204,11 +204,11 @@ describe("the link editor", () => {
     press("k", { ctrlKey: true });
     await settle();
     expect(shown()).toBe(true);
-    const form = bar()!.querySelector<HTMLFormElement>(".cmp-fmt-link")!, address = form.querySelector<HTMLInputElement>("input")!;
+    const form = bar()!.querySelector<HTMLElement>(".cmp-fmt-link")!, address = form.querySelector<HTMLInputElement>("input")!;
     expect(address.value).toBe("https://example.com/x");
     expect(form.querySelector<HTMLElement>('[data-bar="unlink"]')!.hidden).toBe(false);
     address.value = "https://example.org/y";
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    address.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     expect(input.value).toBe("a [word](https://example.org/y) b");
     press("k", { ctrlKey: true });
     await settle();

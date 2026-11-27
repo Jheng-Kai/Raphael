@@ -1310,7 +1310,7 @@ export const vi = {
   "composer.fmt.underline": "Gạch chân",
   "composer.fmt.strike": "Gạch ngang",
   "composer.fmt.highlight": "Tô sáng",
-  "composer.fmt.link": "Liên kết",
+  "composer.fmt.addLink": "Liên kết",
   "composer.fmt.math": "Công thức trong dòng",
   "composer.fmt.unlink": "Gỡ liên kết",
   "composer.fmt.linkAddress": "Địa chỉ liên kết",

@@ -94,7 +94,6 @@
 .cmp-fmt-address, input.cmp-fmt-language { box-sizing: border-box; height: var(--h-ctl); padding: 0 var(--sp-2); border: 1px solid var(--float-edge); border-radius: var(--r-sm); background: transparent; color: var(--text); font: var(--fs-xs) var(--mono); outline: 0; }
 .cmp-fmt-address { width: min(22em, calc(100vw - 8em)); font-family: inherit; }
 input.cmp-fmt-language { width: 7em; }
-.cmp-fmt-address:focus, input.cmp-fmt-language:focus { border-color: var(--line-focus); }
 .cmp-fmt-address[aria-invalid="true"] { border-color: var(--err); }
 .cmp-fmt-address::placeholder, input.cmp-fmt-language::placeholder { color: var(--text-3); }
 /* The words the link editor is for stay drawn as selected while its field has the focus (composer-rich-toolbar.ts). */

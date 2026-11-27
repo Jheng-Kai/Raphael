@@ -1310,7 +1310,7 @@ export const es = {
   "composer.fmt.underline": "Subrayado",
   "composer.fmt.strike": "Tachado",
   "composer.fmt.highlight": "Resaltar",
-  "composer.fmt.link": "Enlace",
+  "composer.fmt.addLink": "Enlace",
   "composer.fmt.math": "Ecuación en línea",
   "composer.fmt.unlink": "Quitar enlace",
   "composer.fmt.linkAddress": "Dirección del enlace",

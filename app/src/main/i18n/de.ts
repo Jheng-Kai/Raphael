@@ -1310,7 +1310,7 @@ export const de = {
   "composer.fmt.underline": "Unterstrichen",
   "composer.fmt.strike": "Durchgestrichen",
   "composer.fmt.highlight": "Hervorheben",
-  "composer.fmt.link": "Link",
+  "composer.fmt.addLink": "Link",
   "composer.fmt.math": "Formel im Text",
   "composer.fmt.unlink": "Link entfernen",
   "composer.fmt.linkAddress": "Link-Adresse",

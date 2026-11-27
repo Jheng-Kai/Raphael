@@ -1310,7 +1310,7 @@ export const id = {
   "composer.fmt.underline": "Garis bawah",
   "composer.fmt.strike": "Coret",
   "composer.fmt.highlight": "Sorot",
-  "composer.fmt.link": "Tautan",
+  "composer.fmt.addLink": "Tautan",
   "composer.fmt.math": "Persamaan sebaris",
   "composer.fmt.unlink": "Hapus tautan",
   "composer.fmt.linkAddress": "Alamat tautan",

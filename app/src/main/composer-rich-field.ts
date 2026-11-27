@@ -118,7 +118,7 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
   const toolbar = composerToolbar(host);
   const editor: Editor = new Editor({
     element: { mount: host },
-    extensions: [...composerExtensions(), composerBehavior({ link: () => toolbar.openLink() }), chrome, toolbar.extension],
+    extensions: [...composerExtensions(), composerBehavior({ openLink: () => toolbar.openLink() }), chrome, toolbar.extension],
     // Enter is the page's (it sends), and no word the owner typed is rewritten by a paste rule.
     enableCoreExtensions: { keymap: false, tabindex: false },
     enablePasteRules: false, injectCSS: false,

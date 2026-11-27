@@ -2399,7 +2399,7 @@ Markdown, and the reply renderer draws both.
 - `composer-rich-bar-keyboard`: Alt+F10 goes to the bar, the arrows move its one tab stop, the focus ring is drawn.
 - `composer-rich-sent-marks`: underline, highlight, strike and code go out as Markdown and the bubble draws each in its own colours.
 
-Why TipTap (the comparison; checked 2026-11-27, versions as the npm registry gave them): the owner asked for every format, with an
+Why TipTap (the comparison, with the versions the npm registry gave): the owner asked for every format, with an
 open-source framework used systematically rather than hand-written.
 
 | | TipTap 3.35 (MIT) | Milkdown 7.23 (MIT) | Lexical 0.53 (MIT) | hand-written ProseMirror (before) |
@@ -2424,7 +2424,7 @@ under a menu: its positioning engine, Floating UI, is used directly), its task l
 one list and one `<details>`), its mathematics (an atom edited in a prompt: here the LaTeX is the text and is drawn under it), its
 Markdown extension (no offsets), its link autolink and paste (they would rewrite an address the owner typed as words), its ordered
 list's and code block's own paste handlers. Bundle: `vite build`, the main chunk, before 2,819.48 kB (1,158.91 kB gzip), now
-BUNDLE_AFTER.
+3,069.28 kB (1,239.50 kB gzip): +249.8 kB, +80.6 kB gzip for the editor framework (@tiptap/core, tables, lists, Floating UI), and the catalogues' 29 new words in fifteen languages +18.5 kB, +5.6 kB gzip, in the i18n chunk. The largest parts are @tiptap/core (300 kB of source), prosemirror-tables (90 kB) and linkifyjs (64 kB, TipTap's link extension carries it for an autolink this field turns off): a mark of its own for the link would save the last.
 
 Not covered by the browser fixture: a real operating-system paste from Word or Notion (the HTML shapes are fixtures, in
 `composer-rich-paste.test.ts`), and macOS and Linux webviews' input methods.

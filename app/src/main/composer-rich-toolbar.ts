@@ -15,7 +15,7 @@ import { shortcutText } from "./keys";
 import { t } from "./i18n";
 import { messageUrl } from "./markdown-text";
 import type { MessageKey } from "./i18n/zh-TW";
-import { type Choice, closeMenu, ico, type IconName, openMenu } from "./ui";
+import { type Choice, closeMenu, ico, type IconName, iconButton, openMenu } from "./ui";
 
 /** A message without slots, whichever of the plain ones it is. */
 const word = t as (key: MessageKey) => string;
@@ -85,8 +85,9 @@ export function linkAddress(words: string): string | null {
   return messageUrl(full) ? full : null;
 }
 
-const button = (icon: IconName, label: string, id: string, extra = "", cls = "", type = "button"): string =>
-  `<button type="${type}" class="btn icon cmp-fmt-btn${cls ? " " + cls : ""}" data-bar="${id}" aria-label="${label}" title="${label}" tabindex="-1"${extra}>${ico(icon)}</button>`;
+/** An icon button of the bar: the app's own (ui.ts), one tab stop for the bar as a whole (the arrows move it). */
+const button = (icon: IconName, label: string, id: string, extra = "", cls = ""): string =>
+  iconButton(icon, label, ` data-bar="${id}" tabindex="-1"${extra}`, `cmp-fmt-btn${cls ? " " + cls : ""}`);
 const escape = (words: string): string => words.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 export interface ComposerToolbar {
@@ -109,7 +110,7 @@ export function composerToolbar(host: HTMLElement): ComposerToolbar {
 
   const marks = FORMATS.map(format => {
     const keys = shortcutText([...format.keys]);
-    return button(format.icon, escape(`${word(format.label)} ${keys}`), format.id, ` aria-pressed="false"`);
+    return button(format.icon, `${word(format.label)} ${keys}`, format.id, ` aria-pressed="false"`);
   }).join("");
   const render = (): void => {
     bar.setAttribute("aria-label", t("composer.fmt.toolbar"));
@@ -118,21 +119,21 @@ export function composerToolbar(host: HTMLElement): ComposerToolbar {
       `<button type="button" class="btn cmp-fmt-block" data-bar="block" aria-haspopup="menu" aria-expanded="false" tabindex="0"><span class="cmp-fmt-kind"></span>${ico("down")}</button>` +
       `<span class="cmp-fmt-sep" role="separator"></span>${marks}` +
       `<span class="cmp-fmt-sep" role="separator"></span>` +
-      button("equation", escape(t("composer.fmt.math")), "math") + button("link", escape(`${t("composer.fmt.link")} ${shortcutText(["Primary", "K"])}`), "link", ` aria-pressed="false"`) +
-      `<span class="cmp-fmt-sep cmp-fmt-table" role="separator"></span>${button("table", escape(t("chat.table")), "table", ` aria-haspopup="menu" aria-expanded="false"`, "cmp-fmt-table")}` +
+      button("equation", t("composer.fmt.math"), "math") + button("link", `${t("composer.fmt.addLink")} ${shortcutText(["Primary", "K"])}`, "link", ` aria-pressed="false"`) +
+      `<span class="cmp-fmt-sep cmp-fmt-table" role="separator"></span>${button("table", t("chat.table"), "table", ` aria-haspopup="menu" aria-expanded="false"`, "cmp-fmt-table")}` +
       `<span class="cmp-fmt-sep cmp-fmt-language" role="separator"></span><input class="cmp-fmt-language" type="text" data-bar="language" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="${escape(t("composer.codeLanguage"))}" placeholder="${escape(t("composer.codeLanguage"))}">` +
       `</div>` +
-      `<form class="cmp-fmt-row cmp-fmt-link" data-row="link" hidden>` +
+      `<div class="cmp-fmt-row cmp-fmt-link" data-row="link" hidden>` +
       `<input class="cmp-fmt-address" type="text" inputmode="url" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="${escape(t("composer.fmt.linkAddress"))}" placeholder="https://">` +
-      button("check", escape(t("composer.fmt.linkSet")), "apply", "", "", "submit") + button("unlink", escape(t("composer.fmt.unlink")), "unlink") + button("x", escape(t("common.close")), "close") +
-      `</form>`;
+      button("check", t("composer.fmt.linkSet"), "apply") + button("unlink", t("composer.fmt.unlink"), "unlink") + button("x", t("common.close"), "close") +
+      `</div>`;
     bar.querySelectorAll<HTMLElement>('[data-bar="table"], .cmp-fmt-sep.cmp-fmt-table').forEach(el => { el.hidden = true; });
     bar.querySelectorAll<HTMLElement>(".cmp-fmt-language, .cmp-fmt-sep.cmp-fmt-language").forEach(el => { el.hidden = true; });
   };
   render();
   const address = (): HTMLInputElement => bar.querySelector<HTMLInputElement>(".cmp-fmt-address")!;
   const formatRow = (): HTMLElement => bar.querySelector<HTMLElement>('[data-row="format"]')!;
-  const linkRow = (): HTMLFormElement => bar.querySelector<HTMLFormElement>('[data-row="link"]')!;
+  const linkRow = (): HTMLElement => bar.querySelector<HTMLElement>('[data-row="link"]')!;
 
   // ----- what the bar shows of the words under it
 
@@ -171,15 +172,19 @@ export function composerToolbar(host: HTMLElement): ComposerToolbar {
 
   // ----- where it stands
 
+  /**
+   * Where the bar stands against: the selection's own stretch across the field and the whole field's height, so that the bar is over
+   * (or, with no room over, under) the field and never over any of the words in it, a line above the selection or a row of a table.
+   */
   const reference = (): VirtualElement => ({
     contextElement: host,
     getBoundingClientRect: () => {
-      const view = editor!.view, { from, to } = editor!.state.selection;
+      const view = editor!.view, { from, to } = editor!.state.selection, field = host.getBoundingClientRect();
       try {
         const a = view.coordsAtPos(from), b = view.coordsAtPos(to);
-        const left = Math.min(a.left, b.left), right = Math.max(a.right, b.right), top = Math.min(a.top, b.top), bottom = Math.max(a.bottom, b.bottom);
-        return new DOMRect(left, top, Math.max(right - left, 1), bottom - top);
-      } catch { return host.getBoundingClientRect(); }
+        const left = Math.max(field.left, Math.min(a.left, b.left)), right = Math.min(field.right, Math.max(a.right, b.right));
+        return new DOMRect(left, field.top, Math.max(right - left, 1), field.height);
+      } catch { return field; }
     },
   });
   const place = (): void => {
@@ -311,10 +316,14 @@ export function composerToolbar(host: HTMLElement): ComposerToolbar {
     if (!control || !editor || control.disabled) return;
     const id = control.dataset.bar!;
     const format = FORMATS.find(item => item.id === id);
+    // The words have the focus before a press changes them (reached by the keyboard, the bar has it): ProseMirror then writes its
+    // selection to the page, and reads none from it.
+    if ((format || id === "math") && !editor.view.hasFocus()) editor.view.focus();
     if (format) { format.run(editor); later(); return; }
     if (id === "block") { chooseBlock(control); return; }
     if (id === "table") { chooseTable(control); return; }
     if (id === "link") { openLink(); return; }
+    if (id === "apply") { applyLink(); return; }
     if (id === "close") { backToWords(); return; }
     if (id === "unlink") { editor.chain().focus().extendMarkRange("link").unsetLink().run(); backToWords(); return; }
     if (id === "math") {
@@ -323,7 +332,6 @@ export function composerToolbar(host: HTMLElement): ComposerToolbar {
       later();
     }
   });
-  linkRow().addEventListener("submit", event => { event.preventDefault(); applyLink(); });
   bar.addEventListener("keydown", event => {
     const target = event.target as HTMLElement;
     if (event.key === "Escape") {
@@ -335,7 +343,7 @@ export function composerToolbar(host: HTMLElement): ComposerToolbar {
       if (event.key === "Enter") { event.preventDefault(); editor!.chain().focus().updateAttributes("codeBlock", { language: (target as HTMLInputElement).value.trim().toLowerCase() }).run(); }
       return;
     }
-    if (target.matches(".cmp-fmt-address")) return;
+    if (target.matches(".cmp-fmt-address")) { if (event.key === "Enter") { event.preventDefault(); applyLink(); } return; }
     // The arrows move along the bar (one stop at a time, as a toolbar does), and Home and End go to its ends.
     const items = [...formatRow().querySelectorAll<HTMLElement>("button:not([hidden]):not(:disabled)")];
     const at = items.indexOf(target.closest("button") as HTMLElement);

@@ -1019,7 +1019,7 @@ export const en = {
   "composer.fmt.underline": "Underline",
   "composer.fmt.strike": "Strikethrough",
   "composer.fmt.highlight": "Highlight",
-  "composer.fmt.link": "Link",
+  "composer.fmt.addLink": "Link",
   "composer.fmt.math": "Inline equation",
   "composer.fmt.unlink": "Remove link",
   "composer.fmt.linkAddress": "Link address",

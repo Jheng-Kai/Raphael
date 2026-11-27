@@ -181,8 +181,8 @@ export function toggleTask({ state, tr, dispatch, commands }: CommandProps): boo
 // ------------------------------------------------------------------------------------------------------------- the extension
 
 export interface BehaviorOptions {
-  /** Mod+K: the link editor, for the words selected or the link the caret is in. */
-  link: () => boolean;
+  /** Mod+K: the editor of the address, for the words selected or the link the caret is in. */
+  openLink: () => boolean;
 }
 
 /** The keys of the field and the typing shortcuts of the app's own blocks. Its priority puts them before TipTap's formats. */
@@ -198,7 +198,7 @@ export function composerBehavior(options: BehaviorOptions): Extension {
       return {
         "Shift-Enter": run(shiftEnter), Tab: run(tab), "Shift-Tab": run(shiftTab),
         Backspace: run(backspace), "Mod-Backspace": run(backspace), Delete: run(forwardDelete), "Mod-Delete": run(forwardDelete), "Mod-a": run(selectAll),
-        "Mod-k": () => options.link(),
+        "Mod-k": () => options.openLink(),
         "Mod-Shift-9": () => this.editor.commands.toggleTask(),
       };
     },

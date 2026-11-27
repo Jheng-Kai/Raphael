@@ -1310,7 +1310,7 @@ export const ru = {
   "composer.fmt.underline": "Подчёркнутый",
   "composer.fmt.strike": "Зачёркнутый",
   "composer.fmt.highlight": "Выделить цветом",
-  "composer.fmt.link": "Ссылка",
+  "composer.fmt.addLink": "Ссылка",
   "composer.fmt.math": "Формула в строке",
   "composer.fmt.unlink": "Убрать ссылку",
   "composer.fmt.linkAddress": "Адрес ссылки",
