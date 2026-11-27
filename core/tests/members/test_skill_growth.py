@@ -61,7 +61,8 @@ async def test_generated_skill_requires_sections_and_bounded_safe_references(rig
         cap.manage_skill(0, {"text": DOCUMENT, "references": {"../../SOUL.md": "bad"}})
     assert cap.skills(0) == []
     skill = cap.manage_skill(0, {"text": DOCUMENT, "references": {"sources.md": "Owner workflow"}})
-    assert "Owner workflow" in cap.read_skill(0, skill["name"])
+    assert "- references/sources.md" in cap.read_skill(0, skill["name"])  # named, read when needed (R-SKILL-31)
+    assert "Owner workflow" in cap.read_skill_file(0, skill["name"], "references/sources.md")
 
 
 async def test_learning_distinguishes_creation_content_and_reference_updates_from_identical_writes(rig):

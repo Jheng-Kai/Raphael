@@ -240,6 +240,9 @@
 .message-text ul, .message-text ol { margin: 0.5em 0; padding-inline-start: 1.6em; }
 /* A message's list is the first level, even inside the thread's own list. */
 .message-text ul { list-style-type: disc; }
+/* A list inside an item hugs it, its bullets hollow, as the composer draws it. */
+.message-text li > :is(ul, ol) { margin-block: 0; }
+.message-text :is(ul, ol) ul { list-style-type: circle; }
 .message-text li { padding-inline-start: 0.15em; }
 .message-text code { font-family: var(--mono); font-size: var(--fs-xs); padding: 0.12em 0.3em; border-radius: var(--r-sm); background: var(--surface-2); }
 code[data-message-path][role="link"]:is(:hover, :focus-visible) { cursor: pointer; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }

@@ -497,13 +497,14 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
                 return text
 
     def _read_skill_text(self, inputs, member_id=None, guest=...):
-        """The skill's document with what a model needs to reach the rest of it: where its folder is in the member's own computer,
-        the references that are short, and the other files by name and size (skill_index.py). Read in a thread, it is given the
-        member's `guest()` path, which it may not ask for there."""
+        """The skill's document with what a model needs to reach the rest of it: where its folder is in the member's own computer
+        and its other files by name and size, its references among them (skill_index.py), each read when it is needed, as Codex,
+        Claude Code and the Agent Skills format do. Read in a thread, it is given the member's `guest()` path, which it may not
+        ask for there."""
         from .skill_index import plugin_entry_points, skill_files
 
         guest = self.guest(member_id) if guest is ... else guest
-        owner, skill, path, plugin = inputs
+        _, skill, path, plugin = inputs
         path = self.homes.safe(path)
         if path.stat().st_size > MAX_SKILL_BYTES:
             return None
@@ -514,20 +515,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             text = text.replace(variable, here)
         if plugin:
             text = text.replace("${CLAUDE_PLUGIN_ROOT}", root)
-        inlined = []
-        for reference in sorted((path.parent / "references").rglob("*")):
-            if not reference.is_file() or reference.suffix not in (".md", ".txt", ".json"):
-                continue
-            reference = self.homes.safe(reference)
-            if reference.stat().st_size <= 8000:
-                try:
-                    content = reference.read_text(encoding="utf-8")
-                except UnicodeError:
-                    continue
-                relative = reference.relative_to(self.homes.home(owner)).as_posix()
-                text += "\n\n<reference name=" + json.dumps(relative) + ">\n" + content + "\n</reference>"
-                inlined.append(reference.relative_to(path.parent).as_posix())
-        files = skill_files(path.parent, inlined)
+        files = skill_files(path.parent, [])
         if files or skill["source"].startswith("local:") or skill["source"] == "upload" or plugin:
             runs = "vm_exec in your Docker computer" if guest and here.startswith(guest) else "the local command tool"
             text += "\n\nSkill folder: " + here

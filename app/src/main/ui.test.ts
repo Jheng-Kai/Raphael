@@ -26,6 +26,13 @@ describe("popover placement", () => {
     expect(menuPlacement({ left: 690, right: 690, top: 300, bottom: 320 }, { width: 240, height: 120 }, viewport, "start").left).toBe(472);
   });
 
+  test("a menu that must not cover what is above its button stands below it at its left edge, and above only when it cannot fit", () => {
+    expect(menuPlacement({ left: 120, right: 200, top: 300, bottom: 326 }, { width: 240, height: 70 }, viewport, "below"))
+      .toEqual({ left: 120, top: 330, maxHeight: 142 });
+    expect(menuPlacement({ left: 120, right: 200, top: 440, bottom: 466 }, { width: 240, height: 120 }, viewport, "below"))
+      .toEqual({ left: 120, top: 316, maxHeight: 396 });
+  });
+
   test("a menu on the right of its anchor (the rail's face) ends where the anchor ends and keeps inside the window", () => {
     // The face at the foot of the 88 px rail: 8 px to the right of it, its bottom edge on the face's bottom.
     expect(menuPlacement({ left: 26, right: 62, top: 424, bottom: 460 }, { width: 220, height: 160 }, viewport, "right"))

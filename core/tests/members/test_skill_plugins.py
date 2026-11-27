@@ -98,7 +98,10 @@ async def test_local_plugin_is_one_set_with_individual_imports_and_all_member_ac
         shared = [s for s in cap.skills(identifier) if s.get("set_id")]
         assert len(shared) == 3 and all(s["shared"] for s in shared)
         write = next(s for s in shared if s["name"] == "write")
-        assert "REFERENCE-DESK" in cap.read_skill(identifier, write["slash_name"])
+        # The reference is named with the document and read when it is needed (progressive disclosure).
+        document = cap.read_skill(identifier, write["slash_name"])
+        assert "REFERENCE-DESK" not in document and "- references/check.md" in document
+        assert "REFERENCE-DESK" in cap.read_skill_file(identifier, write["slash_name"], "references/check.md")
         assert (cap._path(identifier, write["id"]).parent / "scripts/task.py").read_bytes() == package()["skills/write/scripts/task.py"]
         review = next(s for s in shared if s["name"] == "review")
         assert "Review the plan" in cap.expand(identifier, "/" + review["slash_name"] + " the plan")
@@ -339,7 +342,7 @@ for line in sys.stdin:
     if msg.get('method') == 'initialize': send({'id':msg['id'],'result':{}})
     elif msg.get('method') == 'thread/start': send({'id':msg['id'],'result':{'thread':{'id':'synthetic'}}})
     elif msg.get('method') == 'turn/start':
-        assert len([x for x in msg['params']['input'] if x['type']=='skill']) == 2
+        assert [x for x in msg['params']['input'] if x['type']=='skill'] == []
         send({'method':'item/completed','params':{'item':{'type':'agentMessage','text':'Done'}}})
         send({'method':'turn/completed','params':{'turn':{'status':'completed'}}}); break
 ''', encoding="utf-8")

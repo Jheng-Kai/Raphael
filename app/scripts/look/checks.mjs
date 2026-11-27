@@ -670,7 +670,9 @@ export function checkRendered(name, context = {}) {
     // A package's page stands in the list's place (R-SKILL-17): it has no importer of its own.
     const onPage = ['skill-library-open', 'skill-library-page-top', 'skill-library-skill-page', 'skill-library-doc-alone', 'skill-library-page-remove',
       'skill-library-plugin-imported', 'skill-library-skipped', 'skill-library-rename'].includes(name);
-    if (name !== 'member-skills-library' && !onPage) {
+    // A hand-off leaves Settings for Raphael's conversation: what stands there is checked below, not the list.
+    const handedOff = name.startsWith('skill-library-handoff') && name !== 'skill-library-handoff-back';
+    if (name !== 'member-skills-library' && !onPage && !handedOff) {
       const pane = document.querySelector('.modal-scrim .skl');
       require(pane?.getAttribute('aria-label') === '團隊技能', 'the Settings section names Team skills');
       const head = pane.closest('.set-content').querySelector('.set-head');
@@ -866,7 +868,7 @@ export function checkRendered(name, context = {}) {
       if (name === 'skill-library-import-link') require(field.value === 'https://example.com/team-handbook', 'the link stands in the box');
       if (name === 'skill-library-import-menu') {
         const menu = document.querySelector('.skl-pick-menu'), anchor = panel.querySelector('[data-skl="pick"]').getBoundingClientRect(), frame = menu.getBoundingClientRect();
-        require([...menu.querySelectorAll('button')].map(button => button.textContent.trim()).join() === '檔案,資料夾', 'the menu offers files or a folder');
+        require([...menu.querySelectorAll('button')].map(button => button.textContent.trim()).join() === '檔案（zip、SKILL.md…）,資料夾', 'the menu offers the files (a zip plainly among them) or a folder');
         require(frame.left >= 0 && frame.right <= innerWidth && frame.bottom <= innerHeight && (frame.top >= anchor.bottom - 1 || frame.bottom <= anchor.top + 1) && Math.abs(frame.left - anchor.left) <= 2, 'the menu stands against its button, at its left edge, inside the window');
       }
     }
@@ -878,19 +880,42 @@ export function checkRendered(name, context = {}) {
       require(!document.querySelector('.modal-body .skl-import, .modal-body #skl-input'), 'no importer stands in the page');
       if (name === 'skill-library') require(/skl-pack/.test(document.querySelector('.modal-body .skl').firstElementChild.innerHTML), 'the page starts with its lists');
     }
-    if (name === 'skill-library-converting' || name === 'skill-library-converted') {
-      const status = document.querySelector('.skl-import .skl-progress[role="status"]');
-      if (name === 'skill-library-converting') {
-        require(visible(status) && status.textContent.trim() === '拉斐爾 正在轉換成技能…（claude-sonnet-5）', `the card says which slime writes the skill and with which model (${status?.textContent})`);
-        require(document.querySelector('[data-skl="import-go"]').disabled && document.querySelector('#skl-input').disabled && document.querySelector('[data-skl="pick"]').disabled, 'the card holds still while it works');
-        require(!document.querySelector('.skl-error, .toast'), 'nothing else is said while it works');
-        const call = window.__look.calls.find(c => c.method === 'skills.library.import');
-        require(call?.params.file?.name === 'team-handbook.pdf', 'the dropped file went to the core whole, whatever its kind');
-      } else {
-        require(visible(status) && status.textContent.trim() === '拉斐爾 已轉換成「weekly-report」，請先看過內容再讓大家用。', `the card says who made the skill (${status?.textContent})`);
-        require(rowOf('skill:weekly')?.querySelector('.skl-single .d')?.textContent === '整理每週進度並寫成報告' && accessOf('skill:weekly') === '整個團隊', 'the skill is a row of its own, in the list');
-        require(!document.querySelector('.skl-error, .toast') && !document.querySelector('[data-skl="import-go"]').disabled, 'the box is free again and nothing else is said');
-      }
+    if (name.startsWith('skill-library-handoff') && name !== 'skill-library-handoff-back') {
+      // What is no skill leaves the importer for Raphael's own conversation (R-SKILL-28): the dialog and Settings are gone, the
+      // owner's words are the message with their source as readable words (a file as its own chip), Raphael has answered at once
+      // with what it found and its choices as a question card, and the hand-off was made once.
+      require(![...document.querySelectorAll('.skl-dlg, .modal-scrim .skl')].some(visible), 'the importer and Settings are closed');
+      const calls = window.__look.calls.filter(c => c.method === 'skills.library.import'), asks = window.__look.calls.filter(c => c.command === 'agent_ask_text' && c.intent === 'import-skill');
+      require(calls.length === 1 && asks.length === 1, `one import asked and one hand-off sent (${calls.length}, ${asks.length})`);
+      require(!asks[0].memberId, 'the hand-off goes to Raphael, the first member');
+      const mine = [...document.querySelectorAll('.thread .tn')].find(item => item.querySelector('.owner-message .message-text')?.textContent.includes('團隊技能'));
+      require(visible(mine), "the owner's message is in Raphael's conversation");
+      const words = mine.querySelector('.owner-message .message-text').textContent.trim();
+      if (name === 'skill-library-handoff') require(words === '請幫我把這個網頁做成團隊技能：https://example.com/handbook', `the words say the page (${words})`);
+      if (name === 'skill-library-handoff-repo') require(words.startsWith('請幫我把這個 Git 倉庫做成團隊技能：git@gitlab.example.com:group/handbook.git（已下載到 ') && words.includes('skill-sources'), `the words say the repository and where it was put (${words})`);
+      if (name === 'skill-library-handoff-file') {
+        require(words === '請幫我把這個檔案做成團隊技能：team-handbook.pdf', `the words say the file (${words})`);
+        require(asks[0].attachments?.length === 1 && asks[0].attachments[0].name === 'team-handbook.pdf', 'the file goes as the message\'s own attachment');
+        require(mine.querySelector('.me-files')?.textContent.includes('team-handbook.pdf') || mine.textContent.includes('team-handbook.pdf'), 'the file is a chip of the message');
+      } else require(!asks[0].attachments?.length, 'nothing is attached');
+      const card = document.querySelector('[data-owner-question="skill-choice"]');
+      require(visible(card) && card.querySelectorAll('button').length >= 3, 'Raphael asks which skill to make with a question card');
+      require(mine.textContent.includes('我看過了'), 'Raphael has said what it found, in one short message');
+      require(!document.querySelector('.toast, .skl-error'), 'nothing half-done is said anywhere');
+    }
+    if (name === 'skill-library-handoff-back') {
+      // Back in Settings: the hand-off left nothing behind in Team skills.
+      const field = document.querySelector('.skl-dlg #skl-input');
+      require(visible(field) && field.value === '', 'the box is empty again');
+      require(!document.querySelector('.skl-error') && !document.querySelector('.skl-progress')?.textContent && !document.querySelector('[data-skl="import-go"]').disabled, 'no error, no progress, 匯入 free');
+      require(document.querySelectorAll('.skl-pack').length === 3, 'no package was made by a hand-off');
+    }
+    if (name === 'skill-library-fetching') {
+      const row = document.querySelector('.skl-import-row'), status = row.querySelector('.skl-progress[role="status"]');
+      require(visible(status) && status.textContent.trim() === '正在從 gitlab.example.com 取得…', `the dialog says where it fetches from (${status?.textContent})`);
+      require(row.contains(document.querySelector('[data-skl="pick"]')) && getComputedStyle(status).whiteSpace === 'nowrap', 'it stands in the row of the choose button, on one line');
+      require(Math.abs(status.getBoundingClientRect().top - document.querySelector('[data-skl="pick"]').getBoundingClientRect().top) < 12, 'beside the button, not under it');
+      require(document.querySelector('[data-skl="import-go"]').disabled && document.querySelector('#skl-input').disabled && !document.querySelector('.skl-error, .toast'), 'the card holds still and says nothing else');
       const box = document.querySelector('.skl-import').getBoundingClientRect(), r = status.getBoundingClientRect();
       require(r.left >= box.left - 1 && r.right <= box.right + 1, 'the words stay inside the card');
     }
@@ -936,7 +961,8 @@ export function checkRendered(name, context = {}) {
       const expected = {
         'clash-single': ['pdf-read', 'pdf', '重新命名或刪除'], 'clash-package': ['tdd', 'pstack', 'office-kit', '重新命名或刪除'],
         'size': ['assets/demo-video.mp4', '256.0 MB'], 'repo': ['owner/missing'], 'network': ['GitHub', '網路'], 'document': ['skills/bad/SKILL.md', '第 4 行'],
-        'no-model': ['還沒有連上模型', '「模型」', '再匯入一次'], 'no-skill': ['做不成技能', '這是一份菜單'],
+        'git-sign-in': ['gitlab.example.com', 'SSH 金鑰'], 'git-host-key': ['gitlab.example.com', 'ssh gitlab.example.com', '終端機'],
+        'git-network': ['gitlab.example.com', '公司 VPN'], 'git-missing': ['沒有安裝 Git', '安裝'],
       }[name.slice('skill-library-failed-'.length)];
       require(visible(said) && expected.every(part => words.includes(part)), `the cause is said with what it names (${words})`);
       require(visible(document.querySelector('.skl-import #skl-input')) && document.querySelector('#skl-input').value && !document.querySelector('.toast'), 'the importer stays open with what was put in it, and nothing else is said');
@@ -2859,7 +2885,9 @@ export function checkRendered(name, context = {}) {
       require(rows.every(row => row.querySelector('.mdesc')?.textContent), 'commands and skills have descriptions');
       // A long description takes one line, cut with an ellipsis, never several.
       require(rows.every(row => { const d = row.querySelector('.mdesc'), s = getComputedStyle(d); return s.whiteSpace === 'nowrap' && s.textOverflow === 'ellipsis' && d.getBoundingClientRect().height <= parseFloat(s.lineHeight) + 1; }), 'each description takes one line');
-      if (name === 'completion-slash' || name === 'completion-clash') require(heads.join('|') === '指令|技能', 'commands and skills have separate headings');
+      // A bare / also offers the app's own commands first, under 內建 (R-SLASH-APP-01); a typed name filters them out.
+      if (name === 'completion-slash') require(heads.join('|') === '內建|指令|技能' && values[0] === 'app:usage', `the app's commands, then the member's commands and skills, under their own headings: ${heads.join('|')}`);
+      if (name === 'completion-clash') require(heads.join('|') === '指令|技能', 'commands and skills have separate headings');
       if (name === 'completion-plugin') require(heads.join('|') === '技能' && menu.querySelector('.msource')?.textContent === 'Field Notes', 'the plugin is quiet small print, never a section');
       if (name === 'completion-clash') require(values.join('|') === 'review|field-notes:review|desk-notes:review', 'clashes show qualified plugin names');
     }
@@ -6302,7 +6330,7 @@ export function checkRendered(name, context = {}) {
     if (name === "composer-rich-marks") {
       const text = "這是**粗體**、*斜體*、`程式碼`、~~刪除線~~，公式 $x^2$ 和連結 https://example.com/docs";
       require(field.value === text, `the Markdown is what was typed: ${JSON.stringify(field.value)}`);
-      const strong = field.querySelector('strong'), em = field.querySelector('em'), code = field.querySelector('code'), del = field.querySelector('del'), link = field.querySelector('.cmp-link');
+      const strong = field.querySelector('strong'), em = field.querySelector('em'), code = field.querySelector('code'), del = field.querySelector('s, del'), link = field.querySelector('.cmp-link');
       require(strong?.textContent === "粗體" && Number(style(strong).fontWeight) > Number(style(field).fontWeight) && em?.textContent === "斜體" && style(em).fontStyle === 'italic', "bold and italic");
       require(code?.textContent === "程式碼" && /mono|consolas|cascadia/i.test(style(code).fontFamily) && style(code).backgroundColor === ink('--surface-2'), "code on the recessed fill");
       require(del?.textContent === "刪除線" && style(del).textDecorationLine.includes('line-through'), "strike is struck");
@@ -6328,6 +6356,179 @@ export function checkRendered(name, context = {}) {
       require(field.value === "- 水果\n  - 蘋果\n  - 香蕉\n- 蔬菜 **新鮮**", `the nested list kept: ${JSON.stringify(field.value)}`);
       require(field.querySelectorAll('ul ul > li').length === 2 && style(field.querySelector('ul ul')).listStyleType === 'circle' && field.querySelector('strong')?.textContent === "新鮮", "two levels of bullets, the inner ones hollow, and the bold word");
       return { check: name };
+    }
+    if (name === "composer-rich-bubble-lists" || name === "composer-rich-bubble-blocks" || name === "composer-rich-bubble-marks") {
+      // Each sent message is drawn again from its finished turn (SENT_LISTS, SENT_BLOCKS, SENT_MARKS in rich-composer.mjs).
+      const lists = name === "composer-rich-bubble-lists", marks = name === "composer-rich-bubble-marks", box = node => node.getBoundingClientRect();
+      const from = lists ? 700 : marks ? 708 : 704;
+      const bubbles = [0, 1, 2, 3].map(index => document.querySelector(`.tn[data-id="${from + index}"] .owner-message .bubble`));
+      require(bubbles.every(bubble => bubble?.querySelector('.message-text')), "every sent message is drawn in its bubble");
+      const measures = [];
+      for (const bubble of bubbles) {
+        const words = bubble.querySelector('.message-text'), first = words.firstElementChild, last = words.lastElementChild, pad = style(bubble);
+        // The words stand on the bubble's own padding, as one line of words does: a list, a quote or code adds no space at either end.
+        const above = box(first).top - box(bubble).top, below = box(bubble).bottom - box(last).bottom;
+        require(Math.abs(above - parseFloat(pad.paddingTop)) <= 1 && Math.abs(below - parseFloat(pad.paddingBottom)) <= 1, `the words stand on the bubble's padding: ${above.toFixed(1)} above and ${below.toFixed(1)} below, against ${pad.paddingTop} and ${pad.paddingBottom} (${first.tagName}…${last.tagName})`);
+        // Every number fits between the bubble's padding and its words, so none reaches the bubble's edge.
+        for (const ol of bubble.querySelectorAll('ol')) {
+          const items = [...ol.children].filter(item => item.tagName === 'LI'), start = Number(ol.getAttribute('start') ?? 1);
+          require(style(ol).listStyleType === 'decimal' && items.every(item => style(item).display === 'list-item'), "the items are numbered");
+          items.forEach((item, index) => {
+            const probe = document.createElement('span'); probe.textContent = `${start + index}.`; probe.style.cssText = 'position:absolute;white-space:pre'; ol.append(probe);
+            const marker = box(probe).width; probe.remove();
+            const room = box(item).left + parseFloat(style(item).paddingInlineStart) - box(bubble).left - parseFloat(pad.paddingLeft);
+            require(room >= marker + 2, `${start + index}. has room before its words: ${room.toFixed(1)} for ${marker.toFixed(1)}`);
+          });
+        }
+        measures.push({ above, below });
+      }
+      if (lists) {
+        const [short, afterWords, wrapping, nested] = bubbles;
+        require(short.querySelectorAll('ol > li').length === 3 && short.querySelector('ol li')?.textContent === "好", "three short numbered items");
+        require([...afterWords.querySelector('.message-text').children].map(node => node.tagName).join() === "P,OL,P" && afterWords.querySelectorAll('ol > li').length === 2, "words, two numbered items, words");
+        require(wrapping.querySelectorAll('ol > li').length === 3, "three wrapping items");
+        const inner = nested.querySelector('ol > li > ul');
+        require(inner && inner.children.length === 2 && style(inner).listStyleType === 'circle' && style(inner).marginTop === '0px' && style(inner).marginBottom === '0px', "the bullets inside an item are hollow and hug it");
+        require(box(inner.firstElementChild).left > box(nested.querySelector('ol > li')).left + 8 && nested.querySelectorAll('ol > li').length === 3, "they stand in under their item, and the numbers go on after them");
+      } else if (marks) {
+        const [words, table, toggle, math] = bubbles, own = style(words.querySelector('.message-text')).color;
+        const strong = words.querySelector('strong'), em = words.querySelector('em'), del = words.querySelector('del'), code = words.querySelector('code'), link = words.querySelector('a.message-link');
+        require(strong?.textContent === "粗體" && Number(style(strong).fontWeight) > Number(style(words).fontWeight) && em?.textContent === "斜體" && style(em).fontStyle === 'italic', `bold and italic: ${style(strong).fontWeight} against ${style(words).fontWeight}, ${style(em).fontStyle}`);
+        require(del?.textContent === "刪除線" && style(del).textDecorationLine.includes('line-through') && code?.textContent === "程式碼", "strike and code");
+        require(link?.textContent === "https://example.com/docs" && [strong, em, del, code, link].every(node => style(node).color === own), "the link and every mark wear the bubble's words colour");
+        const cells = [...table.querySelectorAll('.owner-table th, .owner-table td')];
+        require(cells.length === 6 && cells.every(cell => style(cell).color === own && style(cell).borderTopStyle === 'solid') && box(table.querySelector('table')).right <= box(table).right - parseFloat(style(table).paddingRight) + 1, "the table's six cells, ruled, inside the bubble");
+        const details = toggle.querySelector('details.owner-details');
+        require(details?.open && details.querySelector('summary')?.textContent === "點開看細節" && visible(details.querySelector('.details-body')) && details.querySelector('.details-body').textContent.includes("收起來的內容"), "the open toggle with its title and what is under it");
+        const hr = math.querySelector('hr');
+        require(visible(math.querySelector('.math-display .katex')) && style(math.querySelector('.katex')).color === own && math.querySelector('p')?.textContent === "結尾", "the display equation in the bubble's colour and the last words");
+        // The divider is the words colour at 40%, never the browser's grey (hr { color: gray }) that vanished on the bubble.
+        require(visible(hr) && style(hr).color === own && style(hr).borderTopWidth === '1px' && box(hr).width >= box(math.querySelector('.katex')).width - 1, `the divider wears the bubble's words colour across the words: ${style(hr).borderTopColor} (${style(hr).color} / ${own})`);
+      } else {
+        const [numbers, tasks, quote, code] = bubbles;
+        require(numbers.querySelector('ol')?.getAttribute('start') === "8" && numbers.querySelectorAll('ol > li').length === 4, "the numbers start at 8 and reach 11");
+        const own = style(tasks.querySelector('.message-text')).color, boxes = [...tasks.querySelectorAll('.message-task input')];
+        require(boxes.length === 2 && boxes.every(input => style(input).appearance === 'none' && style(input).borderTopColor === own), `each task's box is outlined in the bubble's words colour: ${boxes.map(input => style(input).borderTopColor)} / ${own}`);
+        require(style(boxes[1]).backgroundColor === own && !boxes[0].checked && style(boxes[0]).backgroundColor === 'rgba(0, 0, 0, 0)', "the done task's box is filled, the open one is empty");
+        require(boxes.every(input => Math.abs(box(input).width - size(input.closest('li'))) <= 2 && box(input).left >= box(tasks).left + parseFloat(style(tasks).paddingLeft) - 1), "each box is the size of the words, inside the bubble");
+        require(style(tasks.querySelector('li:not(.message-task)')).listStyleType === 'disc', "the plain item keeps its bullet");
+        require(quote.querySelector('.message-text > blockquote:first-child') && code.querySelector('.message-text > .owner-code:only-child'), "a bubble that starts with a quote, and one of only code");
+      }
+      return { check: name, measures };
+    }
+    // The formats' keys, and the bar over a selection (composer-rich-toolbar.ts).
+    if (name === "composer-rich-keys" || name === "composer-rich-sent-marks") {
+      const words = "重點 **粗體** *斜體* <u>底線</u> ~~刪除線~~ `程式碼` ==螢光== 結束";
+      let root = field, sentBubble = null;
+      if (name === "composer-rich-sent-marks") {
+        const sent = window.__look.calls.filter(call => call.command === "agent_ask_text").at(-1);
+        require(sent?.text === words, `Markdown goes out: ${JSON.stringify(sent?.text)}`);
+        sentBubble = [...document.querySelectorAll('.tn.is-pending .owner-message .bubble')].find(visible);
+        root = sentBubble.querySelector('.message-text');
+        require(!field.value, "sending empties the field");
+      } else require(field.value === words, `every format is its Markdown: ${JSON.stringify(field.value)}`);
+      const tag = selector => root.querySelector(selector);
+      const strong = tag('strong'), em = tag('em'), under = tag('u'), strike = tag('s, del'), code = tag('code'), mark = tag('mark');
+      require(strong?.textContent === "粗體" && Number(style(strong).fontWeight) > Number(style(root).fontWeight), "bold is heavier");
+      require(em?.textContent === "斜體" && style(em).fontStyle === 'italic', "italic is slanted");
+      require(under?.textContent === "底線" && style(under).textDecorationLine.includes('underline'), "underline is underlined");
+      require(strike?.textContent === "刪除線" && style(strike).textDecorationLine.includes('line-through'), "strike is struck");
+      require(code?.textContent === "程式碼" && /mono|consolas|cascadia/i.test(style(code).fontFamily), "code is monospace");
+      require(mark?.textContent === "螢光" && style(mark).backgroundColor !== 'rgba(0, 0, 0, 0)' && style(mark).backgroundColor !== style(root).backgroundColor, `highlight has its own fill: ${style(mark).backgroundColor}`);
+      if (sentBubble) {
+        require(style(mark).color === style(root).color, "the highlighted words wear the bubble's own colour");
+        require(style(mark).backgroundColor !== style(sentBubble).backgroundColor, "and the fill is told from the bubble's");
+      } else {
+        require(localStorage.getItem('raphael.sidebar.collapsed') !== 'true', "Ctrl+B was the bold, and did not fold the sidebar");
+        require(style(mark).backgroundColor === ink('--selection') && style(mark).color === ink('--on-selection'), "the highlight is the selection's fill");
+        kept();
+      }
+      return { check: name, value: field.value };
+    }
+    if (name.startsWith("composer-rich-bar") || name.startsWith("composer-rich-link")) {
+      const toolbar = [...document.querySelectorAll('.cmp-fmt')].find(visible), pick = id => toolbar?.querySelector(`[data-bar="${id}"]`);
+      require(toolbar && toolbar.getAttribute('role') === 'toolbar' && toolbar.getAttribute('aria-label'), "the formatting bar is on screen and is a named toolbar");
+      const box = toolbar.getBoundingClientRect(), range = getSelection().rangeCount ? getSelection().getRangeAt(0).getBoundingClientRect() : null;
+      require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, `the bar is whole on the screen: ${JSON.stringify(box)}`);
+      if (range && range.width > 0) require(box.bottom <= range.top + 1 || box.top >= range.bottom - 1, `the bar never covers the selection: bar ${Math.round(box.top)}-${Math.round(box.bottom)}, words ${Math.round(range.top)}-${Math.round(range.bottom)}`);
+      require(style(toolbar).backgroundColor === ink('--float') && style(toolbar).borderTopColor === ink('--float-edge') && style(toolbar).position === 'fixed', "it is the menu's surface");
+      const row = [...toolbar.querySelectorAll('[data-row]')].find(visible);
+      require(row, "one of its rows is shown");
+      const controls = [...row.querySelectorAll('button')].filter(visible);
+      if (row.dataset.row === 'format') {
+        const icons = controls.filter(button => button.classList.contains('icon'));
+        require(icons.length >= 8 && icons.every(button => Math.abs(button.getBoundingClientRect().width - 26) < 1 && Math.abs(button.getBoundingClientRect().height - 26) < 1), `the icon buttons are 26 px: ${icons.map(button => Math.round(button.getBoundingClientRect().width)).join(',')}`);
+        require(controls.every(button => !button.querySelector('svg') || [...button.querySelectorAll('svg.i')].every(svg => Math.abs(svg.getBoundingClientRect().width - 16) < 0.5)), "its icons are 16 px");
+        require(icons.every(button => button.getAttribute('aria-label') && button.getAttribute('title') === button.getAttribute('aria-label')), "every icon button is named, and its tooltip is its name");
+        require(pick('bold').getAttribute('title').endsWith(/Mac/.test(navigator.userAgent) ? "⌘B" : "Ctrl+B"), `a tooltip says the keys: ${pick('bold').getAttribute('title')}`);
+        require(toolbar.querySelector('.cmp-fmt-kind').textContent.length > 0, "the block's kind is named");
+      }
+      if (name === "composer-rich-bar") {
+        require(document.activeElement === field && getSelection().toString() === "把這一句話的重點選起來", "the selection and the caret stay in the words");
+        require(pick('bold').getAttribute('aria-pressed') === 'false' && !pick('bold').disabled && !pick('link').disabled, "no format is on, and every control works");
+        return { check: name, bar: [Math.round(box.left), Math.round(box.top), Math.round(box.width), Math.round(box.height)] };
+      }
+      if (name === "composer-rich-bar-pressed") {
+        require(field.value === "**==把這一句話的重點選起來==**", `bold and highlight: ${JSON.stringify(field.value)}`);
+        require(pick('bold').getAttribute('aria-pressed') === 'true' && pick('highlight').getAttribute('aria-pressed') === 'true' && pick('italic').getAttribute('aria-pressed') === 'false', "the bar says which are on");
+        require(style(pick('bold')).color === ink('--text') && style(pick('bold')).boxShadow !== 'none' && style(pick('italic')).boxShadow === 'none' && style(pick('bold')).backgroundColor === 'rgba(0, 0, 0, 0)', "a format that is on is told by its full ink and the line under it, never a surface");
+        require(document.activeElement === field && getSelection().toString() === "把這一句話的重點選起來", "pressing kept the focus and the selection");
+        return { check: name, value: field.value };
+      }
+      if (name === "composer-rich-bar-block") {
+        const menu = [...document.querySelectorAll('#app-popover')].find(visible), rows = [...menu.querySelectorAll('.menu-choice')];
+        require(menu?.getAttribute('role') === 'menu' && rows.length === 13, `the block menu has its thirteen choices: ${rows.length}`);
+        require(rows.every(rowNode => rowNode.querySelector('.mlead svg') && visible(rowNode)), "each choice has its icon");
+        require(menu.querySelectorAll('.menu-head').length === 2, "the choices of turning into and of inserting have their headings");
+        const trails = rows.map(rowNode => rowNode.querySelector('.mtrail')?.textContent ?? "");
+        require(trails.includes("Ctrl+Alt+1") && trails.includes("Ctrl+Shift+8") && trails.includes("Ctrl+Alt+C"), `the keys are named: ${trails.join(' | ')}`);
+        const menuBox = menu.getBoundingClientRect();
+        require(menuBox.left >= 0 && menuBox.right <= innerWidth && menuBox.top >= 0 && menuBox.bottom <= innerHeight, "the menu is whole on the screen");
+        require(rows.some(rowNode => rowNode.getAttribute('aria-checked') === 'true' && rowNode.dataset.value === 'paragraph'), "the line's kind is the one checked");
+        return { check: name, rows: rows.length };
+      }
+      if (name === "composer-rich-bar-heading") {
+        require(field.value === "## 把這一句話的重點選起來" && field.querySelector('h2'), `a second heading: ${JSON.stringify(field.value)}`);
+        require(size(field.querySelector('h2')) > size(field), "the heading is larger than the words");
+        require(toolbar.querySelector('.cmp-fmt-kind').textContent === "標題 2", `the bar names it: ${toolbar.querySelector('.cmp-fmt-kind').textContent}`);
+        require(!document.querySelector('#app-popover'), "the menu is gone");
+        return { check: name };
+      }
+      if (name === "composer-rich-link-edit") {
+        const form = toolbar.querySelector('.cmp-fmt-link'), address = form.querySelector('input');
+        require(visible(form) && !visible(toolbar.querySelector('[data-row="format"]')), "the link editor stands in the marks' place");
+        require(document.activeElement === address && address.placeholder === "https://" && address.getAttribute('aria-label'), "its address field has the focus and a name");
+        require(visible(form.querySelector('[data-bar="apply"]')) && visible(form.querySelector('[data-bar="close"]')) && !visible(form.querySelector('[data-bar="unlink"]')), "apply and close, and no unlink for words that are no link");
+        require(box.width < 480, `it stays compact: ${box.width}`);
+        return { check: name };
+      }
+      if (name === "composer-rich-link-set") {
+        require(field.value === "[把這一句話的重點選起來](https://example.com/docs)", `the words are the link: ${JSON.stringify(field.value)}`);
+        const link = field.querySelector('a.composer-link');
+        require(link && style(link).color === ink('--link') && link.getAttribute('href') === "https://example.com/docs", "the link is in the link colour");
+        require(visible(toolbar.querySelector('[data-row="format"]')) && !visible(toolbar.querySelector('.cmp-fmt-link')) && document.activeElement === field, "the bar is the marks again and the focus is in the words");
+        require(pick('link').getAttribute('aria-pressed') === 'true', "the bar says the words are a link");
+        return { check: name };
+      }
+      if (name === "composer-rich-bar-code") {
+        const language = toolbar.querySelector('input[data-bar="language"]');
+        require(visible(language) && language.value === "js", `the language is named: ${language?.value}`);
+        require(['bold', 'italic', 'underline', 'strike', 'code', 'highlight', 'link', 'math'].every(id => pick(id).disabled), "marks are off in code");
+        require(!pick('block').disabled && !toolbar.querySelector('.cmp-fmt-kind').textContent.startsWith("文字"), `the block menu is on and names code: ${toolbar.querySelector('.cmp-fmt-kind').textContent}`);
+        return { check: name };
+      }
+      if (name === "composer-rich-bar-table") {
+        const menu = [...document.querySelectorAll('#app-popover')].find(visible), rows = [...menu.querySelectorAll('.menu-choice')];
+        require(rows.length === 7 && visible(pick('table')) && pick('table').getAttribute('aria-expanded') === 'true', `the table menu has its seven: ${rows.length}`);
+        require(rows.every(rowNode => rowNode.dataset.value && visible(rowNode)), "each is on screen");
+        return { check: name };
+      }
+      if (name === "composer-rich-bar-keyboard") {
+        const bold = pick('bold');
+        require(document.activeElement === bold && bold.tabIndex === 0 && pick('block').tabIndex === -1, "the arrows moved the one tab stop along the bar");
+        require(document.documentElement.hasAttribute('data-keys') && style(bold).outlineStyle === 'solid' && style(bold).outlineWidth === '2px' && style(bold).outlineColor === ink('--focus'), `the focus ring is drawn: ${style(bold).outline}`);
+        return { check: name };
+      }
     }
     throw new Error(`${name}: unknown composer check`);
   }

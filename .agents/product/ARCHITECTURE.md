@@ -1058,7 +1058,11 @@ A fully validated generation is staged under shared/skills (the one folder of th
 skills and plugin sets sit side by side; a set kept in the older shared/skill-sets moves in once at start)
 before one database transaction replaces its pointers. skill_layouts.py reads a plugin of any maker (Claude Code,
 Codex, Cursor, a marketplace or a bare layout of commands and agents) as the same set and keeps its whole tree;
-skill_index.py tells a model the files of a skill by name and size (R-SKILL-29 to R-SKILL-31). The Docker
+skill_index.py tells a model the files of a skill by name and size (R-SKILL-29 to R-SKILL-31). The importer of Team skills
+(skills.library.import) takes only what follows the rules, with no model: skill_intake.py says what a pasted string is and
+which refusals mean "not a skill", skill_git.py clones a Git address (SSH, or https of a forge) with the system's git and the
+owner's own keys (R-SKILL-33), and what needs an agent is answered as `handoff` (material put below Raphael's own folder),
+which the window gives to Raphael's conversation with the `import-skill` intent (R-SKILL-28, R-SKILL-35). The Docker
 computers bind that same folder, read-only, at /home/cua/skills (computer/vm.py `SKILLS`), so no copy of a skill
 exists between this PC and the computer. Stable component paths retain IDs and grants;
 removed components trigger the existing grant cleanup. Existing local single-skill

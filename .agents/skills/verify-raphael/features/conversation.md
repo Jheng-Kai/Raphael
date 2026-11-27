@@ -2348,12 +2348,13 @@ npm run look -- team-file-reply reply-local-links rich-chief rich-member rich-ro
 Links: a link in the composer and in a sent message shows its whole address in the link colour (`--link`, blue), never a shortened name; the field's words are the address itself, so copy, cut and send give the same text. `composer-url-chip` requires the whole address, the link colour, a matching field and copy and no sideways overflow; `composer-link-sent` requires the whole address to go out with the words after it, and `room-link-sent` also requires the group's sent message to show the whole address in the link colour (the member conversation's mock does not echo the sent bubble; message-content.test.ts covers its HTML). A bubble that wears a member's colour keeps its own words colour for a link so that it reads (R-UI-81); a neutral bubble shows the link colour. The look driver's `clipboard-paste` does the browser's default insertion of pasted words when no page code took the paste.
 
 
-## The composer writes Markdown, drawn as it will read (R-COMPOSER-RICH-01 to 05)
+## The composer writes Markdown, drawn as it will read (R-COMPOSER-RICH-01 to 05, 07 to 10)
 
 Every composer (a member's conversation, a group, a side thread; `createChatComposer`, `composerHTML`) is a rich field, a
-ProseMirror editor mounted on `.cmp-input` (`composer-rich-field.ts`; schema, Markdown, paste and node views are
-`composer-rich-schema.ts`, `composer-rich-markdown.ts`, `composer-rich-paste.ts`, `composer-rich-views.ts`, equations
-`math-html.ts`). It answers as the textarea it replaced (`value` is the Markdown, offsets are the Markdown's, `input` is said once
+TipTap editor (ProseMirror underneath) mounted on `.cmp-input` (`composer-rich-field.ts`; the formats are
+`composer-rich-extensions.ts`, the keys and the typing rules of the app's own blocks `composer-rich-behavior.ts`, the bar over a
+selection `composer-rich-toolbar.ts`, Markdown `composer-rich-markdown.ts`, paste `composer-rich-paste.ts`, node views
+`composer-rich-views.ts`, equations `math-html.ts`). It answers as the textarea it replaced (`value` is the Markdown, offsets are the Markdown's, `input` is said once
 after the words changed), so drafts, history, dictation, the @ and / menus, the attachments and the send are unchanged. The owner's
 bubble, in a conversation, a group and a side thread, draws the owner's Markdown as a reply does (`ownerMessageHTML`); a reply
 gains toggles and equations; the sidebar's draft line stays plain words (`plainWords`).
@@ -2370,6 +2371,11 @@ shortcut never fires on a value written into the field; `paste(selector, { html,
 - `composer-rich-lists`, `composer-rich-quote-toggle`, `composer-rich-toggle-closed`, `composer-rich-code-math`,
   `composer-rich-marks`: every block and mark once, typed with its shortcut; the toggle's arrow closes what is under it.
 - `composer-rich-sent`: headings, a list, a quote, bold words and an equation go out as Markdown and every part is drawn in the bubble.
+- `composer-rich-bubble-lists`, `composer-rich-bubble-blocks`: sent messages drawn again from their finished turns (short, wrapping and
+  nested numbered lists, numbers past 9, tasks, a quote first, only code) stand on the bubble's own padding; every number has room,
+  inner bullets are hollow and hug their item, and task boxes are the composer's in the bubble's colours (R-COMPOSER-RICH-06).
+- `composer-rich-bubble-marks`: sent bold, italic, strike, code, an address, a table, an open toggle, a
+  display equation and a divider, each in the bubble's words colour; the divider is never the browser's grey.
 - `composer-rich-room`, `composer-rich-docs`: a group's composer takes the same shortcuts; a Google Docs copy keeps its nested list.
 
 Consumers of the field, each checked again on the new field: the mention chips (`mention-chip-*`, `mention-ime-*`, real input-method
@@ -2378,9 +2384,52 @@ events), the history walk (`composer-history-*`), a link in the words (`composer
 `card-send-failed`), and the line and the controls under it (`composer-opened-calm`, `composer-engaged`, `composer-plus-menu`).
 
 ```powershell
-npm run look -- composer-rich-example composer-rich-example-sent composer-rich-example-room composer-rich-list composer-rich-list-leave composer-rich-lists composer-rich-quote-toggle composer-rich-toggle-closed composer-rich-code-math composer-rich-marks composer-rich-sent composer-rich-room composer-rich-docs --theme both --width 1120,720,1920x1080
+npm run look -- composer-rich-example composer-rich-example-sent composer-rich-example-room composer-rich-list composer-rich-list-leave composer-rich-lists composer-rich-quote-toggle composer-rich-toggle-closed composer-rich-code-math composer-rich-marks composer-rich-sent composer-rich-bubble-lists composer-rich-bubble-blocks composer-rich-bubble-marks composer-rich-room composer-rich-docs composer-rich-keys composer-rich-bar composer-rich-bar-pressed composer-rich-bar-block composer-rich-bar-heading composer-rich-link-edit composer-rich-link-set composer-rich-bar-code composer-rich-bar-table composer-rich-bar-keyboard composer-rich-sent-marks --theme both --width 1120,720,1920x1080
 npm run look -- mention-chip-composer mention-chip-sent mention-ime-compose mention-ime-commit composer-history-recall composer-long-link composer-link-edit composer-opened-calm composer-engaged chat --theme both --width 1120,720,1920x1080
 ```
+
+Formats, shortcuts and the bar (R-COMPOSER-RICH-07 to 10): select words (`{Shift+Home}`) and the bar stands above them; Ctrl+B, I, U,
+Shift+S, E and Shift+H are bold, italic, underline, strike, code and highlight (the look driver presses `{Control+b}`,
+`{Control+Shift+s}`); Ctrl+K opens the link editor in the bar; Alt+F10 goes to the bar. Underline is `<u>` and highlight `==` in the
+Markdown, and the reply renderer draws both.
+
+- `composer-rich-keys`: every mark by its shortcut, the Markdown, each mark's drawing, and Ctrl+B left the sidebar as it was.
+- `composer-rich-bar`, `composer-rich-bar-pressed`: the bar above the selection (never over it, whole on the screen, 26 px icon
+  buttons with 16 px icons, named, the keys in the tooltip); a press formats and keeps the focus, the selection and the bar's place.
+- `composer-rich-bar-block`, `composer-rich-bar-heading`: the block menu with its thirteen choices, headings, keys and the checked
+  kind; Heading 2 turns the line into one and the bar names it.
+- `composer-rich-link-edit`, `composer-rich-link-set`: Ctrl+K puts the link editor in the bar's place; an address and Enter make the
+  words a link in the link colour.
+- `composer-rich-bar-code`, `composer-rich-bar-table`: in code the language and marks off; in a table the table menu.
+- `composer-rich-bar-keyboard`: Alt+F10 goes to the bar, the arrows move its one tab stop, the focus ring is drawn.
+- `composer-rich-sent-marks`: underline, highlight, strike and code go out as Markdown and the bubble draws each in its own colours.
+
+Why TipTap (the comparison, with the versions the npm registry gave): the owner asked for every format, with an
+open-source framework used systematically rather than hand-written.
+
+| | TipTap 3.35 (MIT) | Milkdown 7.23 (MIT) | Lexical 0.53 (MIT) | hand-written ProseMirror (before) |
+| --- | --- | --- | --- | --- |
+| Engine | ProseMirror | ProseMirror and remark (Crepe, its UI kit, is 3.5 MB unpacked) | its own | ProseMirror |
+| Formats | official extensions for every format here (bold, italic, underline, strike, code, highlight, link, headings, quotes, lists, code blocks, tables, history), each with its shortcut, typing rule and command | presets for GFM, math, history | nodes, plugins and Markdown transformers | bold, italic, strike, code, headings, lists, quotes, tables; no bold key, no underline, no highlight |
+| Markdown in and out | its Markdown extension (marked): the framework's dialect, no map between a position and an offset of the text | remark's: the same gap | transformers: the same gap | the app's own codec, in the reply renderer's dialect, with an offset map |
+| Offsets for the @ and / menus, drafts, dictation | not provided | not provided | not provided | the codec's map |
+| Input method (Chinese, Japanese) | ProseMirror's, which the app already ships and tests | ProseMirror's | its own composition handling (a rewrite of every test of ours) | ProseMirror's |
+| The page's textarea adapter and the owner's paste rules | kept: a ProseMirror view with ProseMirror plugins and props | kept, under its own context | rewritten | is them |
+
+Facts from the npm registry and the packages' sources; Milkdown and Lexical were read about and not built here. TipTap's
+shortcuts, rules and Markdown were read in its source (`@tiptap/core`, `extension-*` 3.35.0), built into this field and tested.
+
+None of the three writes the Markdown the reply renderer reads with a map of offsets, so the app keeps its codec and its adapter
+(a thin layer on top); TipTap is what the formats, their shortcuts, their typing rules, the commands the bar presses, the table
+editing and the history come from, and ProseMirror's input-method handling is kept. Milkdown's strength (Markdown-first) is its
+remark pipeline, which cannot hold the app's dialect (a blank line is a paragraph, an empty line is kept, `<details>`) and offsets
+at once; Lexical would be a rewrite of the field, the codec, the adapter and every test of them. Where TipTap does not fit it is
+left out and the reason is in the code: its bubble menu (a flag that a press sets and only a blur clears, and no way to stay open
+under a menu: its positioning engine, Floating UI, is used directly), its task list and details (separate nodes where Markdown has
+one list and one `<details>`), its mathematics (an atom edited in a prompt: here the LaTeX is the text and is drawn under it), its
+Markdown extension (no offsets), its link autolink and paste (they would rewrite an address the owner typed as words), its ordered
+list's and code block's own paste handlers. Bundle: `vite build`, the main chunk, before 2,819.48 kB (1,158.91 kB gzip), now
+3,069.28 kB (1,239.50 kB gzip): +249.8 kB, +80.6 kB gzip for the editor framework (@tiptap/core, tables, lists, Floating UI), and the catalogues' 29 new words in fifteen languages +18.5 kB, +5.6 kB gzip, in the i18n chunk. The largest parts are @tiptap/core (300 kB of source), prosemirror-tables (90 kB) and linkifyjs (64 kB, TipTap's link extension carries it for an autolink this field turns off): a mark of its own for the link would save the last.
 
 Not covered by the browser fixture: a real operating-system paste from Word or Notion (the HTML shapes are fixtures, in
 `composer-rich-paste.test.ts`), and macOS and Linux webviews' input methods.

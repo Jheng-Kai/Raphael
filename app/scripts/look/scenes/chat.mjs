@@ -303,7 +303,8 @@ export default [
     { skills: Array.from({ length: 30 }, (_, index) => ({ id: 300 + index, member_id: 0, name: `skill-${index}`, slash_name: `skill-${index}`, description: `整理第 ${index + 1} 類資料，寫成可以直接使用的摘要與清單`, enabled: true, source: "owner" })) }),
   // R-MENU-05: a / opens the menu wherever it begins a word, as an @ does; a / inside a word or an address does not.
   scene("slash-after-words", "Slash menu opens beside a slash typed after other words", [type(".composer .cmp-input", "請幫我整理這份報告"), type(".composer .cmp-input", "請幫我整理這份報告 /"), wait(".slash-menu"), check("slash-after-words")], slashAfterWords),
-  scene("slash-after-words-pick", "Picking a name after words puts it where the slash was", [type(".composer .cmp-input", "請幫我整理這份報告 /"), wait(".slash-menu"), key("Tab"), check("slash-after-words-picked")], slashAfterWords),
+  // The app's /usage stands first in the menu (R-SLASH-APP-01): one arrow down reaches the member's /review.
+  scene("slash-after-words-pick", "Picking a name after words puts it where the slash was", [type(".composer .cmp-input", "請幫我整理這份報告 /"), wait(".slash-menu"), key("ArrowDown"), key("Tab"), check("slash-after-words-picked")], slashAfterWords),
   scene("slash-inside-word", "A slash inside an address or a word closes the menu and opens none", [type(".composer .cmp-input", "請看 /"), wait(".slash-menu"), type(".composer .cmp-input", "請看 https://example.com/review 或 a/b"), waitGone("#app-popover"), check("slash-inside-word")], slashAfterWords),
   scene("composer-task-stop","Running private task uses the same composer slot", [wait('.composer[data-task-state="running"] .cmp-voice'), check('p04-task-slot')], {running:true}),
   scene("running", "Conversation while a reply is being prepared", [wait('.live-presence'), check("conversation-running")], { running: true }),

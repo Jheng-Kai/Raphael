@@ -4,9 +4,20 @@
 //
 // Writing also keeps a map of where each ProseMirror position stands in the text (`OffsetMap`): the composer's helpers (the @ and
 // / menus, the history walk, dictation) speak in offsets of the text, as they did for a plain field.
-import { Fragment, type Mark, type Node as PMNode, Slice as PMSlice, type Slice } from "prosemirror-model";
-import { composerMarks as M, composerNodes as N, composerSchema as S, isBlankLine } from "./composer-rich-schema";
+import { Fragment, type Mark, type Node as PMNode, type Schema, Slice as PMSlice, type Slice } from "prosemirror-model";
+import { isBlankLine, standaloneSchema } from "./composer-rich-extensions";
 import { bareUrl, linkDestination, messageUrl, tableCells } from "./markdown-text";
+
+// The schema the words are read into or written from: the field's own (its editor makes one of its own), or a standalone one. The entry
+// points set it for the length of their call, so every helper below makes its nodes and marks of the same schema.
+let schema: Schema = standaloneSchema();
+const nodeType = (name: string) => schema.nodes[name]!;
+const markType = (name: string) => schema.marks[name]!;
+function inSchema<T>(next: Schema | undefined, work: () => T): T {
+  const before = schema;
+  schema = next ?? standaloneSchema();
+  try { return work(); } finally { schema = before; }
+}
 
 const PUNCTUATION = /[!-/:-@[-`{-~]/;
 const WORD = /[\p{L}\p{N}]/u;
@@ -31,6 +42,21 @@ function closerOf(text: string, from: number, ch: string, size: number): number 
     while (text[at + run] === ch) run++;
     if (run === size && at > from && !SPACE.test(text[at - 1]!) && (ch !== "_" || !WORD.test(text[at + run] ?? ""))) return at;
     at += run - 1;
+  }
+  return -1;
+}
+
+/** Where the `</u>` that closes an underline opened before `from` stands, or -1: code and escapes are skipped as they are for emphasis. */
+function underlineCloser(text: string, from: number): number {
+  for (let at = from; at < text.length; at++) {
+    const c = text[at]!;
+    if (c === "\\") { at++; continue; }
+    if (c === "`") {
+      const run = /^`+/.exec(text.slice(at))![0], end = text.indexOf(run, at + run.length);
+      at = end > at ? end + run.length - 1 : at + run.length - 1;
+      continue;
+    }
+    if (c === "<" && /^<\/u>/i.test(text.slice(at, at + 4)) && at > from) return at;
   }
   return -1;
 }
@@ -64,11 +90,11 @@ function addressAt(text: string, at: number): string {
   return cut > 0 ? raw.slice(0, cut) : cut === 0 ? "" : raw;
 }
 
-/** One line of words as inline nodes: emphasis, strike, code, links, equations; an address stays the words it is. */
+/** One line of words as inline nodes: emphasis, underline, strike, highlight, code, links, equations; an address stays the words it is. */
 export function parseInline(text: string, marks: readonly Mark[] = [], depth = 0): PMNode[] {
   const out: PMNode[] = [];
   let plain = "", at = 0;
-  const flush = (): void => { if (plain) out.push(S.text(plain, marks as Mark[])); plain = ""; };
+  const flush = (): void => { if (plain) out.push(schema.text(plain, marks as Mark[])); plain = ""; };
   while (at < text.length) {
     const ch = text[at]!;
     if (ch === "\\" && PUNCTUATION.test(text[at + 1] ?? "")) { plain += text[at + 1]; at += 2; continue; }
@@ -79,7 +105,7 @@ export function parseInline(text: string, marks: readonly Mark[] = [], depth = 0
       if (end > at + run.length) {
         let code = text.slice(at + run.length, end);
         if (code.length > 2 && code.startsWith(" ") && code.endsWith(" ") && code.trim()) code = code.slice(1, -1);
-        flush(); out.push(S.text(code, withMark(marks, M.code!.create()) as Mark[])); at = end + run.length; continue;
+        flush(); out.push(schema.text(code, withMark(marks, markType("code").create()) as Mark[])); at = end + run.length; continue;
       }
       plain += run; at += run.length; continue;
     }
@@ -101,8 +127,8 @@ export function parseInline(text: string, marks: readonly Mark[] = [], depth = 0
         if (url) {
           flush();
           const label = text.slice(at + 1, middle);
-          if (label.trim() === "") out.push(S.text(url, withMark(marks, M["link"]!.create({ href: url })) as Mark[]));
-          else out.push(...parseInline(label, withMark(marks, M["link"]!.create({ href: url })), depth + 1));
+          if (label.trim() === "") out.push(schema.text(url, withMark(marks, markType("link").create({ href: url })) as Mark[]));
+          else out.push(...parseInline(label, withMark(marks, markType("link").create({ href: url })), depth + 1));
           at = end; continue;
         }
       }
@@ -113,7 +139,7 @@ export function parseInline(text: string, marks: readonly Mark[] = [], depth = 0
     }
     if (ch === "$" && depth < 6) {
       const end = mathEnd(text, at);
-      if (end > 0) { flush(); out.push(N.math_inline!.create({ latex: text.slice(at + 1, end) }, null, marks as Mark[])); at = end + 1; continue; }
+      if (end > 0) { flush(); out.push(nodeType("mathInline").create({ latex: text.slice(at + 1, end) }, null, marks as Mark[])); at = end + 1; continue; }
     }
     if ((ch === "*" || ch === "_") && depth < 6) {
       let run = 1;
@@ -124,8 +150,8 @@ export function parseInline(text: string, marks: readonly Mark[] = [], depth = 0
       if (end > 0) {
         flush();
         let inner = marks;
-        if (size >= 2) inner = withMark(inner, M.strong!.create());
-        if (size !== 2) inner = withMark(inner, M.em!.create());
+        if (size >= 2) inner = withMark(inner, markType("bold").create());
+        if (size !== 2) inner = withMark(inner, markType("italic").create());
         out.push(...parseInline(text.slice(at + run, end), inner, depth + 1));
         at = end + run; continue;
       }
@@ -135,7 +161,18 @@ export function parseInline(text: string, marks: readonly Mark[] = [], depth = 0
       let run = 2;
       while (text[at + run] === "~") run++;
       const edge = text[at + run], end = run === 2 && edge !== undefined && !SPACE.test(edge) ? closerOf(text, at + 2, "~", 2) : -1;
-      if (end > 0) { flush(); out.push(...parseInline(text.slice(at + 2, end), withMark(marks, M.strike!.create()), depth + 1)); at = end + 2; continue; }
+      if (end > 0) { flush(); out.push(...parseInline(text.slice(at + 2, end), withMark(marks, markType("strike").create()), depth + 1)); at = end + 2; continue; }
+      plain += text.slice(at, at + run); at += run; continue;
+    }
+    if (ch === "<" && depth < 6 && /^<u>/i.test(text.slice(at, at + 3))) {
+      const end = underlineCloser(text, at + 3);
+      if (end > 0) { flush(); out.push(...parseInline(text.slice(at + 3, end), withMark(marks, markType("underline").create()), depth + 1)); at = end + 4; continue; }
+    }
+    if (ch === "=" && text[at + 1] === "=" && depth < 6) {
+      let run = 2;
+      while (text[at + run] === "=") run++;
+      const edge = text[at + run], end = run === 2 && edge !== undefined && !SPACE.test(edge) ? closerOf(text, at + 2, "=", 2) : -1;
+      if (end > 0) { flush(); out.push(...parseInline(text.slice(at + 2, end), withMark(marks, markType("highlight").create()), depth + 1)); at = end + 2; continue; }
       plain += text.slice(at, at + run); at += run; continue;
     }
     plain += ch; at++;
@@ -144,8 +181,8 @@ export function parseInline(text: string, marks: readonly Mark[] = [], depth = 0
   return out;
 }
 
-const paragraphOf = (text: string): PMNode => N.paragraph!.create(null, parseInline(text));
-const blank = (): PMNode => N.paragraph!.create();
+const paragraphOf = (text: string): PMNode => nodeType("paragraph").create(null, parseInline(text));
+const blank = (): PMNode => nodeType("paragraph").create();
 
 interface ListItem { indent: number; ordered: boolean; order: number; checked: boolean | null; text: string; more: string[]; nested: ListNode[] }
 interface ListNode { ordered: boolean; order: number; indent: number; items: ListItem[] }
@@ -183,8 +220,8 @@ function listBlocks(lines: string[]): PMNode[] {
     } else { const list = listNode(item); top.items[top.items.length - 1]!.nested.push(list); stack.push(list); }
     last = item;
   }
-  const build = (list: ListNode): PMNode => (list.ordered ? N.ordered_list! : N.bullet_list!).create(list.ordered ? { order: list.order } : null,
-    list.items.map(item => N.list_item!.create({ checked: item.checked }, [paragraphOf(item.text), ...item.more.map(paragraphOf), ...item.nested.map(build)])));
+  const build = (list: ListNode): PMNode => (list.ordered ? nodeType("orderedList") : nodeType("bulletList")).create(list.ordered ? { start: list.order } : null,
+    list.items.map(item => nodeType("listItem").create({ checked: item.checked }, [paragraphOf(item.text), ...item.more.map(paragraphOf), ...item.nested.map(build)])));
   return roots.map(build);
 }
 
@@ -206,8 +243,8 @@ function detailsAt(lines: string[], from: number): { end: number; node: PMNode }
   const blocks = trimBlanks(parseBlocks(body.replace(/^\n/, "").split("\n")));
   return {
     end,
-    node: N.details!.create({ open: /\bopen\b/i.test(open[1] ?? "") },
-      [N.summary!.create(null, parseInline((summary?.[1] ?? "").replace(/\s*\n\s*/g, " ").trim())), ...blocks]),
+    node: nodeType("details").create({ open: /\bopen\b/i.test(open[1] ?? "") },
+      [nodeType("summary").create(null, parseInline((summary?.[1] ?? "").replace(/\s*\n\s*/g, " ").trim())), ...blocks]),
   };
 }
 
@@ -223,27 +260,27 @@ function parseBlocks(lines: string[]): PMNode[] {
       for (i++; i < lines.length && !close.test(lines[i]!); i++) body.push(lines[i]!);
       i++;
       const text = body.join("\n");
-      out.push(N.code_block!.create({ language: fence[2]!.toLowerCase() }, text ? S.text(text) : null));
+      out.push(nodeType("codeBlock").create({ language: fence[2]!.toLowerCase() }, text ? schema.text(text) : null));
       continue;
     }
     const single = /^ *\$\$(.+)\$\$ *$/.exec(line);
-    if (single && single[1]!.trim()) { out.push(N.math_block!.create(null, S.text(single[1]!.trim()))); i++; continue; }
+    if (single && single[1]!.trim()) { out.push(nodeType("mathBlock").create(null, schema.text(single[1]!.trim()))); i++; continue; }
     if (/^ *\$\$ *$/.test(line)) {
       const body: string[] = [];
       for (i++; i < lines.length && !/^ *\$\$ *$/.test(lines[i]!); i++) body.push(lines[i]!);
       i++;
       const text = body.join("\n");
-      out.push(N.math_block!.create(null, text ? S.text(text) : null));
+      out.push(nodeType("mathBlock").create(null, text ? schema.text(text) : null));
       continue;
     }
     if (DETAILS.test(line)) { const found = detailsAt(lines, i); out.push(found.node); i = found.end; continue; }
     const heading = HEADING.exec(line);
-    if (heading) { out.push(N.heading!.create({ level: heading[1]!.length }, parseInline(heading[2]!.replace(/(?:^| )#+ *$/, "").trimEnd()))); i++; continue; }
-    if (RULE.test(line)) { out.push(N.horizontal_rule!.create()); i++; continue; }
+    if (heading) { out.push(nodeType("heading").create({ level: heading[1]!.length }, parseInline(heading[2]!.replace(/(?:^| )#+ *$/, "").trimEnd()))); i++; continue; }
+    if (RULE.test(line)) { out.push(nodeType("horizontalRule").create()); i++; continue; }
     if (QUOTE.test(line)) {
       const body: string[] = [];
       for (; i < lines.length && QUOTE.test(lines[i]!); i++) body.push(lines[i]!.replace(/^ *> ?/, ""));
-      out.push(N.blockquote!.create(null, parseBlocks(body)));
+      out.push(nodeType("blockquote").create(null, parseBlocks(body)));
       continue;
     }
     if (ITEM.test(line)) {
@@ -261,7 +298,7 @@ function parseBlocks(lines: string[]): PMNode[] {
         const align = separators.map(cell => cell.endsWith(":") ? cell.startsWith(":") ? "center" : "right" : cell.startsWith(":") ? "left" : null);
         const rows = [header];
         for (i += 2; i < lines.length && lines[i]!.trim() && lines[i]!.includes("|"); i++) { const cells = tableCells(lines[i]!); rows.push(header.map((_, index) => cells[index] ?? "")); }
-        out.push(N.table!.create(null, rows.map(cells => N.table_row!.create(null, cells.map((cell, index) => N.table_cell!.create({ align: align[index] }, parseInline(cell)))))));
+        out.push(nodeType("table").create(null, rows.map((cells, row) => nodeType("tableRow").create(null, cells.map((cell, index) => nodeType(row ? "tableCell" : "tableHeader").create({ align: align[index] }, parseInline(cell)))))));
         continue;
       }
     }
@@ -288,13 +325,15 @@ const trimBlanks = (blocks: PMNode[]): PMNode[] => {
   return blocks.slice(from, to);
 };
 
-const isParagraphNode = (node: PMNode): boolean => node.type === N.paragraph;
+const isParagraphNode = (block: PMNode): boolean => block.type.name === "paragraph";
 
-/** The document a Markdown text is. */
-export function parseMarkdown(text: string): PMNode {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  const blocks = text === "" ? [] : parseBlocks(lines);
-  return N.doc!.create(null, blocks.length ? blocks : [blank()]);
+/** The document a Markdown text is, of the editor's schema (a standalone one when none is given). */
+export function parseMarkdown(text: string, target?: Schema): PMNode {
+  return inSchema(target, () => {
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const blocks = text === "" ? [] : parseBlocks(lines);
+    return nodeType("doc").create(null, blocks.length ? blocks : [blank()]);
+  });
 }
 
 // ---------------------------------------------------------------------------------------------------------------- writing
@@ -312,7 +351,7 @@ type Kind = "paragraph" | "inline";
 /** `level` is how much is escaped: 0 only what must be, 1 the signs of emphasis and code, 2 every sign of Markdown. */
 interface Context { level: 0 | 1 | 2; kind: Kind; cell: boolean }
 
-const SPREAD = new Set(["strong", "em", "strike"]);
+const SPREAD = new Set(["bold", "italic", "strike", "underline", "highlight"]);
 const spreads = (marks: readonly Mark[]): boolean => marks.some(mark => SPREAD.has(mark.type.name));
 
 function tokensOf(parent: PMNode, start: number, flat: boolean): Tok[] {
@@ -329,12 +368,12 @@ function tokensOf(parent: PMNode, start: number, flat: boolean): Tok[] {
       if (lead) list.push({ kind: "text", text: text.slice(0, lead), marks: plain, pm });
       list.push({ kind: "text", text: text.slice(lead, text.length - trail), marks, pm: pm + lead });
       if (trail) list.push({ kind: "text", text: text.slice(text.length - trail), marks: plain, pm: pm + text.length - trail });
-    } else if (child.type === N.hard_break) list.push(flat ? { kind: "text", text: " ", marks: [], pm } : { kind: "break", text: "", marks: [], pm });
-    else if (child.type === N.math_inline) list.push({ kind: "atom", text: `$${child.attrs.latex}$`, marks: child.marks, pm });
+    } else if (child.type.name === "hardBreak") list.push(flat ? { kind: "text", text: " ", marks: [], pm } : { kind: "break", text: "", marks: [], pm });
+    else if (child.type.name === "mathInline") list.push({ kind: "atom", text: `$${child.attrs.latex}$`, marks: child.marks, pm });
   });
   // A link whose words are its own address is written as the bare address.
   for (let i = 0; i < list.length; i++) {
-    const link = list[i]!.marks.find(mark => mark.type === M["link"]);
+    const link = list[i]!.marks.find(mark => mark.type.name === "link");
     if (!link || list[i]!.kind !== "text") continue;
     let end = i, text = "";
     while (end < list.length && list[end]!.kind === "text" && list[end]!.marks.some(mark => mark.eq(link))) text += list[end++]!.text;
@@ -345,7 +384,7 @@ function tokensOf(parent: PMNode, start: number, flat: boolean): Tok[] {
   return list;
 }
 
-const ESCAPABLE: readonly RegExp[] = [/(?!)/, /[*_~`]/, /[*_~`$[\]<]/];
+const ESCAPABLE: readonly RegExp[] = [/(?!)/, /[*_~`=]/, /[*_~`=$[\]<]/];
 type Hazards = "paragraph" | "item" | "none";
 
 /** Where, in the first words of a line, the one character that would make it something else stands (a heading, an item...), or -1. */
@@ -382,6 +421,8 @@ function textChunks(tok: Tok, context: Context, hazard: number, final: boolean):
     const ch = text[i]!;
     if (context.level === 0 && addresses.some(([start, end]) => i >= start && i < end)) continue;
     const escape = i === hazard || (ch === "<" && /^<\/?(details|summary)\b/i.test(text.slice(i, i + 10)))
+      // An underline's tag is words until it reads as one (a closing tag after it): the first written form that does not read back as the words escapes it.
+      || (ch === "<" && context.level > 0 && /^<\/?u\b/i.test(text.slice(i, i + 4)))
       || (ch === "\\" && (i === text.length - 1 ? !final : PUNCTUATION.test(text[i + 1]!)))
       || (context.level > 0 && ESCAPABLE[context.level]!.test(ch))
       || (context.cell && ch === "|");
@@ -403,9 +444,11 @@ function lineChunks(toks: Tok[], context: Context, hazards: Hazards): Line {
   let open: Mark[] = [], fence = "", pad = "";
   const opening = (mark: Mark, index: number): void => {
     switch (mark.type.name) {
-      case "strong": struct("**"); break;
-      case "em": struct("*"); break;
+      case "bold": struct("**"); break;
+      case "italic": struct("*"); break;
       case "strike": struct("~~"); break;
+      case "underline": struct("<u>"); break;
+      case "highlight": struct("=="); break;
       case "link": struct("["); break;
       default: {
         let content = "";
@@ -418,9 +461,11 @@ function lineChunks(toks: Tok[], context: Context, hazards: Hazards): Line {
   };
   const closing = (mark: Mark): void => {
     switch (mark.type.name) {
-      case "strong": struct("**"); break;
-      case "em": struct("*"); break;
+      case "bold": struct("**"); break;
+      case "italic": struct("*"); break;
       case "strike": struct("~~"); break;
+      case "underline": struct("</u>"); break;
+      case "highlight": struct("=="); break;
       case "link": { const href = String(mark.attrs.href); struct(`](${/[\s()]/.test(href) ? `<${href}>` : href})`); break; }
       default: struct(pad + fence);
     }
@@ -437,7 +482,7 @@ function lineChunks(toks: Tok[], context: Context, hazards: Hazards): Line {
     }
     for (const mark of want) if (!open.some(other => other.eq(mark))) { opening(mark, index); open.push(mark); }
     if (tok.kind === "atom") line.push({ kind: "atom", t: tok.text, pm: tok.pm });
-    else if (tok.raw || tok.marks.some(mark => mark.type === M.code)) { if (tok.text) line.push({ kind: "run", t: tok.text, pm: tok.pm }); }
+    else if (tok.raw || tok.marks.some(mark => mark.type.name === "code")) { if (tok.text) line.push({ kind: "run", t: tok.text, pm: tok.pm }); }
     else line.push(...textChunks(tok, context, first && !tok.marks.length ? lineStartHazard(tok.text, hazards) : -1, index === toks.length - 1 && !tok.marks.length));
     first = false;
   });
@@ -455,7 +500,7 @@ function textblockLines(node: PMNode, start: number, kind: Kind, hazards: Hazard
   const build = (level: 0 | 1 | 2): Line[] => lines.map((line, index) => [
     { kind: "run" as const, t: "", pm: index === 0 ? start : breaks[index - 1]! + 1 }, ...lineChunks(line, { level, kind, cell }, hazards)]);
   let written = build(0);
-  const risky = toks.some(tok => tok.kind === "atom" || (!tok.raw && (/[\\*_~`$[<!|]/.test(tok.text) || tok.marks.length)));
+  const risky = toks.some(tok => tok.kind === "atom" || (!tok.raw && (/[\\*_~`=$[<!|]/.test(tok.text) || tok.marks.length)));
   // Each step escapes more, and the first that reads back as the same words is the one written.
   for (const level of [1, 2] as const) if (risky && !readsBack(written, lines, kind)) written = build(level);
   return written;
@@ -475,8 +520,8 @@ function readsBack(written: Line[], lines: Tok[][], kind: Kind): boolean {
 }
 
 function tokensToNodes(toks: Tok[]): PMNode[] {
-  return toks.flatMap(tok => tok.kind === "atom" ? [N.math_inline!.create({ latex: tok.text.slice(1, -1) }, null, tok.marks as Mark[])]
-    : tok.text ? [S.text(tok.text, tok.marks as Mark[])] : []);
+  return toks.flatMap(tok => tok.kind === "atom" ? [nodeType("mathInline").create({ latex: tok.text.slice(1, -1) }, null, tok.marks as Mark[])]
+    : tok.text ? [schema.text(tok.text, tok.marks as Mark[])] : []);
 }
 
 const prefixed = (lines: Line[], first: string, rest: string): Line[] => lines.map((line, index) => {
@@ -494,18 +539,18 @@ function blockLines(node: PMNode, pos: number): Line[] {
       return [[{ kind: "struct", t: "#".repeat(node.attrs.level) + " " }, ...line!]];
     }
     case "blockquote": return prefixed(blocksLines(node, start), "> ", "> ").map(line => line.length === 1 && line[0]!.t === "> " ? plainLine(">") : line);
-    case "code_block": case "math_block": {
-      const text = node.textContent, math = node.type === N.math_block;
+    case "codeBlock": case "mathBlock": {
+      const text = node.textContent, math = node.type.name === "mathBlock";
       const fence = math ? "$$" : "`".repeat(Math.max(3, tickRun(text) + 1));
       const body: Line[] = [];
       let offset = 0;
       for (const piece of text.split("\n")) { body.push([{ kind: "run", t: piece, pm: start + offset }]); offset += piece.length + 1; }
       return [plainLine(fence + (math ? "" : node.attrs.language ?? "")), ...body, plainLine(fence)];
     }
-    case "horizontal_rule": return [plainLine("---")];
-    case "bullet_list": case "ordered_list": {
-      const ordered = node.type === N.ordered_list, lines: Line[] = [];
-      node.forEach((item, offset, index) => lines.push(...itemLines(item, start + offset, ordered ? `${node.attrs.order + index}. ` : "- ")));
+    case "horizontalRule": return [plainLine("---")];
+    case "bulletList": case "orderedList": {
+      const ordered = node.type.name === "orderedList", lines: Line[] = [];
+      node.forEach((item, offset, index) => lines.push(...itemLines(item, start + offset, ordered ? `${node.attrs.start + index}. ` : "- ")));
       return lines;
     }
     case "details": {
@@ -545,7 +590,7 @@ function itemLines(item: PMNode, pos: number, marker: string): Line[] {
   item.forEach((child, offset, index) => {
     const childPos = start + offset;
     if (index === 0) lines.push(...prefixed(textblockLines(child, childPos + 1, "inline", task ? "none" : "item"), lead, indent));
-    else if (child.type === N.paragraph) lines.push(...prefixed(textblockLines(child, childPos + 1, "inline"), indent, indent));
+    else if (child.type.name === "paragraph") lines.push(...prefixed(textblockLines(child, childPos + 1, "inline"), indent, indent));
     else lines.push(...prefixed(blockLines(child, childPos), indent, indent));
   });
   return lines;
@@ -583,18 +628,24 @@ function flatten(lines: Line[]): Written {
 
 /** The document as Markdown, with the map between its positions and the text's offsets. */
 export function serializeMarkdown(doc: PMNode): Written {
-  return flatten(blocksLines(doc, 0));
+  return inSchema(doc.type.schema, () => flatten(blocksLines(doc, 0)));
 }
 
 /** The words of any stretch of a document (a copied selection) as Markdown. */
 export function fragmentToMarkdown(content: Fragment): string {
+  const own = content.firstChild?.type.schema;
+  if (!own) return "";
   try {
-    const blocks = content.childCount && content.firstChild!.isInline ? [N.paragraph!.create(null, content)] : content.content;
-    const wrapped = blocks.map(block => block.type === N.list_item ? N.bullet_list!.create(null, block) : block);
-    return serializeMarkdown(N.doc!.create(null, wrapped)).text;
+    return inSchema(own, () => fragmentWords(content));
   } catch {
     return content.textBetween(0, content.size, "\n", "\n");
   }
+}
+
+function fragmentWords(content: Fragment): string {
+  const blocks = content.childCount && content.firstChild!.isInline ? [nodeType("paragraph").create(null, content)] : content.content;
+  const wrapped = blocks.map(block => block.type.name === "listItem" ? nodeType("bulletList").create(null, block) : block);
+  return serializeMarkdown(nodeType("doc").create(null, wrapped)).text;
 }
 
 // ---------------------------------------------------------------------------------------------------------------- offsets
@@ -638,7 +689,7 @@ export function looksLikeMarkdown(text: string): boolean {
   if (/^ {0,3}(#{1,6} |[-+*] |\d{1,9}[.)] |>|```|~~~|\$\$ *$|<details)/m.test(text)) return true;
   if (/^ {0,3}([-*_])( *\1){2,} *$/m.test(text)) return true;
   if (/^\|.*\|[ \t]*\n[ \t]*\|?[ \t]*:?-+:?[ \t]*\|/m.test(text)) return true;
-  return /(\*\*|__)(?=\S)[\s\S]*?\S\1|(?<![\w*])\*(?=\S)[^*\n]+\S\*(?![\w*])|`[^`\n]+`|~~(?=\S)[\s\S]*?\S~~|\[[^\]\n]+\]\(https?:\/\/[^)\s]+\)|(?<![\w$])\$(?=[^\s$])[^$\n]*[^\s$]\$(?!\d)/.test(text);
+  return /(\*\*|__)(?=\S)[\s\S]*?\S\1|(?<![\w*])\*(?=\S)[^*\n]+\S\*(?![\w*])|`[^`\n]+`|~~(?=\S)[\s\S]*?\S~~|==(?=\S)[^=\n]*\S==|<u>[^<\n]+<\/u>|\[[^\]\n]+\]\(https?:\/\/[^)\s]+\)|(?<![\w$])\$(?=[^\s$])[^$\n]*[^\s$]\$(?!\d)/.test(text);
 }
 
 /** The words, one line of plain text with no Markdown marks, for a place that only previews them (the sidebar's draft line). */
@@ -652,7 +703,7 @@ export function plainWords(markdown: string): string {
 }
 
 /** A slice of pasted Markdown, its first and last paragraphs open so that they join the words around the caret. */
-export function markdownSlice(text: string): Slice {
-  const content = parseMarkdown(text.replace(/^[ 	]+$/gm, "")).content;
+export function markdownSlice(text: string, target?: Schema): Slice {
+  const content = parseMarkdown(text.replace(/^[ 	]+$/gm, ""), target).content;
   return new PMSlice(content, isParagraphNode(content.firstChild!) && content.firstChild!.childCount ? 1 : 0, isParagraphNode(content.lastChild!) && content.lastChild!.childCount ? 1 : 0);
 }

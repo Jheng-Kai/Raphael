@@ -67,6 +67,36 @@ def test_fresh_context_never_silently_truncates_a_large_owner_request():
         fresh_user("x" * 150_000, (), (), RECOVER, "records", window=window, reserve=20_000)
 
 
+def test_a_codex_model_starts_from_codex_window_before_it_reports_its_own():
+    """Before Codex reports its window (the first turn after the app starts), a Codex model was given the 64K default: with
+    the system prompt beside it, a skill's document called with / was refused as more than "Codex CLI" could take, though
+    every Codex model reads well over 200K tokens. Claude Code's models start from theirs the same way."""
+    from raphael_core.brain.windows import KNOWN_CONTEXT_TOKENS, window_of
+
+    window = window_of("cli:codex:gpt-unlisted")
+    assert window == KNOWN_CONTEXT_TOKENS["codex"] >= 200_000
+    document = "Step. " * 8_000  # a 48 KB SKILL.md
+    assert document in fresh_user(document, (), (), RECOVER, "records", window=window, reserve=40_000)
+    with pytest.raises(ValueError, match="context_overflow"):  # what the 64K default left beside a 40 KB system prompt
+        fresh_user(document, (), (), RECOVER, "records", window=None, reserve=40_000)
+
+
+async def test_a_codex_members_first_turn_after_a_start_reaches_codex_with_a_long_skill(monkeypatch, tmp_path):
+    """The owner's case: the first turn after the app starts, with a skill called by / on a Codex member. Codex had reported no
+    window yet, so the loop measured the system prompt and the skill's words against 64K, gave the session up for a fresh one,
+    and refused the request itself (context_overflow, "Codex CLI cannot take this much text at once") without asking Codex."""
+    async def play(loop, attempt):
+        yield Event("final", "Done with the skill.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain="codex")
+    request = "/weekly-report this week\n\n" + "Follow this step of the skill. " * 1000  # a 31 KB request
+    rig.loop.system = "Keep the owner's scope. " * 1250  # a 30 KB system prompt
+    rig.loop.user = rig.loop.owner_text = request
+    result = await rig.loop.run()
+    assert result.final == "Done with the skill." and rig.loop.failure is None
+    assert len(rig.calls) == 1 and request in rig.calls[0]["user"]
+
+
 def test_the_fresh_budget_grows_with_the_models_window_and_leaves_room_for_the_turn():
     small, large = fresh_budget(50_000), fresh_budget(1_000_000)
     assert small[0] < large[0] and small[1] < large[1]

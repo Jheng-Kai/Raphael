@@ -124,13 +124,13 @@ describe("typing marks", () => {
   });
   test("an equation is one unit; Backspace after it opens its source to edit", () => {
     type("$x$a");
-    expect(view().state.doc.firstChild!.child(0).type.name).toBe("math_inline");
+    expect(view().state.doc.firstChild!.child(0).type.name).toBe("mathInline");
     // The browser deletes the letter itself; the next Backspace is the editor's.
     view().dispatch(view().state.tr.delete(view().state.selection.from - 1, view().state.selection.from));
     press("Backspace");
     expect(input.value).toBe("$x");
     type("$");
-    expect(view().state.doc.firstChild!.child(0).type.name).toBe("math_inline");
+    expect(view().state.doc.firstChild!.child(0).type.name).toBe("mathInline");
   });
 });
 

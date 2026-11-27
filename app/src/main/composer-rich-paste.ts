@@ -1,8 +1,7 @@
 // What a paste keeps. A copy from the app's own messages, a web page, Notion, Word or Google Docs carries HTML; before the
-// editor reads it (its schema's parse rules, composer-rich-schema.ts), this makes it plainer where each source writes the same
+// editor reads it (its schema's parse rules, composer-rich-extensions.ts), this makes it plainer where each source writes the same
 // thing its own way: a code block, an address chip, a tick box, a nested list, an equation, a table cell.
-import { Fragment, Slice } from "prosemirror-model";
-import { composerNodes as N, composerSchema as S } from "./composer-rich-schema";
+import { Fragment, type Schema, Slice } from "prosemirror-model";
 
 const DROPPED = "style, script, meta, link, title, svg, canvas, iframe, object, embed, img, video, audio, select, textarea, button, noscript, template, "
   + ".rich-head, .mention-ico, .link-mark, .katex-mathml";
@@ -140,7 +139,7 @@ export function normalizePastedHTML(html: string): string {
 }
 
 /** Words that are only words: each line a paragraph, a blank line an empty one, every space kept. */
-export function literalSlice(text: string): Slice {
+export function literalSlice(text: string, schema: Schema): Slice {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  return new Slice(Fragment.from(lines.map(line => N.paragraph.create(null, line ? S.text(line) : null))), 1, 1);
+  return new Slice(Fragment.from(lines.map(line => schema.nodes["paragraph"]!.create(null, line ? schema.text(line) : null))), 1, 1);
 }

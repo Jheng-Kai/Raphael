@@ -69,7 +69,10 @@
 .message-text blockquote { margin: .6em 0; padding-inline-start: var(--sp-3); border-inline-start: 3px solid var(--edge); color: var(--text-2); }
 .message-text hr { border: 0; border-top: 1px solid var(--edge); margin: var(--sp-3) 0; }
 .message-task { list-style: none; }
-.message-task input { margin-inline: -1.3em .5em; accent-color: var(--accent-text); }
+/* A task's box is the composer's (composer-rich.css .cmp-task-box), never the system's checkbox: an outline, filled with a tick when done. */
+.message-task input { appearance: none; display: inline-grid; place-items: center; box-sizing: border-box; width: 1em; height: 1em; margin: 0 .45em 0 -1.45em; vertical-align: -0.12em; border: 1.5px solid var(--text-3); border-radius: var(--r-sm); background: transparent; }
+.message-task input:checked { border-color: var(--accent-text); background: var(--accent-text); }
+.message-task input:checked::after { content: ""; width: 0.28em; height: 0.52em; margin-top: -0.08em; border: solid var(--on-accent); border-width: 0 2px 2px 0; rotate: 45deg; }
 /* The weather, as a weather app draws it (message-forms.ts forecastHTML): now with its glyph and the temperature large,
    the hours ahead in one row that scrolls, one row a day with its low and high on a bar of the week's range, then the
    unit, the source and when it was read. The glyphs are the only colour: the sun amber, rain blue, clouds grey. */
@@ -160,8 +163,11 @@
 /* The owner's own Markdown in the bubble, drawn in the bubble's colours: no card, no panel fill, the words' own colour with a tint. */
 .owner-message .message-text code { background: color-mix(in srgb, currentColor 16%, transparent); color: inherit; }
 .owner-message .message-text blockquote { color: inherit; border-inline-start-color: color-mix(in srgb, currentColor 55%, transparent); }
-.owner-message .message-text hr { border-top-color: color-mix(in srgb, currentColor 40%, transparent); }
-.owner-message .message-task input { accent-color: currentColor; }
+/* A divider's own colour is the browser's grey (`hr { color: gray }`): it takes the bubble's words colour first. */
+.owner-message .message-text hr { color: inherit; border-top-color: color-mix(in srgb, currentColor 40%, transparent); }
+.owner-message .message-task input { border-color: currentColor; }
+.owner-message .message-task input:checked { background: currentColor; }
+.owner-message .message-task input:checked::after { border-color: var(--bubble); }
 .owner-message .message-text .owner-code { margin: 0.4em 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); background: color-mix(in srgb, currentColor 14%, transparent); font: var(--fs-xs)/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .owner-message .message-text .owner-code code { padding: 0; background: transparent; font: inherit; }
 .owner-message .message-text .owner-table { max-width: 100%; margin: 0.4em 0; overflow-x: auto; }
@@ -171,3 +177,11 @@
 .owner-message .message-text .owner-details { margin: 0.4em 0; }
 .owner-message .message-text .owner-details > summary { font-weight: var(--weight-medium); cursor: pointer; }
 .owner-message .message-text .owner-details > .details-body { padding-inline-start: 1.2em; }
+
+/* A highlight (`==words==`, the composer's highlight): the selection's fill, so it reads in both themes and is not a search hit (that is `mark[data-find-match]`). */
+.message-mark { padding: 0 0.12em; border-radius: var(--r-sm); background: var(--selection); color: var(--on-selection); }
+/* On the owner's bubble (the member's colour, light or dark words) a darker patch keeps the words readable on either. */
+.owner-message .message-text .message-mark { background: color-mix(in srgb, black 22%, transparent); color: inherit; }
+/* The words' first and last blocks stand on the bubble's (or the reply's) own padding: a list, a quote, code or a table adds no space there. */
+.message-text > :first-child, .owner-message .message-text > :first-child { margin-top: 0; }
+.message-text > :last-child, .owner-message .message-text > :last-child { margin-bottom: 0; }

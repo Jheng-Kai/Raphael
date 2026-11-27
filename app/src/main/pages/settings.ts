@@ -29,7 +29,7 @@ import { createVault } from "../vault";
 import { createSkillLibrary } from "../skill-library";
 import { createConnections } from "../connections";
 import { UPDATE_STATUS_MS } from "../updates";
-import { askInChat } from "../chat-ask";
+import { askInChat, askPending } from "../chat-ask";
 import { RAPHAEL_ID } from "../members";
 import { DICTATION_MODES, isDictationMode } from "../dictation";
 import { describeError } from "../format";
@@ -278,7 +278,13 @@ export function createSettings(app: AppContext): SettingsPage {
   const rules = createRules({ visible: () => visible && pane === "safety", redraw: () => render() });
   // A Composio key replaced or removed in the vault: Connect apps reads its connections and catalog again (#320).
   const vault = createVault(el, () => { if (visible && pane === "safety") render(); }, () => { void connections.keyReplaced(); });
-  const skillLibrary = createSkillLibrary(el, () => { if (visible && pane === "skills") render(); }, () => body);
+  // What is no skill leaves the importer for Raphael's own conversation, handed over in the owner's words (R-SKILL-28).
+  const skillLibrary = createSkillLibrary(el, () => { if (visible && pane === "skills") render(); }, () => body, (words, attachments) => {
+    if (askPending(RAPHAEL_ID, "import-skill")) return false;
+    app.go("agent", "raphael");
+    askInChat(RAPHAEL_ID, "import-skill", "", { words, attachments });
+    return true;
+  });
   const services = createServices({ root: el, visible: () => visible && pane === "tools", redraw: () => render(), brain: () => brain, changeSetting: (key, value) => changeBrain(key, value) });
   const cliBrains = createCliBrains({ visible: () => visible, redraw: () => render() });
   const providers = createProviders({ root: el, visible: () => visible && pane === "models", redraw: () => render() });

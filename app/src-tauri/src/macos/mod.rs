@@ -5,6 +5,7 @@
 //! - [`ax`]: the accessibility API, which reads and operates other apps' windows.
 //! - [`workspace`]: the running apps, the one in front, bringing one forward.
 //! - [`keys`]: posting keys and clicks (marked as Raphael's own), and the keyboard layout.
+//! - [`open_panel`]: the open panel that takes a file or a folder.
 //! - [`pasteboard`]: the clipboard half of pasting.
 //! - [`power`]: keeping the computer awake, and the time since the last input.
 //! - [`permissions`]: the privacy permissions the features need.
@@ -15,6 +16,7 @@ pub mod ax;
 pub mod cf;
 pub mod ffi;
 pub mod keys;
+pub mod open_panel;
 pub mod pasteboard;
 pub mod permissions;
 pub mod power;

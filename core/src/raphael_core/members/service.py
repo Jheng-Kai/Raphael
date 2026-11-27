@@ -102,6 +102,7 @@ from ..agent.speaker import BUILTIN_TOOL_IDS, RAPHAEL_NAMES, Speaker, is_raphael
 from ..background.tasks import Refused
 from ..brain.settings import SettingsStore
 from ..clock import wall_clock_ms
+from ..folders import default_folders
 from ..home_digest import FAILED_TASKS, FAILED_TURNS
 from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from ..router import Router
@@ -110,7 +111,8 @@ from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError
 from .capabilities import MemberCapabilities, download_skills
 from .skill_layouts import PluginTree
 from .skill_packages import SkillPackages
-from .skill_convert import Conversions, needs_conversion, routed
+from .skill_intake import hand_over, needs_agent, routed
+from . import skill_git
 from .skill_paths import as_local
 from . import skill_sources
 from .schedule import Schedule, first_eligible_slot, next_run
@@ -177,8 +179,13 @@ def unread_kind(turns: Sequence[tuple]) -> str:
     return "failed" if failed else "done" if done else "message"
 
 
-class ConvertInstead(Exception):
-    """The direct import found material that is no skill yet: a slime converts it (skill_convert.py)."""
+class HandOff(Exception):
+    """The direct import found material that is no skill: Raphael looks at it with the owner (skill_intake.py). `kept` is the
+    folder a Git address was fetched into, which stays where Raphael reads it."""
+
+    def __init__(self, error, kept=None):
+        super().__init__()
+        self.error, self.kept = error, kept
 
 
 def _rpc_error(error: MemberError) -> RpcError:
@@ -339,8 +346,6 @@ class MembersService:
         self.store = MemberStore(conn, now_ms)
         self.capabilities = MemberCapabilities(conn, local_dir / "member-skills", self.store)
         self.packages = SkillPackages(self.capabilities)
-        self.attachments = None  # where the material of a conversion is kept (use_attachment_store)
-        self.conversions = Conversions(self)
         self.greeting = None  # Bound by the interactive AgentService, never the routine worker.
         self._delivered: set[tuple[int, int, str]] = set()
         self._conn = conn
@@ -415,7 +420,6 @@ class MembersService:
         methods = {
             "skills.library.list": self._packages_list,
             "skills.library.import": self._packages_import,
-            "skills.library.convert": self.conversions.status,
             "skills.library.update": self._packages_update,
             "skills.library.delete": self._packages_delete,
             "members.skills.list": self._skills_list,
@@ -976,32 +980,39 @@ class MembersService:
 
     async def _packages_list(self, params):
         self._package_fields(params, ())
-        # A conversion that ended while the window was elsewhere is imported now, so that its work is never lost.
-        await self.conversions.settle()
-        return {"packages": await self.packages.list_async(), "members": [{"id": m.id, "name": m.name} for m in self.store.members()],
-                "converting": self.conversions.waiting()}
-
-    def use_attachment_store(self, store) -> None:
-        """Keep the material of a conversion where a conversation keeps what the owner attaches (app.py)."""
-        self.attachments = store
+        return {"packages": await self.packages.list_async(), "members": [{"id": m.id, "name": m.name} for m in self.store.members()]}
 
     async def _packages_import(self, params):
-        """The one box of Team skills: whatever is a skill or a plugin imports directly, with no model; what is not in a
-        skill's format because of its format is converted by the primary contact (skill_convert.py)."""
-        params = routed(params)
+        """The one box of Team skills: whatever is a skill or a plugin imports directly, with no model and no agent. What is
+        not one is no work of the dialog: the answer is `handoff`, what the window needs to give the material to Raphael's own
+        conversation (skill_intake.py)."""
+        # The window asks for the hand-off (the default); a member's tool never does: it is told why the material is no skill.
+        params = dict(params) if isinstance(params, dict) else params
+        handoff = params.pop("handoff", True) if isinstance(params, dict) else True
+        if type(handoff) is not bool:
+            raise invalid_params("handoff must be true or false")
+        try:
+            params = routed(params)
+        except MemberError as error:
+            raise _library_error(error) from None
         if "files" in params:
             self._package_fields(params, ("files", "access", "name"))
         try:
             key, _, _, skipped = await self._import_package(-1, params, new_package=True)
-        except ConvertInstead:
+        except HandOff as instead:
+            if not handoff:
+                if instead.kept is not None:
+                    shutil.rmtree(instead.kept, ignore_errors=True)
+                raise _library_error(instead.error) from None
             try:
-                return await self.conversions.start(params)
+                parent = getattr(self, "member_folders", default_folders)(0)[0]
+                return {"handoff": await hand_over(params, parent, kept=instead.kept)}
             except MemberError as error:
                 raise _library_error(error) from None
         # What was left out because its name is taken is named with who holds it (#313): the rest is in the library.
         return {"package": await self.packages.view_async(key), **({"skipped": skipped} if skipped else {})}
 
-    async def _package_documents(self, params, plugins=False):
+    async def _package_documents(self, params, plugins=False, keep=False):
         """What a source holds, as the documents to install: `(documents, source, origin, name)`. With `plugins`, a source that is
         a plugin of any kind (skill_layouts.py) is its `PluginTree` instead, so that the whole of it is kept."""
         if "text" in params:
@@ -1021,6 +1032,9 @@ class MembersService:
         if source.startswith("local:"):
             files, name = await asyncio.to_thread(skill_sources.local, source, plugins)
             return files if plugins and isinstance(files, PluginTree) else ([(source, f) for f in files], source, "source", name)
+        where = skill_git.address(source)
+        if where is not None:
+            return await self._git_documents(where, plugins, keep)
         documents = await (download_skills(source, plugins=True) if plugins else download_skills(source))
         if isinstance(documents, PluginTree):
             return documents
@@ -1031,6 +1045,29 @@ class MembersService:
         except MemberError:
             name = source.rstrip("/").split("/")[-1]
         return documents, source, "source", name
+
+    async def _git_documents(self, where, plugins, keep):
+        """The skills of a Git address, cloned by the system's git into Raphael's own folder and read there as a folder is. The
+        clone is removed once read, unless `keep` and the material is no skill: then it stays, for Raphael to look at."""
+        from .skill_intake import folder_for
+
+        parent = await asyncio.to_thread(folder_for, getattr(self, "member_folders", default_folders)(0)[0])
+        folder = await skill_git.fetch(where, parent)
+        try:
+            files, _ = await asyncio.to_thread(skill_sources.local, "local:" + str(folder), plugins)
+        except MemberError as error:
+            if keep and needs_agent(error):
+                error.material = folder
+            else:
+                await asyncio.to_thread(shutil.rmtree, folder, True)
+            raise
+        except BaseException:
+            await asyncio.to_thread(shutil.rmtree, folder, True)
+            raise
+        await asyncio.to_thread(shutil.rmtree, folder, True)
+        if isinstance(files, PluginTree):
+            return replace(files, source=where.url, identity=where.key, label=files.label if files.label != folder.name else where.name)
+        return [(where.url, f) for f in files], where.url, "source", where.name
 
     async def _import_package(self, member, params, *, new_package=False):
         self._package_fields(params, ("source", "text", "file", "files", "access", "name", "plugin", "set_id", "marketplace"))
@@ -1072,7 +1109,8 @@ class MembersService:
                 if sum(k in params for k in ("source", "text", "file", "files")) != 1:
                     raise invalid_params("choose exactly one source, text or file")
                 # The one box takes a plugin of any kind whole (skill_layouts.py); `plugin: false` asks for its skills only.
-                data = await self._package_documents(params, plugins=new_package and member == -1 and params.get("plugin") is not False)
+                data = await self._package_documents(params, plugins=new_package and member == -1 and params.get("plugin") is not False,
+                                                     keep=new_package and member == -1 and "plugin" not in params)
                 if isinstance(data, PluginTree):
                     plugin, as_plugin = await self.capabilities.import_tree(data, access=params.get("access")), True
             if as_plugin:
@@ -1083,8 +1121,10 @@ class MembersService:
                 key, ids = await self.packages.install(member, *data, access=params.get("access"), name=params.get("name"),
                                                          skipped=skipped)
         except MemberError as error:
-            if new_package and member == -1 and "plugin" not in params and needs_conversion(error):
-                raise ConvertInstead from None
+            if new_package and member == -1 and "plugin" not in params and needs_agent(error):
+                raise HandOff(error, getattr(error, "material", None)) from None
+            if getattr(error, "material", None) is not None:
+                shutil.rmtree(error.material, ignore_errors=True)
             raise (_library_error if member == -1 else _rpc_error)(error) from None
         except (OSError, UnicodeError) as error:
             raise (_library_error if member == -1 else _rpc_error)(_io_error(error, "read or keep the skill files")) from error
@@ -2379,6 +2419,9 @@ class MembersService:
         if action.service != "rpc":
             raise invalid_params("This action requires its existing owner card service")
         params = {"key": action.setting, "value": arguments["value"]} if action.setting else dict(arguments)
+        if action.rpc == "skills.library.import":
+            # A member's import is a tool call: material that is no skill is refused with its reason (no_skill), never handed over.
+            params["handoff"] = False
         result = await self._management_rpc(action.rpc, params)
         if action.setting or name == "settings_read":
             # The UI response includes internal provider/device/authority state.
@@ -2831,5 +2874,4 @@ class MembersService:
         if polling is not None:
             polling.cancel()
             await asyncio.gather(polling, return_exceptions=True)
-        await self.conversions.close()
         await self.webhooks.close()

@@ -334,8 +334,6 @@ class Driver:
             else:
                 raise ValueError("unknown_cli")
             if self.name == "codex":
-                self.native_skills = [{"type": "skill", "name": skill["name"], "path": path}
-                                      for skill, path in zip(loaded_skills, skill_paths)]
                 environ["RAPHAEL_MCP_TOKEN"] = token
             self.child = Child(command, environ=environ, cwd=child_cwd)
             self.native_diagnostic("launch", {"brain": self.name, "executable": self.command[0], "model": self.model,
@@ -620,7 +618,9 @@ class Driver:
                     inputs = [{"type": "text", "text": user}] + [
                         item for path, label in zip(image_paths, labels)
                         for item in ([{"type": "text", "text": label}] if label else []) + [{"type": "localImage", "path": path}]]
-                    inputs += getattr(self, "native_skills", [])
+                    # No `skill` input: that is the owner calling a skill (an explicit mention in Codex), and every turn named
+                    # every skill. Codex knows them from skills.config and reads the one it needs, as in Codex itself; a skill
+                    # the owner calls with / comes in the words (capabilities.py).
                     await request("turn/start", {"threadId": self.session, "input": inputs,
                                   **({"effort": self.effort} if self.effort else {})}, "turn")
                 elif label == "turn":

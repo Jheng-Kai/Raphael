@@ -29,6 +29,17 @@ describe("a panel button done in the conversation", () => {
     stop();
   });
 
+  test("a hand-off to Raphael carries the owner's own words and files, once, while Raphael is answering", async () => {
+    const file = { name: "guide.pdf", mime: "application/pdf", data: "JVBERi0=" };
+    askInChat(0, "import-skill", "", { words: "請幫我把這個檔案做成團隊技能：guide.pdf", attachments: [file] });
+    askInChat(0, "import-skill", "", { words: "a second one", attachments: [] });
+    await flush();
+    expect(ask).toHaveBeenCalledExactlyOnceWith("請幫我把這個檔案做成團隊技能：guide.pdf", [file], 0, { intent: "import-skill" });
+    expect(askPending(0, "import-skill")).toBe(true);
+    settleAsks(0, "idle");
+    expect(askPending(0, "import-skill")).toBe(false);
+  });
+
   test("a refused press and one that never hears back are free again", async () => {
     ask.mockRejectedValueOnce(new Error("busy"));
     askInChat(1, "settings");

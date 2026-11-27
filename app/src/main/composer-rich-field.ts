@@ -1,22 +1,20 @@
-// The composer's field: ProseMirror shows the words as they will read (headings, lists, quotes, code, equations, toggles) and the
-// element it is mounted on answers like the plain field it replaces. `value` is the Markdown, `selectionStart`, `setRangeText` and
-// the rest speak in offsets of that text, and every change says `input`: so drafts, history, dictation, the @ and / menus, the
-// attachments and the send all keep working on words, as before (composer-rich-markdown.ts has the map between the two).
-import { chainCommands, deleteSelection, joinBackward, joinForward, lift, liftEmptyBlock, newlineInCode, selectAll, selectNodeBackward, selectNodeForward, setBlockType, splitBlock, toggleMark } from "prosemirror-commands";
-import { history, redo, undo } from "prosemirror-history";
-import { InputRule, inputRules, textblockTypeInputRule, undoInputRule, wrappingInputRule } from "prosemirror-inputrules";
-import { keymap } from "prosemirror-keymap";
-import type { MarkType, Node as PMNode } from "prosemirror-model";
-import { liftListItem, sinkListItem, splitListItem } from "prosemirror-schema-list";
-import { AllSelection, type Command, EditorState, Plugin, PluginKey, Selection, TextSelection, type Transaction } from "prosemirror-state";
-import { findWrapping } from "prosemirror-transform";
-import { Decoration, DecorationSet, EditorView } from "prosemirror-view";
+// The composer's field: TipTap (ProseMirror) shows the words as they will read (headings, lists, quotes, code, equations, toggles,
+// every format) and the element it is mounted on answers like the plain field it replaces. `value` is the Markdown,
+// `selectionStart`, `setRangeText` and the rest speak in offsets of that text, and every change says `input`: so drafts, history,
+// dictation, the @ and / menus, the attachments and the send all keep working on words, as before (composer-rich-markdown.ts has the
+// map between the two, composer-rich-extensions.ts the formats, composer-rich-behavior.ts the keys, composer-rich-toolbar.ts what
+// floats over a selection).
+import { Editor, Extension } from "@tiptap/core";
+import type { Node as PMNode, Schema } from "prosemirror-model";
+import { AllSelection, EditorState, Plugin, PluginKey, Selection, TextSelection, type Transaction } from "prosemirror-state";
+import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import {
   fragmentToMarkdown, looksLikeMarkdown, markdownSlice, offsetOf, parseMarkdown, positionOf, serializeMarkdown, type Written,
 } from "./composer-rich-markdown";
 import { literalSlice, normalizePastedHTML } from "./composer-rich-paste";
-import { composerMarks as M, composerNodes as N, composerSchema as S, isBlankLine } from "./composer-rich-schema";
-import { composerNodeViews } from "./composer-rich-views";
+import { composerExtensions, isBlankLine } from "./composer-rich-extensions";
+import { composerBehavior } from "./composer-rich-behavior";
+import { composerToolbar } from "./composer-rich-toolbar";
 import { RICH, richFieldOf, type RichChip, type RichField } from "./composer-rich-handle";
 import { messageUrl } from "./markdown-text";
 import "./composer-rich.css";
@@ -24,13 +22,13 @@ import "./composer-rich.css";
 const SILENT = "composer-rich:silent";
 /** The key the page keeps for itself: the editor would swallow it as it does Enter, and the page uses it to cancel a task and close a menu. */
 const PAGE_KEY = "Escape";
-const LINK = M["link"];
-const blank = (): PMNode => N.paragraph.create();
+const blank = (schema: Schema): PMNode => schema.nodes["paragraph"]!.create();
+const isParagraph = (node: PMNode): boolean => node.type.name === "paragraph";
 
 /** A document, with the empty line after a last block that lets the caret go below it. */
-function documentOf(markdown: string): PMNode {
-  const doc = parseMarkdown(markdown), last = doc.lastChild;
-  return last && last.type !== N.paragraph ? doc.copy(doc.content.addToEnd(blank())) : doc;
+function documentOf(markdown: string, schema: Schema): PMNode {
+  const doc = parseMarkdown(markdown, schema), last = doc.lastChild;
+  return last && !isParagraph(last) ? doc.copy(doc.content.addToEnd(blank(schema))) : doc;
 }
 
 /**
@@ -39,9 +37,9 @@ function documentOf(markdown: string): PMNode {
  */
 function keepTail(tr: Transaction, before: PMNode): void {
   const after = tr.doc, last = after.lastChild;
-  if (last && last.type !== N.paragraph) { tr.insert(after.content.size, blank()); return; }
-  if (!tr.docChanged || after.childCount < 2 || !last || !isBlankLine(last) || after.child(after.childCount - 2).type !== N.paragraph) return;
-  const held = before.childCount >= 2 && isBlankLine(before.lastChild!) && before.child(before.childCount - 2).type !== N.paragraph;
+  if (last && !isParagraph(last)) { tr.insert(after.content.size, blank(after.type.schema)); return; }
+  if (!tr.docChanged || after.childCount < 2 || !last || !isBlankLine(last) || !isParagraph(after.child(after.childCount - 2))) return;
+  const held = before.childCount >= 2 && isBlankLine(before.lastChild!) && !isParagraph(before.child(before.childCount - 2));
   if (!held) return;
   let tail = before.content.size - 2, touched = false;
   for (const map of tr.mapping.maps) {
@@ -51,219 +49,11 @@ function keepTail(tr: Transaction, before: PMNode): void {
   if (!touched) tr.delete(after.content.size - 2, after.content.size);
 }
 
-// ------------------------------------------------------------------------------------------------------------- commands
-
-function ancestor(state: EditorState, type: PMNode["type"]): { depth: number; node: PMNode } | undefined {
-  const { $from } = state.selection;
-  for (let depth = $from.depth; depth > 0; depth--) if ($from.node(depth).type === type) return { depth, node: $from.node(depth) };
-  return undefined;
-}
-
-/** A new line under the caret: in a list the next item, in code a line of it, in a toggle's title the first line under it. */
-const shiftEnter: Command = (state, dispatch) => {
-  const { $from } = state.selection, parent = $from.parent;
-  if (parent.type.spec.code) {
-    // A second newline at the end leaves the block for the line below it.
-    if (state.selection.empty && $from.parentOffset === parent.content.size && parent.textContent.endsWith("\n")) {
-      if (dispatch) {
-        const tr = state.tr.delete($from.pos - 1, $from.pos), after = tr.mapping.map($from.after());
-        const next = tr.doc.resolve(after).nodeAfter;
-        if (!next) tr.insert(after, blank());
-        dispatch(tr.setSelection(TextSelection.create(tr.doc, after + 1)).scrollIntoView());
-      }
-      return true;
-    }
-    return newlineInCode(state, dispatch);
-  }
-  if (parent.type === N.summary) {
-    const details = $from.node($from.depth - 1), at = $from.after($from.depth);
-    if (dispatch) {
-      let tr = state.tr;
-      if (!details.attrs.open) tr = tr.setNodeMarkup($from.before($from.depth - 1), undefined, { ...details.attrs, open: true });
-      if (details.childCount < 2) tr = tr.insert(at, blank());
-      dispatch(tr.setSelection(TextSelection.create(tr.doc, at + 1)).scrollIntoView());
-    }
-    return true;
-  }
-  if (parent.type === N.table_cell) return goToCell(1)(state, dispatch);
-  const item = ancestor(state, N.list_item);
-  if (item && parent.type === N.paragraph && $from.node(item.depth).firstChild === parent) {
-    // An empty item, with no list inside one to leave, is lifted out of the list.
-    if (splitListItem(N.list_item, item.node.attrs.checked === null ? undefined : { checked: false })(state, dispatch)) return true;
-    return liftEmptyBlock(state, dispatch);
-  }
-  if (parent.content.size === 0 && $from.depth > 1 && liftEmptyBlock(state, dispatch)) return true;
-  return splitBlock(state, dispatch);
-};
-
-/** The start of a cell's words, `step` cells on (the next or the one before) in the table. */
-const goToCell = (step: 1 | -1): Command => (state, dispatch) => {
-  const { $from } = state.selection;
-  if ($from.parent.type !== N.table_cell) return false;
-  const table = $from.node($from.depth - 2), start = $from.start($from.depth - 2), here = $from.before();
-  const cells: number[] = [];
-  table.descendants((node, offset) => { if (node.type === N.table_cell) cells.push(start + offset); return node.type !== N.table_cell; });
-  const next = cells[cells.indexOf(here) + step];
-  if (next !== undefined && dispatch) dispatch(state.tr.setSelection(TextSelection.create(state.doc, next + 1, next + 1 + state.doc.nodeAt(next)!.content.size)).scrollIntoView());
-  return true;
-};
-
-const tab: Command = (state, dispatch) => {
-  const { $from } = state.selection;
-  if ($from.parent.type.spec.code) { if (dispatch) dispatch(state.tr.insertText("  ").scrollIntoView()); return true; }
-  const item = ancestor(state, N.list_item);
-  if (item) { sinkListItem(N.list_item)(state, dispatch); return true; }
-  return goToCell(1)(state, dispatch);
-};
-
-const shiftTab: Command = (state, dispatch) => {
-  const item = ancestor(state, N.list_item);
-  if (item) {
-    // A top-level item stays where it is: leaving the list is Backspace's.
-    if (state.selection.$from.node(item.depth - 2)?.type === N.list_item) liftListItem(N.list_item)(state, dispatch);
-    return true;
-  }
-  return goToCell(-1)(state, dispatch);
-};
-
-/** A just-closed equation is a unit; Backspace right after it opens its source again, for the next `$` to close. */
-const openMath: Command = (state, dispatch) => {
-  const { selection } = state, before = selection.empty ? selection.$from.nodeBefore : null;
-  if (!before || before.type !== N.math_inline) return false;
-  if (dispatch) {
-    const from = selection.from - before.nodeSize, tr = state.tr.replaceWith(from, selection.from, S.text(`$${before.attrs.latex}`));
-    dispatch(tr.setSelection(TextSelection.create(tr.doc, from + 1 + String(before.attrs.latex).length)));
-  }
-  return true;
-};
-
-/** Backspace at the start of a block turns it back into a paragraph, one step at a time. */
-const backspaceBlock: Command = (state, dispatch) => {
-  const { selection } = state;
-  if (!selection.empty || selection.$from.parentOffset !== 0) return false;
-  const { $from } = selection, parent = $from.parent;
-  if (parent.type === N.heading || parent.type === N.code_block || parent.type === N.math_block) return setBlockType(N.paragraph)(state, dispatch);
-  if (parent.type === N.table_cell) return true;
-  if (parent.type === N.summary) {
-    const depth = $from.depth - 1, details = $from.node(depth), at = $from.before(depth);
-    if (dispatch) {
-      const blocks: PMNode[] = [N.paragraph.create(null, parent.content)];
-      details.forEach((child, _, index) => { if (index) blocks.push(child); });
-      const tr = state.tr.replaceWith(at, at + details.nodeSize, blocks);
-      dispatch(tr.setSelection(TextSelection.create(tr.doc, at + 1)).scrollIntoView());
-    }
-    return true;
-  }
-  const item = ancestor(state, N.list_item);
-  if (item && $from.node(item.depth).firstChild === parent && liftListItem(N.list_item)(state, dispatch)) return true;
-  if ($from.depth > 1 && $from.index($from.depth - 1) === 0 && $from.node($from.depth - 1).type === N.blockquote) return lift(state, dispatch);
-  return false;
-};
-
-/**
- * Backspace in an empty line right after a block that holds other blocks (a list, a quote, a toggle, a table) goes back to the end
- * of that block's last words. Joining would pull the line into it as a new item, the next Backspace would lift that item out again,
- * and the empty line kept under a last block (`keepTail`) came back each time: the owner pressed Backspace and nothing was ever
- * deleted. A line in the middle of the words goes away; the one under a last block stays, as `keepTail` would put it back.
- */
-const backspaceIntoBlock: Command = (state, dispatch) => {
-  const { selection } = state;
-  if (!selection.empty || selection.$from.parentOffset !== 0) return false;
-  const { $from } = selection, parent = $from.parent;
-  if (parent.type !== N.paragraph || parent.content.size !== 0 || $from.depth !== 1) return false;
-  const index = $from.index(0);
-  if (index === 0 || state.doc.child(index - 1).isTextblock) return false;
-  if (dispatch) {
-    const last = index === state.doc.childCount - 1;
-    const tr = last ? state.tr : state.tr.delete($from.before(), $from.after());
-    const back = Selection.findFrom(tr.doc.resolve($from.before()), -1, true);
-    if (back) tr.setSelection(back);
-    dispatch(tr.scrollIntoView());
-  }
-  return true;
-};
-
-const backspace = chainCommands(undoInputRule, openMath, backspaceBlock, backspaceIntoBlock, deleteSelection, joinBackward, selectNodeBackward);
-const forwardDelete = chainCommands(deleteSelection, joinForward, selectNodeForward);
-
-// ------------------------------------------------------------------------------------------------------------- typing
-
-/** `**bold**`, `*italic*`, `` `code` ``... at the closing mark: the words between take the mark, and the marks themselves go. */
-function markRule(pattern: RegExp, open: number, mark: MarkType): InputRule {
-  return new InputRule(pattern, (state, match, start, end) => {
-    const lead = match[1]!.length, inner = match[2]!;
-    const from = start + lead, innerFrom = from + open, innerTo = innerFrom + inner.length;
-    const tr = state.tr.delete(innerTo, end).delete(from, innerFrom);
-    return tr.addMark(from, from + inner.length, mark.create()).removeStoredMark(mark);
-  });
-}
-
-// A star, a strike or a backtick opens after any letter, a Chinese one too (他說**重點**); an underscore never does inside a word.
-const AFTER = String.raw`(^|[^\w*\\])`, AFTER_WORD = String.raw`(^|[^\p{L}\p{N}_\\])`;
-function typingRules(): InputRule[] {
-  const task = new InputRule(/^\s*(?:[-+*]\s)?\[([ xX]?)\]\s$/, (state, match, start, end) => {
-    const checked = match[1]!.toLowerCase() === "x";
-    let tr = state.tr.delete(start, end);
-    const $start = tr.doc.resolve(start), depth = $start.depth - 1;
-    if ($start.parent.type !== N.paragraph) return null;
-    if (depth > 0 && $start.node(depth).type === N.list_item && $start.index(depth) === 0) return tr.setNodeMarkup($start.before(depth), undefined, { checked });
-    const range = $start.blockRange(), wrapping = range && findWrapping(range, N.bullet_list);
-    if (!range || !wrapping) return null;
-    tr = tr.wrap(range, wrapping);
-    const inside = tr.doc.resolve(tr.mapping.map(start));
-    for (let d = inside.depth; d > 0; d--) if (inside.node(d).type === N.list_item) return tr.setNodeMarkup(inside.before(d), undefined, { checked });
-    return null;
-  });
-  const toggle = new InputRule(/^\s*>>\s$/, (state, _match, start, end) => {
-    const $start = state.doc.resolve(start), parent = $start.node($start.depth - 1), index = $start.index($start.depth - 1);
-    const node = N.details.create({ open: true }, [N.summary.create(), blank()]);
-    if ($start.parent.type !== N.paragraph || !parent.canReplaceWith(index, index + 1, N.details)) return null;
-    const tr = state.tr.delete(start, end), before = tr.mapping.map($start.before());
-    tr.replaceWith(before, before + tr.doc.nodeAt(before)!.nodeSize, node);
-    return tr.setSelection(TextSelection.create(tr.doc, before + 2));
-  });
-  const rule = new InputRule(/^---$/, (state, _match, start) => {
-    const $start = state.doc.resolve(start), index = $start.index($start.depth - 1), parent = $start.node($start.depth - 1);
-    if ($start.parent.type !== N.paragraph || !parent.canReplaceWith(index, index + 1, N.horizontal_rule)) return null;
-    const tr = state.tr, before = $start.before();
-    tr.replaceWith(before, $start.after(), [N.horizontal_rule.create(), blank()]);
-    return tr.setSelection(TextSelection.create(tr.doc, before + 2));
-  });
-  const math = new InputRule(new RegExp(String.raw`(^|[^\w$\\])\$([^\s$](?:[^$\n]*[^\s$])?)\$$`), (state, match, start, end) => {
-    const from = start + match[1]!.length;
-    return state.tr.replaceWith(from, end, N.math_inline.create({ latex: match[2]! }));
-  });
-  const link = new InputRule(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)$/, (state, match, start, end) => {
-    const href = messageUrl(match[2]);
-    if (!href) return null;
-    return state.tr.replaceWith(start, end, S.text(match[1]!, [LINK.create({ href: match[2]! })])).removeStoredMark(LINK);
-  });
-  return [
-    textblockTypeInputRule(/^(#{1,6})\s$/, N.heading, match => ({ level: match[1]!.length })),
-    task, toggle,
-    wrappingInputRule(/^\s*>\s$/, N.blockquote),
-    wrappingInputRule(/^\s*([-+*])\s$/, N.bullet_list),
-    wrappingInputRule(/^(\d{1,9})\.\s$/, N.ordered_list, match => ({ order: Number(match[1]) }), (match, node) => node.childCount + node.attrs.order === Number(match[1])),
-    textblockTypeInputRule(/^```([\w#+.-]*)\s$/, N.code_block, match => ({ language: match[1]!.toLowerCase() })),
-    textblockTypeInputRule(/^\$\$\s$/, N.math_block),
-    rule,
-    markRule(new RegExp(`${AFTER}\\*\\*([^\\s*](?:[^*\\n]*[^\\s*])?)\\*\\*$`), 2, M.strong),
-    markRule(new RegExp(`${AFTER_WORD}__([^\\s_](?:[^_\\n]*[^\\s_])?)__$`, "u"), 2, M.strong),
-    markRule(new RegExp(`${AFTER}\\*([^\\s*](?:[^*\\n]*[^\\s*])?)\\*$`), 1, M.em),
-    markRule(new RegExp(`${AFTER_WORD}_([^\\s_](?:[^_\\n]*[^\\s_])?)_$`, "u"), 1, M.em),
-    markRule(new RegExp(`${AFTER}~~([^\\s~](?:[^~\\n]*[^\\s~])?)~~$`), 2, M.strike),
-    markRule(/(^|[^`\\])`([^`\n]+)`$/, 1, M.code),
-    math, link,
-  ];
-}
-
-// ------------------------------------------------------------------------------------------------------------- the field
-
 /** Whether a paste is a lone address over some words: the words become its link. */
 function linkOver(text: string, state: EditorState): Transaction | null {
   const { from, to, empty, $from, $to } = state.selection, address = text.trim();
   if (empty || /\s/.test(address) || !messageUrl(address) || $from.parent !== $to.parent || !$from.parent.inlineContent) return null;
-  return state.tr.addMark(from, to, LINK.create({ href: address }));
+  return state.tr.addMark(from, to, state.schema.marks["link"]!.create({ href: address }));
 }
 
 /**
@@ -274,6 +64,7 @@ function linkOver(text: string, state: EditorState): Transaction | null {
 export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
   let chips: readonly RichChip[] = [], cache: { doc: PMNode; written: Written } | undefined;
   let disabled = false, readOnly = false, inputType = "", placeholder = host.getAttribute("data-placeholder") ?? "";
+  let view!: EditorView;
 
   const written = (): Written => {
     const doc = view.state.doc;
@@ -316,41 +107,48 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
     return DecorationSet.create(doc, found);
   };
 
-  const keys = keymap({
-    "Shift-Enter": shiftEnter, Tab: tab, "Shift-Tab": shiftTab, Backspace: backspace, "Mod-Backspace": backspace,
-    Delete: forwardDelete, "Mod-Delete": forwardDelete, "Mod-a": selectAll,
-    "Mod-z": undo, "Mod-y": redo, "Mod-Shift-z": redo, "Mod-i": toggleMark(M.em), "Mod-e": toggleMark(M.code), "Mod-Shift-x": toggleMark(M.strike),
+  /** What the field draws over the words (the placeholder, the chips the page asks for), and the line it keeps open under a last block. */
+  const chrome = Extension.create({
+    name: "composerChrome",
+    addProseMirrorPlugins() { return [new Plugin({ key: new PluginKey("composer-chrome"), props: { decorations } })]; },
+    // TipTap's own dispatch follows (it applies the transaction and says what changed), with the tail kept in the same transaction.
+    dispatchTransaction({ transaction, next }) { keepTail(transaction, this.editor.state.doc); next(transaction); },
   });
-  const plugins = [history(), inputRules({ rules: typingRules() }), keys,
-    new Plugin({ key: new PluginKey("composer-chrome"), props: { decorations } })];
 
-  const view: EditorView = new EditorView({ mount: host }, {
-    state: EditorState.create({ schema: S, doc: documentOf(""), plugins }),
-    nodeViews: composerNodeViews,
-    attributes: { class: "cmp-input", role: "textbox", "aria-multiline": "true", enterkeyhint: "send", autocapitalize: "off" },
-    // Escape is the page's (it cancels a task, closes a menu): the editor would swallow it as it does Enter.
-    handleDOMEvents: { keydown: (_view, event) => event.key === PAGE_KEY },
-    clipboardTextSerializer: slice => fragmentToMarkdown(slice.content),
-    clipboardTextParser: (words, _context, plain) => plain || !looksLikeMarkdown(words) ? literalSlice(words) : markdownSlice(words),
-    transformPastedHTML: normalizePastedHTML,
-    handlePaste(editor, event) {
-      const data = event.clipboardData;
-      if (!data) return false;
-      const words = data.getData("text/plain");
-      // A code editor's copy is code: its lines are the words, whatever it dresses them in.
-      if (data.types?.includes("vscode-editor-data") && words) { editor.dispatch(editor.state.tr.replaceSelection(literalSlice(words)).scrollIntoView()); return true; }
-      const linked = linkOver(words, editor.state);
-      if (linked) { editor.dispatch(linked.scrollIntoView()); return true; }
-      return false;
-    },
-    dispatchTransaction(tr) {
-      keepTail(tr, view.state.doc);
-      const next = view.state.apply(tr);
-      view.updateState(next);
-      host.toggleAttribute("data-empty", next.doc.childCount === 1 && isBlankLine(next.doc.firstChild!));
-      if (tr.docChanged && !tr.getMeta(SILENT)) { const type = inputType || "insertText"; inputType = ""; emit(type); }
+  const toolbar = composerToolbar(host);
+  const editor: Editor = new Editor({
+    element: { mount: host },
+    extensions: [...composerExtensions(), composerBehavior({ openLink: () => toolbar.openLink() }), chrome, toolbar.extension],
+    // Enter is the page's (it sends), and no word the owner typed is rewritten by a paste rule.
+    enableCoreExtensions: { keymap: false, tabindex: false },
+    enablePasteRules: false, injectCSS: false,
+    editorProps: {
+      attributes: { class: "cmp-input", role: "textbox", "aria-multiline": "true", enterkeyhint: "send", autocapitalize: "off" },
+      // Escape is the page's (it cancels a task, closes a menu), and so is Enter, which sends: no extension is asked for either.
+      handleDOMEvents: { keydown: (_view, event) => event.key === PAGE_KEY || (event.key === "Enter" && !event.shiftKey) },
+      clipboardTextSerializer: slice => fragmentToMarkdown(slice.content),
+      clipboardTextParser: (words, _context, plain) => plain || !looksLikeMarkdown(words) ? literalSlice(words, editor.schema) : markdownSlice(words, editor.schema),
+      transformPastedHTML: normalizePastedHTML,
+      handlePaste(editorView, event) {
+        const data = event.clipboardData;
+        if (!data) return false;
+        const words = data.getData("text/plain");
+        // A code editor's copy is code: its lines are the words, whatever it dresses them in.
+        if (data.types?.includes("vscode-editor-data") && words) { editorView.dispatch(editorView.state.tr.replaceSelection(literalSlice(words, editor.schema)).scrollIntoView()); return true; }
+        const linked = linkOver(words, editorView.state);
+        if (linked) { editorView.dispatch(linked.scrollIntoView()); return true; }
+        return false;
+      },
     },
   });
+  view = editor.view;
+  // After TipTap has applied a transaction: the field says whether it is empty, and every change of the words says `input`, once.
+  editor.on("transaction", ({ transaction, appendedTransactions }) => {
+    const doc = editor.state.doc;
+    host.toggleAttribute("data-empty", doc.childCount === 1 && isBlankLine(doc.firstChild!));
+    if ([transaction, ...appendedTransactions].some(tr => tr.docChanged) && !transaction.getMeta(SILENT)) { const type = inputType || "insertText"; inputType = ""; emit(type); }
+  });
+  const schema = editor.schema;
   // The browser's own `input` comes before the editor has read what it changed: the words are announced once, after it has.
   host.addEventListener("input", event => {
     if (!event.isTrusted) return;
@@ -361,9 +159,9 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
 
   /** The words replaced by `markdown`, only where they differ, with the caret at `caret` (offsets in the new words). */
   const replace = (markdown: string, caret: [number, number] | undefined, fresh: boolean): void => {
-    const doc = documentOf(markdown);
+    const doc = documentOf(markdown, schema);
     if (fresh) {
-      const state = EditorState.create({ schema: S, doc, plugins: view.state.plugins, selection: Selection.atEnd(doc) });
+      const state = EditorState.create({ schema, doc, plugins: view.state.plugins, selection: Selection.atEnd(doc) });
       view.updateState(state);
       host.toggleAttribute("data-empty", doc.childCount === 1 && isBlankLine(doc.firstChild!));
     } else {
@@ -384,6 +182,7 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
 
   const field: RichField = {
     view,
+    editor,
     caretRect(offset) {
       try {
         const at = view.coordsAtPos(positionOf(written().map, offset));
@@ -395,7 +194,7 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
       chips = next;
       view.updateState(view.state);
     },
-    destroy() { view.destroy(); },
+    destroy() { toolbar.destroy(); editor.destroy(); },
   };
 
   const range = (): { start: number; end: number } => {

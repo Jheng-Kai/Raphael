@@ -1482,21 +1482,14 @@ export function installMock(fixture, config = {}, target = window) {
         if (p.rename) pack.skills.find(skill => skill.id === p.rename.id).name = p.rename.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
         return { package: pack };
       }
-      case "skills.library.convert": {
-        // A conversion under way (`skillConvert`): it works until the scene lets it end, then the skill the slime wrote is in the library.
-        const convert = variant.skillConvert;
-        if (!convert || p.task_id !== convert.task.task_id) throw new Error("[-32602] Invalid params: this conversion is not under way");
-        if (convert.ends !== "done") return { state: "working", ...convert.task };
-        const skill = { id: 610, name: "weekly-report", description: "整理每週進度並寫成報告", enabled: true };
-        const pack = { key: "skill:weekly", name: "weekly-report", kind: "single", source: convert.match, description: "", version: "", enabled: true, access: "all", updatable: false, skills: [skill] };
-        if (!data.skillLibrary.some(item => item.key === pack.key)) data.skillLibrary = [...data.skillLibrary, pack].sort((a, b) => a.name.localeCompare(b.name));
-        return { state: "done", package: pack };
-      }
       case "skills.library.import": {
-        // The one box sends a pasted link as text; the core says it is a link (members/skill_convert.py `kind_of`).
-        const asked = p.source ?? (typeof p.text === "string" && p.text.trim() && !/\s/.test(p.text.trim()) ? p.text.trim() : undefined);
+        // The one box sends a pasted link as text; the core says what it is (members/skill_intake.py `kind_of`).
+        const typed = typeof p.text === "string" ? p.text.trim() : "";
+        const asked = p.source ?? (typed && !/\s/.test(typed) ? typed : undefined);
+        // What is no skill is handed over (`skillHandoff`: what the box was given, and the facts the core answers with), never made into one here.
+        const handed = (variant.skillHandoff ?? []).find(item => [p.source, typed, p.file?.name, p.files?.[0]?.path].includes(item.match));
+        if (handed) return { handoff: handed.handoff };
         p = asked !== undefined && p.source === undefined ? { source: asked } : p;
-        if (variant.skillConvert && (p.source === variant.skillConvert.match || p.file?.name === variant.skillConvert.match)) return { converting: variant.skillConvert.task };
         if (p.source === "nothing/here") throw new Error("[-32602] Invalid params: not_found: no SKILL.md found");
         // A cause the core names (members/skill_errors.py): its kind leads the message and its detail rides at the end. The
         // scene's fixture holds the refusal of each source it fails.
@@ -2664,6 +2657,22 @@ export function installMock(fixture, config = {}, target = window) {
       // The voice button's press and release reach the native recorder; here it simply starts listening.
       if (command === "window_hotkey" && variant.voicePress) {
         if (args.kind === "down" || args.state === "down") notify("Dictation", { phase: "listening", agent: true, member_id: args.memberId ?? 0 });
+        return null;
+      }
+      if (command === "agent_ask_text" && args.intent === "import-skill") {
+        // Raphael takes up what the importer handed over (the owner's words and files, as the message they are): it says what it found,
+        // and asks which skill the owner wants with a question card, before it writes anything.
+        const base = structuredClone(data.turns.find(turn => (turn.member_id ?? 0) === 0 && turn.conversation_id === 1));
+        const id = nextId(data.turns);
+        const question = { ...structuredClone(data.ownerQuestionCard), id: "skill-choice", turn_id: id, task_id: id, member_id: 0,
+          question: "你想先做哪一個？", options: ["會議紀錄整理", "週報產生器", "兩個都做"], descriptions: ["把逐字稿整理成決議與待辦", "把每週進度寫成報告", ""] };
+        const files = (args.attachments ?? []).map((file, at) => ({ id: `${String(at).repeat(32)}.pdf`, name: file.name, mime: file.mime, size: 4096 }));
+        data.turns.push({ ...base, id, session_id: args.requestId ?? `import-skill-${id}`, question: args.text, route: "answer", source: "app", prefix: "答",
+          text: "我看過了，這份資料可以做成兩個技能。", detail: null, status: "done", steps: [], handoffs: [], permissions: [], drafts: [], connectors: [], secrets: [], pages: [], computers: [],
+          attachments: files, reactions: {}, owner_questions: [question],
+          messages: [{ seq: 1, kind: "reply", text: "我看過了，這份資料可以做成兩個技能：\n\n- **會議紀錄整理**：把逐字稿整理成決議與待辦\n- **週報產生器**：把每週進度寫成報告\n\n你想先做哪一個？", at_ms: data.now }],
+          task: { id, state: "waiting", waiting_owner: 1, started_at_ms: data.now - 2000, created_at_ms: data.now - 2000, finished_at_ms: null }, created_at_ms: data.now });
+        notify("AgentTurn", { turn_id: id, member_id: 0 });
         return null;
       }
       if (command === "agent_ask_text") {

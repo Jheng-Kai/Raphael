@@ -392,7 +392,7 @@ export function swapHTML(host: HTMLElement, html: string): void {
 interface MenuState {
   el: HTMLElement; anchor: HTMLElement; rect: DOMRect; stopOutside(): void;
   onKey?: (e: KeyboardEvent) => boolean; onClose?: () => void;
-  parent: MenuState | null; placement?: "beside" | "start" | "pointer" | "above" | "center" | "right" | "middle"; anchorRect?: () => DOMRect;
+  parent: MenuState | null; placement?: "beside" | "start" | "below" | "pointer" | "above" | "center" | "right" | "middle"; anchorRect?: () => DOMRect;
   /** Set when a right click asked for the menu: it stands at that point rather than under its button. */
   at?: PointerAt;
   stopHover?: () => void;
@@ -571,7 +571,7 @@ export function menuPlacement(
   anchor: Pick<DOMRect, "top" | "bottom" | "right"> & Partial<Pick<DOMRect, "left">>,
   size: { width: number; height: number },
   viewport: { width: number; height: number; headerBottom: number },
-  alignment: "end" | "start" | "pointer" | "above" | "center" | "right" | "middle" = "end",
+  alignment: "end" | "start" | "below" | "pointer" | "above" | "center" | "right" | "middle" = "end",
 ): { left: number; top: number; maxHeight: number } {
   const upper = viewport.headerBottom + 8;
   const lower = Math.max(upper, viewport.height - 8);
@@ -595,6 +595,7 @@ export function menuPlacement(
   const maxHeight = useBelow ? below : above;
   return {
     // "center" stands under the middle of its anchor (a face picker under the face).
+    // "below" stands under its anchor, at its left edge (a menu that must not cover what is above its button), above only when it cannot fit.
     left: Math.max(8, Math.min(alignment === "center" ? ((anchor.left ?? anchor.right) + anchor.right - size.width) / 2 : alignment === "end" || alignment === "above" ? anchor.right - size.width : anchor.left ?? anchor.right, viewport.width - size.width - 8)),
     top: useBelow ? belowTop : aboveBottom - Math.min(size.height, maxHeight),
     maxHeight,
@@ -645,7 +646,7 @@ export function placeMenu(reuseCompletionAnchor = false): void {
   const cap = el.classList?.contains("menu-scroll") ? Math.min(room, parseFloat(getComputedStyle(el).maxHeight) || room) : room;
   el.style.maxHeight = `${cap}px`;
   const size = { width: el.offsetWidth, height: el.offsetHeight }, viewport = { width: innerWidth, height: innerHeight, headerBottom };
-  const placement = menu.placement === "beside" ? submenuPlacement(r, size, viewport) : menuPlacement(r, size, viewport, menu.placement === "start" || menu.placement === "pointer" || menu.placement === "above" || menu.placement === "center" || menu.placement === "right" || menu.placement === "middle" ? menu.placement : "end");
+  const placement = menu.placement === "beside" ? submenuPlacement(r, size, viewport) : menuPlacement(r, size, viewport, menu.placement === "start" || menu.placement === "below" || menu.placement === "pointer" || menu.placement === "above" || menu.placement === "center" || menu.placement === "right" || menu.placement === "middle" ? menu.placement : "end");
   if (cap < room) placement.maxHeight = Math.min(placement.maxHeight, cap);
   if (menu.placement === "beside") {
     // The first row is a button, or a block marked `data-menu-row` where the menu starts with words that are not a button.
@@ -718,7 +719,7 @@ function listenForSubmenus(state: MenuState): void {
 export interface PopoverOptions {
   navigation?: LayerNavigation;
   /** Beside preserves its parent menu; start aligns text completions above their character; right stands on the anchor's right, ending where it ends; middle stands in the middle of the window, whatever the anchor. */
-  placement?: "beside" | "start" | "above" | "center" | "right" | "middle";
+  placement?: "beside" | "start" | "below" | "above" | "center" | "right" | "middle";
   /** A live text/caret rectangle; the field remains the dismissal and focus anchor. */
   anchorRect?: () => DOMRect;
   onClose?: () => void;

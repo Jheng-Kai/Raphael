@@ -260,6 +260,17 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
       const path = barePath(text, at);
       if (path) { flush(); out += pathHTML(path, query, false); at += path.length; continue; }
     }
+    // `<u>words</u>` is an underline (Markdown has no mark for one) and `==words==` a highlight (Obsidian's, Typora's): the composer writes both.
+    if (markdown && depth < 8 && text[at] === "<" && /^<u>/i.test(text.slice(at, at + 3))) {
+      const end = text.toLowerCase().indexOf("</u>", at + 3);
+      if (end > at + 3) { flush(); out += `<u>${inline(text.slice(at + 3, end), query, true, urls, depth + 1, mentions, files, owner)}</u>`; at = end + 4; continue; }
+    }
+    if (markdown && depth < 8 && text.startsWith("==", at) && text[at + 2] !== "=" && text[at - 1] !== "=") {
+      const edge = text[at + 2] ?? " ";
+      let end = /\s/.test(edge) ? -1 : text.indexOf("==", at + 2);
+      while (end > at + 2 && (/\s/.test(text[end - 1]!) || text[end + 2] === "=" || text[end - 1] === "=")) end = text.indexOf("==", end + 1);
+      if (end > at + 2) { flush(); out += `<mark class="message-mark">${inline(text.slice(at + 2, end), query, true, urls, depth + 1, mentions, files, owner)}</mark>`; at = end + 2; continue; }
+    }
     if (markdown && depth < 8 && /[*_~]/.test(text[at])) {
       const marker = text[at + 1] === text[at] ? text.slice(at, at + 2) : text[at];
       if (marker === "~") { plain += text[at++]; continue; }
