@@ -305,10 +305,10 @@ pub(crate) mod job {
 
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
     use windows::Win32::System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION,
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_BASIC_LIMIT_INFORMATION,
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
-        SetInformationJobObject,
+        AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_BREAKAWAY_OK,
+        JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOBOBJECT_BASIC_LIMIT_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JobObjectExtendedLimitInformation, SetInformationJobObject,
     };
     use windows::core::PCWSTR;
 
@@ -330,11 +330,15 @@ pub(crate) mod job {
 
             // KILL_ON_JOB_CLOSE is the point of the job. DIE_ON_UNHANDLED_EXCEPTION keeps Windows
             // Error Reporting from putting up a "has stopped working" window for a core that
-            // crashed and leaving it alive behind it, which would stop the restart.
+            // crashed and leaving it alive behind it, which would stop the restart. BREAKAWAY_OK lets
+            // the one process that asks for it (CREATE_BREAKAWAY_FROM_JOB) leave the job: the core's
+            // Chrome shown for a certificate, which keeps running when the app quits so that the
+            // certificate chosen in it is still there at the next start (`host_desktop.py`).
             let limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
                 BasicLimitInformation: JOBOBJECT_BASIC_LIMIT_INFORMATION {
                     LimitFlags: JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-                        | JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION,
+                        | JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION
+                        | JOB_OBJECT_LIMIT_BREAKAWAY_OK,
                     ..Default::default()
                 },
                 ..Default::default()
