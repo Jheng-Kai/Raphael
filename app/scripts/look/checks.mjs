@@ -4461,9 +4461,12 @@ export function checkRendered(name, context = {}) {
       require(root.dataset.mode === (name === "tour-offer" ? 'offer' : 'bye') && root.dataset.dim === 'none', "no dim: the window is not covered");
       require(getComputedStyle(catcher).display === 'none', "nothing catches a press: the window still works under it");
       require(!document.getElementById('nav').inert && !document.getElementById('main').inert, "the window is not inert");
-      require(b.bottom <= account.top && s.bottom <= account.top, `Raphael and its bubble stand over the account button (${Math.round(b.bottom)} over ${Math.round(account.top)})`);
-      require(Math.abs(s.left - account.left) <= 16, `Raphael stands at the button's left edge (${Math.round(s.left)} vs ${Math.round(account.left)})`);
-      require(!touches(b, account) && !touches(s, account), "nothing of the group covers the account button it came out of");
+      const foot = document.querySelector('#nav .side-foot').getBoundingClientRect();
+      require(b.bottom <= foot.top && s.bottom <= foot.top, `Raphael and its bubble stand over the sidebar's foot (${Math.round(b.bottom)} over ${Math.round(foot.top)})`);
+      require(Math.abs(s.left - foot.left) <= 16, `Raphael stands at the foot's left edge (${Math.round(s.left)} vs ${Math.round(foot.left)})`);
+      require(![...document.querySelectorAll('#nav .side-foot button, #nav [data-col="add"]')].some(control => visible(control) && (touches(b, control.getBoundingClientRect()) || touches(s, control.getBoundingClientRect()))), "nothing of the group covers a button of the foot, the account button it came out of included");
+      const thread = [...document.querySelectorAll('.page-agent:not([hidden]) .composer')].find(visible)?.getBoundingClientRect();
+      require(!thread || (!touches(b, thread) && !touches(s, thread)), "nothing of the group covers the composer: the question blocks nothing");
       if (name === "tour-offer") {
         require(ids.join() === 'later,start' && buttons[1].classList.contains('pri'), "two buttons, the primary last: 之後再說, 開始");
         require(/\d/.test(text), `it says roughly how long the tour takes: ${text}`);

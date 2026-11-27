@@ -80,9 +80,10 @@ export function createTour(host: TourHost): Tour {
 
   // ---------- what is drawn ----------
 
+  /** The offer and the goodbye stand over the sidebar's whole foot (the account button, the apps button and, on the rail, the plus), so that they hide none of them. */
   const anchorSpot = () => {
-    const button = account();
-    return button ? { ...spotOf(button, 4), dim: false } : null;
+    const foot = firstShown("#nav .side-foot") ?? account();
+    return foot ? { ...spotOf(foot, 0), dim: false } : null;
   };
   const origin = () => anchorSpot()?.box ?? null;
 

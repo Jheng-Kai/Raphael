@@ -87,7 +87,7 @@ export function createView(on: (pressed: Pressed) => void): TourView {
     const close = next.closeLabel ? iconButton("x", next.closeLabel, ' data-tour="close"', "row tour-x") : "";
     const progress = next.progress ? `<span class="tour-count" aria-label="${esc(next.progress.label)}">${esc(next.progress.shown)}</span>` : "";
     const buttons = next.buttons.map(button => btn(esc(button.label), `sm${button.primary ? " pri" : ""}`, ` data-tour="${button.id}"`)).join("");
-    return close + `<p class="tour-text">${esc(next.text)}</p>${caps}` + (progress || buttons ? `<div class="tour-foot">${progress}<div class="tour-buttons">${buttons}</div></div>` : "");
+    return close + `<p class="tour-text">${sentences(next.text)}</p>${caps}` + (progress || buttons ? `<div class="tour-foot">${progress}<div class="tour-buttons">${buttons}</div></div>` : "");
   }
 
   function place(next: ViewModel): { placement: Placement; spot: (Spot & { dim: boolean }) | null } {
@@ -152,6 +152,9 @@ export function createView(on: (pressed: Pressed) => void): TourView {
     destroy() { clearTimeout(leaving); for (const type of owned) window.removeEventListener(type, own, true); root.remove(); },
   };
 }
+
+/** Each sentence on a line of its own, so that a line never breaks in the middle of a phrase where a sentence ends (the text itself is unchanged). */
+const sentences = (text: string): string => esc(text).replace(/([。！？])(?!$)/g, "$1<br>").replace(/([.!?])\s+/g, "$1 <br>");
 
 /** A hop from `from` to `to`: up in an arc, a squash on landing. Only transform moves (the box already stands at `to`). */
 function moveSlime(slime: HTMLElement, from: Box, to: Box): void {
