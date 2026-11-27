@@ -8811,8 +8811,15 @@ export function checkRendered(name, context = {}) {
     // The area does not scroll (the page scrolls in its frame), and nothing scrolls under the band, so there is no fade there.
     require(areaStyle.overflowY === "hidden" && areaStyle.maskImage === "none" && area.scrollHeight <= area.clientHeight + 1 && area.contains(box), `the area does not scroll: ${areaStyle.overflowY}, ${area.scrollHeight} in ${area.clientHeight}`);
     const bandRoom = parseFloat(areaStyle.paddingTop), footRoom = parseFloat(areaStyle.paddingBottom);
-    require(Math.abs(shown.top - (areaBox.top + bandRoom)) <= 1 && Math.abs(shown.bottom - areaBox.bottom) <= 1, `the frame fills the area from under the header's band to the window's foot: ${Math.round(shown.top)}-${Math.round(shown.bottom)} of ${Math.round(areaBox.top)}-${Math.round(areaBox.bottom)}`);
-    require(bandRoom >= arrow.bottom - areaBox.top - 1 && footRoom === 0, `the band holds the header's buttons and nothing is kept clear below the page: ${bandRoom} px, ${footRoom} px`);
+    // R-PAGE-16: the frame starts at the window's top edge and the header is transparent over it, so no strip of the app's own colour stands above the page.
+    require(Math.abs(shown.top - areaBox.top) <= 1 && Math.abs(shown.top) <= 1 && Math.abs(shown.bottom - areaBox.bottom) <= 1, `the frame fills the area from the window's top edge to its foot: ${Math.round(shown.top)}-${Math.round(shown.bottom)} of ${Math.round(areaBox.top)}-${Math.round(areaBox.bottom)}`);
+    require(bandRoom === 0 && footRoom === 0, `nothing is kept clear above or below the page by the area: ${bandRoom} px, ${footRoom} px`);
+    const headRoom = area.querySelector(":scope > .pgv-head"), header = pane.querySelector(":scope > .mb-head");
+    require(headRoom && getComputedStyle(headRoom).visibility === "hidden" && headRoom.getBoundingClientRect().height >= arrow.bottom - areaBox.top - 1, "the room the header's buttons take at the head is only measured, and holds them");
+    require(/^(transparent|rgba\(0, 0, 0, 0\))$/.test(getComputedStyle(header).backgroundColor), `the header is transparent over the page: ${getComputedStyle(header).backgroundColor}`);
+    // The window's own buttons stand over the page too, in a corner of a surface of their own, whatever the page's colour is (R-PAGE-16).
+    const caption = document.querySelector(".window-chrome .window-controls");
+    if (caption && visible(caption)) require(/^rgb\(/.test(getComputedStyle(caption).backgroundColor) && parseFloat(getComputedStyle(caption).borderBottomLeftRadius) > 0, `the window's buttons stand on a surface of their own: ${getComputedStyle(caption).backgroundColor}`);
     // R-PAGE-11: it runs to the window's foot with the composer standing over it: the frame is the page's window all the way down, so no strip of
     // another colour stands under it, and the window paints nothing behind it (the page's own background is the only one).
     const { composerBox } = pageUnderComposer(stage, area);
@@ -9165,13 +9172,13 @@ export function checkRendered(name, context = {}) {
     return { check: name, column: Math.round(column), aside };
   }
   if (name === "page-rail") {
-    // R-PAGE-10, R-PAGE-11: the page's window is the area from under the header's band to the window's foot, so a rail one window tall is whole
-    // in it, its buttons at its foot; the composer floats over the foot of the window, and nothing of the window's own is painted behind the page.
+    // R-PAGE-10, R-PAGE-11: the page's window is the area from the window's top edge to its foot, so a rail one window tall is whole
+    // in it; the header floats over its head and the composer over its foot, and nothing of the window's own is painted behind the page.
     const stage = document.querySelector(".page-agent .ra-stage"), view = stage.querySelector(":scope > .pgv"), area = view.querySelector(".pgv-page"), frame = view.querySelector(".pgv-frame-box iframe");
     require(stage.classList.contains("is-page") && frame && visible(frame) && area, "the page is open in the conversation's place");
     const { composerBox, areaBox } = pageUnderComposer(stage, area), box = frame.getBoundingClientRect(), style = getComputedStyle(area);
     require(Math.abs(box.bottom - innerHeight) <= 1 && box.bottom >= composerBox.bottom - 0.5, `the page's window runs to the window's foot, under the composer: ${Math.round(box.bottom)} of ${innerHeight}, the composer ends at ${Math.round(composerBox.bottom)}`);
-    require(Math.abs(box.top - (areaBox.top + parseFloat(style.paddingTop))) <= 1 && Math.abs(box.height - (areaBox.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom))) <= 1, `it fills the area under the band: ${Math.round(box.top)}, ${Math.round(box.height)}`);
+    require(Math.abs(box.top - areaBox.top) <= 1 && Math.abs(box.height - areaBox.height) <= 1, `it fills the area from the window's top edge: ${Math.round(box.top)}, ${Math.round(box.height)}`);
     require(!area.style.getPropertyValue("--pgv-bg") && (!getComputedStyle(area, "::before").content || /^(none|normal)$/.test(getComputedStyle(area, "::before").content)), "the window paints no background behind the page");
     require(area.scrollHeight <= area.clientHeight + 1 && area.scrollTop === 0, "the area does not scroll: the article scrolls in the page's window");
     return { check: name, window: [Math.round(box.top), Math.round(box.bottom)], composer: Math.round(composerBox.top) };
@@ -13440,7 +13447,7 @@ export function checkFrame(name) {
     const body = document.body.getBoundingClientRect();
     return { check: name, canvas: painted(document.documentElement) ?? painted(document.body), bodyLeft: body.left, bodyRight: body.right,
       firstTop: Math.min(...flow.map(element => element.getBoundingClientRect().top)), lastBottom: Math.max(...flow.map(element => element.getBoundingClientRect().bottom)),
-      innerHeight, scrollY: Math.round(scrollY), scrollMax: Math.max(0, document.documentElement.scrollHeight - innerHeight), foot: parseFloat(getComputedStyle(document.documentElement).paddingBottom) || 0 };
+      innerHeight, scrollY: Math.round(scrollY), scrollMax: Math.max(0, document.documentElement.scrollHeight - innerHeight), foot: parseFloat(getComputedStyle(document.documentElement).paddingBottom) || 0, head: parseFloat(getComputedStyle(document.documentElement).paddingTop) || 0 };
   }
   // R-PAGE-10: the frame is the page's own window, as in a browser: a rail one window tall and sticky stays while the article scrolls, and its
   // buttons at its foot are in the window, which runs to the window's foot (the app's own check, `page-rail`, measures that end).

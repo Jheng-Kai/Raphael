@@ -17,8 +17,8 @@ import type { AgentTurn, PageCard, PageOpened } from "./types";
 import { btn, esc, ico, toaster } from "./ui";
 
 const MIN_HEIGHT = 80, MAX_HEIGHT = 2400;
-/** The most of its foot a page is told the composer covers (core agent/pages.py's helper takes no more). */
-const FOOT_LIMIT = 2000;
+/** The most of its foot or its head a page is told the window keeps over it (core agent/pages.py's helper takes no more). */
+const ROOM_LIMIT = 2000;
 const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
 /** How long a page asked for by its id waits for its card to be in the thread and ready. */
 const CARD_WAIT_MS = 10000;
@@ -108,7 +108,9 @@ interface Live {
   /** How much of its foot the composer and the answer line over it cover while it is open (R-PAGE-11): the page is told it, so its
    *  last line scrolls clear of them while its frame runs to the window's foot. 0 when it was told nothing or it is back in its card. */
   foot: number;
-  /** Watches the measure of that room (`.pgv-foot`) while the page is open. */
+  /** The same at its head: how much of it the header's buttons cover (R-PAGE-16), so its first line stands clear under them. */
+  head: number;
+  /** Watches the measure of those rooms (`.pgv-foot`, `.pgv-head`) while the page is open. */
   footWatch: ResizeObserver | null;
   opened: PageOpened | null;
   /** It has drawn: its frame loaded, or the page said something (its helper speaks once it is parsed). Only then is its
@@ -204,15 +206,22 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
   }
   const heard = (live: Live, height: unknown): void => { live.height = clampHeight(height); };
 
-  /** The page is told how much of its foot the composer covers (R-PAGE-11), so it scrolls its last line clear of it. */
-  const tellFoot = (live: Live, frame: HTMLIFrameElement = live.frame): void => { post(live, { raphaelPage: 1, type: "foot", y: live.foot }, frame); };
-  /** Reads the room under the page (`.pgv-foot`, which page-view.css sizes to `--pgv-under`) and tells the page when it changed. */
-  function measureFoot(live: Live): void {
+  /** The page is told how much of its foot the composer covers (R-PAGE-11) and of its head the header's buttons (R-PAGE-16), so it
+   *  scrolls its first and last lines clear of them. */
+  const tellRoom = (live: Live, frame: HTMLIFrameElement = live.frame): void => {
+    post(live, { raphaelPage: 1, type: "foot", y: live.foot }, frame);
+    post(live, { raphaelPage: 1, type: "head", y: live.head }, frame);
+  };
+  /** Reads the rooms over the page (`.pgv-foot` and `.pgv-head`, which page-view.css sizes to `--pgv-under` and `--row-lead`) and
+   *  tells the page when one changed. */
+  function measureRoom(live: Live): void {
     if (!live.expanded || !live.area) return;
-    const foot = Math.min(FOOT_LIMIT, Math.max(0, Math.round(live.area.querySelector<HTMLElement>(":scope > .pgv-foot")?.offsetHeight ?? 0)));
-    if (foot === live.foot) return;
+    const room = (name: string): number => Math.min(ROOM_LIMIT, Math.max(0, Math.round(live.area!.querySelector<HTMLElement>(`:scope > ${name}`)?.offsetHeight ?? 0)));
+    const foot = room(".pgv-foot"), head = room(".pgv-head");
+    if (foot === live.foot && head === live.head) return;
     live.foot = foot;
-    tellFoot(live);
+    live.head = head;
+    tellRoom(live);
   }
   /** Puts the page where the owner was reading it (R-PAGE-10): the helper scrolls to it in its own window. */
   const placeAt = (live: Live, y: number, frame: HTMLIFrameElement = live.frame): void => { post(live, { raphaelPage: 1, type: "scroll-to", y }, frame); };
@@ -257,14 +266,14 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     frame.setAttribute("inert", "");
     frame.addEventListener("load", () => {
       drawn(live);
-      // A page that loads again in the whole area (a theme, a new revision, a Mac's move) is told its foot again.
-      if (live.expanded && live.foot > 0 && (frame === live.frame || frame === live.next)) tellFoot(live, frame);
+      // A page that loads again in the whole area (a theme, a new revision, a Mac's move) is told its rooms again.
+      if (live.expanded && (live.foot > 0 || live.head > 0) && (frame === live.frame || frame === live.next)) tellRoom(live, frame);
     });
     return frame;
   }
 
   function make(id: string, rev: number): Live {
-    const live = { id, rev, height: null, area: null, box: null, foot: 0, footWatch: null, opened: null, ready: false, failed: null, drawTimer: undefined, expanded: false, reading: 0, next: null, nextHeight: null, refused: false } as unknown as Live;
+    const live = { id, rev, height: null, area: null, box: null, foot: 0, head: 0, footWatch: null, opened: null, ready: false, failed: null, drawTimer: undefined, expanded: false, reading: 0, next: null, nextHeight: null, refused: false } as unknown as Live;
     live.frame = newFrame(live);
     frames.set(id, live);
     return live;
@@ -490,14 +499,14 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
   }
 
   /** The page opens in the whole area right of the sidebar, the same frame moved there, so nothing the
-   *  owner did in it is lost. The frame is the page's window, as a browser gives one: it fills the area from under the header's
-   *  band down to the window's foot and the page scrolls in it (R-PAGE-10), so `100vh`, sticky and fixed parts work; the composer
-   *  floats over its foot and the page is told how much (R-PAGE-11).
+   *  owner did in it is lost. The frame is the page's window, as a browser gives one: it fills the area from the window's
+   *  top edge down to the window's foot and the page scrolls in it (R-PAGE-10), so `100vh`, sticky and fixed parts work; the header's
+   *  buttons float over its head and the composer over its foot, and the page is told how much of each (R-PAGE-11, R-PAGE-16).
    *  It is the card's frame again, back at its top, when the owner goes back (`leave`). */
   function expand(live: Live, card: HTMLElement): void {
     const host = view();
     const title = card.querySelector(".card-title")?.textContent ?? live.opened?.title ?? "";
-    host.body.innerHTML = `<div class="pgv-page" tabindex="-1"><div class="pgv-frame-box"></div><div class="pgv-foot" aria-hidden="true"></div></div>`;
+    host.body.innerHTML = `<div class="pgv-page" tabindex="-1"><div class="pgv-frame-box"></div><div class="pgv-head" aria-hidden="true"></div><div class="pgv-foot" aria-hidden="true"></div></div>`;
     const area = host.body.querySelector<HTMLElement>(".pgv-page")!, box = area.querySelector<HTMLElement>(".pgv-frame-box")!;
     live.expanded = true;
     live.area = area;
@@ -513,8 +522,8 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
         live.box = null;
         live.footWatch?.disconnect();
         live.footWatch = null;
-        // The page is told its foot is its own again, before its frame goes back to the card.
-        if (live.foot > 0) { live.foot = 0; tellFoot(live); }
+        // The page is told its head and foot are its own again, before its frame goes back to the card.
+        if (live.foot > 0 || live.head > 0) { live.foot = 0; live.head = 0; tellRoom(live); }
         live.next?.remove();
         live.next = null;
         live.nextHeight = null;
@@ -527,12 +536,12 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       },
     });
     moveFrame(live.frame, box);
-    // The room the composer takes at the foot is measured now and as it changes (the composer grows, the answer line comes).
+    // The rooms over the page are measured now and as they change (the composer grows, the answer line comes, the window narrows).
     if (typeof ResizeObserver === "function") {
-      live.footWatch = new ResizeObserver(() => measureFoot(live));
-      live.footWatch.observe(area.querySelector<HTMLElement>(":scope > .pgv-foot")!);
+      live.footWatch = new ResizeObserver(() => measureRoom(live));
+      for (const name of [".pgv-foot", ".pgv-head"]) live.footWatch.observe(area.querySelector<HTMLElement>(`:scope > ${name}`)!);
     }
-    measureFoot(live);
+    measureRoom(live);
     // Back where the owner was reading (a frame that had to load again says it once it has).
     if (live.reading > 0) {
       const frame = live.frame, at = live.reading;

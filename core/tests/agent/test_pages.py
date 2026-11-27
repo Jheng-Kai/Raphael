@@ -989,8 +989,8 @@ def test_the_helper_says_nothing_of_its_background_and_takes_the_room_under_the_
     # (the page's own background) runs under the composer.
     from raphael_core.agent.pages import _HELPER
     assert "post('background'" not in _HELPER and "getComputedStyle(root).backgroundColor" not in _HELPER
-    assert "own && data.type === 'foot' && Number.isFinite(data.y)" in _HELPER
-    assert "document.documentElement.style.paddingBottom = Math.max(0, Math.min(2000, Math.round(data.y))) + 'px';" in _HELPER
+    assert "own && (data.type === 'foot' || data.type === 'head') && Number.isFinite(data.y)" in _HELPER
+    assert "style[data.type === 'foot' ? 'paddingBottom' : 'paddingTop'] = Math.max(0, Math.min(2000, Math.round(data.y))) + 'px';" in _HELPER
     # Only the window that holds the page may say it.
     assert "own = event.source === parent && data && data.raphaelPage === 1;" in _HELPER
     # The helper is a Python string: a backslash in it would be an escape of Python's, not of the page's script.

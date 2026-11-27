@@ -141,7 +141,8 @@ FONT = '"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei UI","Microsoft 
 
 # A page open in the whole area is shown as a browser shows it (R-PAGE-10): its frame is the page's window, to the window's foot
 # (R-PAGE-11), and the page scrolls in it. The height it says only sizes its card in the thread. The window tells it how much of its
-# foot the composer floats over (`foot`), so its last line scrolls clear of it.
+# foot the composer floats over (`foot`) and how much of its head the header's buttons do (`head`), so its first and last lines
+# scroll clear of them.
 _HELPER = "<script>" + FRAME_NAVIGATION + """
 (() => {
   const post = (type, data) => parent.postMessage({raphaelPage: 1, type, ...data}, '*');
@@ -218,9 +219,12 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
   addEventListener('message', event => {
     const data = event.data, own = event.source === parent && data && data.raphaelPage === 1;
     if (own && data.type === 'scroll-to' && Number.isFinite(data.y)) scrollTo(0, Math.max(0, data.y));
-    // The room the composer takes at the window's foot (R-PAGE-11): the root's own foot, which is page and canvas alike, so the page
-    // scrolls its last line clear of the composer and nothing but the page's own background shows there.
-    if (own && data.type === 'foot' && Number.isFinite(data.y)) document.documentElement.style.paddingBottom = Math.max(0, Math.min(2000, Math.round(data.y))) + 'px';
+    // The room the window keeps over the page (R-PAGE-11, R-PAGE-16): the composer at the foot and the header's buttons at the head. It
+    // is the root's own padding, which is page and canvas alike, so the page's first line stands clear under the buttons and its last
+    // clear above the composer, and nothing but the page's own background shows in either.
+    if (own && (data.type === 'foot' || data.type === 'head') && Number.isFinite(data.y)) {
+      document.documentElement.style[data.type === 'foot' ? 'paddingBottom' : 'paddingTop'] = Math.max(0, Math.min(2000, Math.round(data.y))) + 'px';
+    }
   });
   // A style sheet the page loads from another host holds all of it back while it comes: nothing is drawn and the page's own
   // script waits. One still on its way after a few seconds stops holding the page, which draws in the fonts and styles it

@@ -3,7 +3,7 @@ import { bandPlan, bandProblems, rgb } from "./page-band.mjs";
 
 // The frame as the window shows it (a 1920 x 1080 window, the page beside a 260 px sidebar), and what a light reading page says of itself.
 const frame = { left: 260, top: 56, right: 1920, bottom: 1080 };
-const measure = { canvas: "rgb(247, 241, 227)", bodyLeft: 270, bodyRight: 1390, firstTop: 32, lastBottom: 3000, scrollY: 0, scrollMax: 2200, innerHeight: 1024, foot: 124 };
+const measure = { canvas: "rgb(247, 241, 227)", bodyLeft: 270, bodyRight: 1390, firstTop: 92, lastBottom: 3000, scrollY: 0, scrollMax: 2200, innerHeight: 1024, foot: 124, head: 60 };
 const shown = { frame, composerTop: 960, windowHeight: 1080 };
 const page = [247, 241, 227], black = [10, 10, 10];
 
@@ -15,14 +15,18 @@ it("reads a colour the page paints, and nothing else", () => {
 });
 
 it("looks above the first line from the top and below the last line at the end, and always at the window's foot", () => {
-  const top = bandPlan({ where: "top", ...shown, measure });
+  const top = bandPlan({ where: "top", ...shown, measure, headGap: 700 });
   expect(top.problems).toEqual([]);
-  expect(top.points.map(point => point.name)).toEqual(["above the content", "the window's foot"]);
-  // Above the content: inside the body's width, between the frame's top and the first line.
+  expect(top.points.map(point => point.name)).toEqual(["above the content", "the header's row", "the window's foot"]);
+  // Above the content: inside the body's width, between the head room the header's buttons take and the first line.
   expect(top.points[0].x).toBe(260 + 270 + 8);
-  expect(top.points[0].y).toBeGreaterThan(56);
-  expect(top.points[0].y).toBeLessThan(56 + 32);
-  expect(top.points[1]).toMatchObject({ x: 264, y: 1076 });
+  expect(top.points[0].y).toBeGreaterThan(56 + 60);
+  expect(top.points[0].y).toBeLessThan(56 + 92);
+  // The header's row stands between its buttons, at the frame's top edge.
+  expect(top.points[1]).toMatchObject({ x: 700, y: 62 });
+  expect(top.points[2]).toMatchObject({ x: 264, y: 1076 });
+  // A header with no room between its buttons is not sampled.
+  expect(bandPlan({ where: "top", ...shown, measure }).points.map(point => point.name)).toEqual(["above the content", "the window's foot"]);
 
   const end = bandPlan({ where: "end", ...shown, measure: { ...measure, lastBottom: 860, scrollY: 2200 } });
   expect(end.problems).toEqual([]);

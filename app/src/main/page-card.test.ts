@@ -369,14 +369,18 @@ test("the page runs to the window's foot under a floating composer: the dock is 
   expect(css).toContain(".ra-stage.is-page > .ra-scroll { grid-area: 1 / 1; visibility: hidden; }");
   // The frame is the page's own window (R-PAGE-10): it fills the area from under the header's band to the window's foot (R-PAGE-11), and
   // the page scrolls in it, so the area has no scroll, no growth from the page's height and no room after the frame.
-  expect(css).toMatch(/\.pgv-page \{[^}]*overflow: hidden;[^}]*padding: var\(--row-lead\) 0 0;/);
-  expect(css).not.toMatch(/\.pgv-page \{[^}]*padding:[^;}]*--pgv-under/);
+  expect(css).toMatch(/\.pgv-page \{[^}]*overflow: hidden;[^}]*padding: 0;/);
+  expect(css).not.toMatch(/\.pgv-page \{[^}]*padding:[^;}]*(--pgv-under|--row-lead)/);
   expect(css).toContain(".pgv-frame-box { position: relative; width: 100%; height: 100%; }");
   expect(css).not.toMatch(/--pgv-h\b|pgv-frame-box::after/);
   // Nothing is painted behind the page: no strip of the window's own colour under the frame, whatever the page's background is. What the
   // composer covers is only measured (`.pgv-foot`, told to the page), and a page that says its background is not painted over it.
   expect(css).not.toMatch(/\.pgv-page::(before|after)|--pgv-bg/);
-  expect(css).toMatch(/\.pgv-foot \{[^}]*position: absolute;[^}]*height: var\(--pgv-under, 0px\);[^}]*visibility: hidden;[^}]*pointer-events: none;/);
+  expect(css).toMatch(/\.pgv-head, \.pgv-foot \{[^}]*position: absolute;[^}]*visibility: hidden;[^}]*pointer-events: none;/);
+  expect(css).toMatch(/\.pgv-foot \{[^}]*height: var\(--pgv-under, 0px\);/);
+  expect(css).toMatch(/\.pgv-head \{[^}]*top: 0;[^}]*height: var\(--row-lead\);/);
+  // The window's own buttons stand over the page's head on a surface of their own (R-PAGE-16).
+  expect(css).toMatch(/\.window-controls \{[^}]*background: var\(--surface-2\);/);
   expect(css).toMatch(/\.ra-stage\.is-page \.rp-scroll \{[^}]*padding-bottom: var\(--pgv-under\);/);
   // The answer line floats just over the composer, on its own surface, and takes no pointer from the page.
   expect(css).toMatch(/\.pgv-status \{[^}]*position: absolute;[^}]*bottom: calc\(var\(--pgv-dock, 0px\) \+ var\(--sp-1\)\);[^}]*pointer-events: none;/);
@@ -490,39 +494,42 @@ class Watching {
   disconnect(): void { Watching.all = Watching.all.filter(item => item !== this); }
 }
 
-test("the page is told how much of its foot the composer covers, as it changes, and is told it is its own again when it is put away (R-PAGE-11)", async () => {
+test("the page is told how much of its foot the composer and of its head the header covers, as they change, and is told they are its own again when it is put away (R-PAGE-11, R-PAGE-16)", async () => {
   vi.stubGlobal("ResizeObserver", Watching);
   try {
     const { thread, frame, stage } = mount();
     await flush();
     loaded(frame);
     const posted = vi.mocked(frame.contentWindow!.postMessage);
-    // The room under the page is measured on a box of its own in the area: the composer's dock, the gap and the answer line over it.
-    const probe = (height: number): void => {
-      const foot = stage.querySelector<HTMLElement>(".pgv-foot")!;
-      Object.defineProperty(foot, "offsetHeight", { value: height, configurable: true });
+    // The rooms over the page are measured on boxes of their own in the area: at the foot the composer's dock, the gap and the answer line
+    // over it, at the head the row the header's buttons stand in.
+    const probe = (foot: number, head: number): void => {
+      Object.defineProperty(stage.querySelector<HTMLElement>(".pgv-foot")!, "offsetHeight", { value: foot, configurable: true });
+      Object.defineProperty(stage.querySelector<HTMLElement>(".pgv-head")!, "offsetHeight", { value: head, configurable: true });
       for (const watch of Watching.all) watch.callback();
     };
+    const said = (): unknown[] => posted.mock.calls.map(([message]) => message);
     thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
     // Nothing covers the page yet: it is told nothing.
     expect(posted).not.toHaveBeenCalled();
-    probe(96);
-    expect(posted).toHaveBeenLastCalledWith({ raphaelPage: 1, type: "foot", y: 96 }, "*");
-    // The same room again says nothing; a taller one (the answer line came) says it.
-    probe(96);
-    expect(posted).toHaveBeenCalledTimes(1);
-    probe(140);
-    expect(posted).toHaveBeenLastCalledWith({ raphaelPage: 1, type: "foot", y: 140 }, "*");
+    probe(96, 60);
+    expect(said()).toEqual([{ raphaelPage: 1, type: "foot", y: 96 }, { raphaelPage: 1, type: "head", y: 60 }]);
+    // The same rooms again say nothing; a taller foot (the answer line came) says both again.
+    probe(96, 60);
+    expect(posted).toHaveBeenCalledTimes(2);
+    probe(140, 60);
+    expect(said().slice(-2)).toEqual([{ raphaelPage: 1, type: "foot", y: 140 }, { raphaelPage: 1, type: "head", y: 60 }]);
     // A page that loads again in the whole area is told again.
     frame.dispatchEvent(new Event("load"));
-    expect(posted).toHaveBeenLastCalledWith({ raphaelPage: 1, type: "foot", y: 140 }, "*");
-    // No room is told past what the helper takes, and none that is not a size.
-    probe(99999);
-    expect(posted).toHaveBeenLastCalledWith({ raphaelPage: 1, type: "foot", y: 2000 }, "*");
-    probe(96);
-    // Put away: the page is told the foot is its own again, then its frame goes back to the card.
+    expect(said().slice(-2)).toEqual([{ raphaelPage: 1, type: "foot", y: 140 }, { raphaelPage: 1, type: "head", y: 60 }]);
+    // No room is told past what the helper takes.
+    probe(99999, 99999);
+    expect(said().slice(-2)).toEqual([{ raphaelPage: 1, type: "foot", y: 2000 }, { raphaelPage: 1, type: "head", y: 2000 }]);
+    probe(96, 60);
+    // Put away: the page is told both are its own again, then its frame goes back to the card.
     back().click();
-    expect(posted).toHaveBeenCalledWith({ raphaelPage: 1, type: "foot", y: 0 }, "*");
+    expect(said()).toContainEqual({ raphaelPage: 1, type: "foot", y: 0 });
+    expect(said()).toContainEqual({ raphaelPage: 1, type: "head", y: 0 });
     expect(Watching.all).toHaveLength(0);
     const told = posted.mock.calls.length;
     frame.dispatchEvent(new Event("load"));

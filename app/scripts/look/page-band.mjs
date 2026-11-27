@@ -1,7 +1,8 @@
 // R-PAGE-10, R-PAGE-11: a page's own background is the only one. Nothing of the window's own colour may stand above, below or beside a page's
-// content, and the page runs down to the window's foot with the composer floating over it. The page is another origin, so what the screen shows
-// of it can only be read from the screen: this reads the pixels of a real capture at the places a band once stood (the room above a page's first
-// line, the room under its last, and the window's foot beside the composer) and compares them with the colour the page paints itself.
+// content, and the page runs from the window's top edge to its foot with the header's buttons and the composer floating over it. The page is
+// another origin, so what the screen shows of it can only be read from the screen: this reads the pixels of a real capture at the places a band
+// once stood (the header's row between its buttons, the room above a page's first line, the room under its last, and the window's foot beside the
+// composer) and compares them with the colour the page paints itself.
 // The measure of the page (where its body and content stand, how far it is read, what it paints) is read inside its frame (checks.mjs
 // `checkFrame("page-band-measure")`); the places and the verdict are plain functions, tested in page-band.test.mjs.
 
@@ -15,15 +16,16 @@ export function rgb(text) {
 
 /**
  * Where to look, in window pixels. `frame` is the page's frame in the window, `measure` what the page says of itself (frame coordinates), `composerTop`
- * the top of what floats over the page's foot. `where` is "top" (the page read from its top) or "end" (read to its end).
+ * the top of what floats over the page's foot, `headGap` the x of a place in the header's row between its buttons (none when there is no room).
+ * `where` is "top" (the page read from its top) or "end" (read to its end).
  */
-export function bandPlan({ where, frame, measure, composerTop, windowHeight }) {
+export function bandPlan({ where, frame, measure, composerTop, windowHeight, headGap }) {
   const problems = [], points = [];
   const x = Math.min(frame.right - 24, Math.max(frame.left + 2, frame.left + measure.bodyLeft + 8));
   if (where === "top") {
     if (measure.scrollY !== 0) problems.push(`the page is read from its top, not ${measure.scrollY} px down`);
-    // The room between the window's top and the page's first line is the page's own (its body's padding): the frame starts under the header's band.
-    else if (measure.firstTop >= 8) points.push({ name: "above the content", x, y: frame.top + measure.firstTop / 2 });
+    // The room between the header's buttons and the page's first line is the page's own (its body's padding below the head room it was told).
+    else if (measure.firstTop - measure.head >= 8) points.push({ name: "above the content", x, y: frame.top + measure.head + (measure.firstTop - measure.head) / 2 });
   } else {
     if (measure.scrollY < measure.scrollMax - 1) problems.push(`the page is read to its end, not ${measure.scrollY} of ${measure.scrollMax} px`);
     const last = frame.top + measure.lastBottom, room = composerTop - last;
@@ -31,6 +33,9 @@ export function bandPlan({ where, frame, measure, composerTop, windowHeight }) {
     if (room < 4) problems.push(`the page's last line stands under the composer: it ends at ${Math.round(last)}, the composer begins at ${Math.round(composerTop)}`);
     else points.push({ name: "below the content", x, y: last + Math.min(room - 2, 24) / 2 + 1 });
   }
+  // The header's row between its buttons: the frame starts at the window's top edge, so the page's colour is there, never the app's own.
+  // (Read to its end the page's content has scrolled under the header, which is transparent: only the page read from its top has none there.)
+  if (where === "top" && measure.scrollY === 0 && Number.isFinite(headGap)) points.push({ name: "the header's row", x: headGap, y: frame.top + 6 });
   // The window's foot, beside the composer and under the page: the page's colour runs down to the window's last pixel.
   points.push({ name: "the window's foot", x: frame.left + 4, y: windowHeight - 4 });
   return { points, problems, reference: { name: "the page's corner", x: frame.left + 2, y: frame.top + 2 } };
@@ -56,10 +61,12 @@ export async function pageBand(page, frame, where, checkFrame) {
   const place = await page.evaluate(() => {
     const box = document.querySelector(".pgv-frame-box iframe")?.getBoundingClientRect(), composer = document.querySelector(".ra-stage.is-page > .ra-dock .composer")?.getBoundingClientRect();
     const line = document.querySelector(".pgv-status:not([hidden]) > *")?.getBoundingClientRect();
-    return box && composer && { frame: { left: box.left, top: box.top, right: box.right, bottom: box.bottom }, composerTop: Math.min(composer.top, line?.top ?? Infinity), windowHeight: innerHeight, ratio: devicePixelRatio };
+    const back = document.querySelector(".mb-head [data-page-back]")?.getBoundingClientRect(), pill = document.querySelector(".mb-head .pgv-pill")?.getBoundingClientRect();
+    const headGap = back && pill && pill.left - back.right >= 12 ? (back.right + pill.left) / 2 : undefined;
+    return box && composer && { frame: { left: box.left, top: box.top, right: box.right, bottom: box.bottom }, composerTop: Math.min(composer.top, line?.top ?? Infinity), windowHeight: innerHeight, ratio: devicePixelRatio, headGap };
   });
   if (!place) throw new Error("page-band: no page stands open in the conversation's place");
-  const plan = bandPlan({ where, frame: place.frame, measure, composerTop: place.composerTop, windowHeight: place.windowHeight });
+  const plan = bandPlan({ where, frame: place.frame, measure, composerTop: place.composerTop, windowHeight: place.windowHeight, headGap: place.headGap });
   const shot = await page.screenshot({ encoding: "base64", type: "png" });
   const read = await page.evaluate(async (data, points, ratio) => {
     const image = new Image(); image.src = `data:image/png;base64,${data}`; await image.decode();
@@ -69,7 +76,7 @@ export async function pageBand(page, frame, where, checkFrame) {
   }, shot, [...plan.points, plan.reference], place.ratio);
   const reference = read.pop();
   const problems = bandProblems(plan, measure, read, reference);
-  const result = { check: "page-band", where, canvas: measure.canvas, foot: measure.foot, points: plan.points.map((point, index) => ({ at: point.name, x: Math.round(point.x), y: Math.round(point.y), seen: read[index] })) };
+  const result = { check: "page-band", where, canvas: measure.canvas, foot: measure.foot, head: measure.head, points: plan.points.map((point, index) => ({ at: point.name, x: Math.round(point.x), y: Math.round(point.y), seen: read[index] })) };
   if (problems.length) throw Object.assign(new Error(`page-band ${where}: ${problems.join("; ")}`), { assertion: { ...result, problems } });
   return result;
 }
