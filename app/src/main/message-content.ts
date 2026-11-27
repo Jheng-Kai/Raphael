@@ -8,7 +8,10 @@ import { answerFormHTML } from "./message-forms";
 import { answerFormText, isAnswerFormKind, parseAnswerForm } from "../shared/answer-forms";
 import { publicEventText } from "./public-event";
 import { composioText } from "./composio-result";
+import { bareUrl, linkDestination, messageUrl, tableCells } from "./markdown-text";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
+
+export { bareUrl, linkDestination, messageUrl, tableCells } from "./markdown-text";
 
 // Team file chips keep their own opener. Other paths can become links after the core checks them.
 const TEAM_FILE = /^\/home\/cua\/team\/[^\s<>"'`]+$/;
@@ -82,14 +85,6 @@ function imageAt(text: string, at: number): { label: string; target: string; end
   return level ? null : { label: text.slice(at + 2, middle), target: text.slice(middle + 2, end - 1), end };
 }
 
-export function messageUrl(raw: unknown): string | null {
-  if (typeof raw !== "string" || raw.length > 8192 || /[\u0000-\u0020\u007f]/.test(raw)) return null;
-  try {
-    const url = new URL(raw);
-    return /^(https?:)$/.test(url.protocol) && !url.username && !url.password ? url.href : null;
-  } catch { return null; }
-}
-
 export function urlLabel(url: string): string {
   const parsed = new URL(url);
   // A path in another script reads as the words it is, not as its percent codes.
@@ -101,37 +96,6 @@ export function urlLabel(url: string): string {
 export function shortUrl(url: string): string {
   const label = urlLabel(url);
   return label.length > 32 ? label.slice(0, 31) + "…" : label;
-}
-
-/** Letters of the scripts written without spaces between words. */
-const SPACELESS = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}]/u;
-/** What starts a part of an address (a path segment, a query value, a fragment, a handle): a page or a person named in Chinese starts after one. */
-const PART_START = "/=?#&@";
-
-/**
- * Where an address that starts at the beginning of `text` ends. It stops at a space, a quote, CJK punctuation and at
- * Chinese, Japanese or Korean words that follow it directly (`https://example.com看這裡`), unless those words start a part of
- * the address of their own (`https://zh.wikipedia.org/wiki/臺北`). A full stop, comma or closing bracket that ends the
- * sentence around it is not part of it; a bracket the address opened itself is.
- */
-export function bareUrl(text: string): string {
-  let raw = /^https?:\/\/[^\s<>"'`\u2018-\u201f\u2026\u3000-\u303f\uff00-\uffef]+/i.exec(text)?.[0] ?? "";
-  let at = 0, previous = "", inPart = false;
-  for (const char of raw) {
-    if (SPACELESS.test(char)) {
-      if (!inPart && !PART_START.includes(previous)) { raw = raw.slice(0, at); break; }
-      inPart = true;
-    } else if (PART_START.includes(char)) inPart = false;
-    previous = char; at += char.length;
-  }
-  for (let before = ""; before !== raw;) {
-    before = raw;
-    raw = raw.replace(/[.,;:!?*_]+$/, "");
-    for (const [open, close] of [["(", ")"], ["[", "]"], ["{", "}"]]) {
-      while (raw.endsWith(close) && raw.split(close).length > raw.split(open).length) raw = raw.slice(0, -1);
-    }
-  }
-  return raw;
 }
 
 /**
@@ -200,17 +164,6 @@ function linkChipHTML(url: string, labelHTML: string | null, query: string): str
   const name = labelHTML ?? highlightHTML(local ? urlLabel(url) : new URL(url).host.replace(/^www\./, ""), query);
   return `<a class="message-link link-chip" href="${esc(url)}" data-act="open-url" data-url="${esc(url)}" data-link-url="${esc(url)}"` +
     `${labelHTML === null ? ` data-link-bare${local ? "" : " data-link-title"}` : ""} rel="noreferrer noopener">${siteMark(url)}<span class="link-name">${name}</span></a>`;
-}
-
-/**
- * A markdown link's destination as CommonMark reads it: the <...> around it (how a path with spaces or backslashes is
- * written) is dropped, and so is a title after it ("...", '...' or (...)). Every model writes these forms.
- */
-export function linkDestination(raw: string): string {
-  const value = raw.trim();
-  const angled = /^<([^<>\n]*)>(?:\s+(?:"[^"]*"|'[^']*'|\([^()]*\)))?$/.exec(value);
-  if (angled) return angled[1].trim();
-  return value.replace(/\s+(?:"[^"]*"|'[^']*'|\([^()]*\))$/, "");
 }
 
 /** A letter or digit of any script: what an underscore must not sit between to be emphasis. */
@@ -314,23 +267,6 @@ export type MessageBlock =
   | { type: "table"; source: string; headers: string[]; align: ("left" | "center" | "right")[]; rows: string[][] }
   | { type: "code" | "diagram"; source: string; language: string; complete: boolean }
   | { type: "image"; source: string; alt: string; url: string };
-
-/** Split only structural pipes; code spans and escaped pipes belong to the cell. */
-export function tableCells(line: string): string[] {
-  const cells: string[] = []; let cell = "", ticks = 0;
-  const value = line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "");
-  for (let i = 0; i < value.length; i++) {
-    if (value[i] === "\\" && value[i + 1] === "|") { cell += "|"; i++; continue; }
-    if (value[i] === "`") {
-      const run = /^`+/.exec(value.slice(i))![0];
-      ticks = ticks === run.length ? 0 : ticks || run.length;
-      cell += run; i += run.length - 1; continue;
-    }
-    if (value[i] === "|" && !ticks) { cells.push(cell.trim()); cell = ""; }
-    else cell += value[i];
-  }
-  cells.push(cell.trim()); return cells;
-}
 
 export function parseMessageBlocks(text: string, streaming = false): MessageBlock[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
