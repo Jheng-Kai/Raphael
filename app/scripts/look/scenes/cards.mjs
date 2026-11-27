@@ -14,6 +14,13 @@ const hostCard = {computerCard: 'signin', browserHandback: true,
 // A page that asks for a client certificate: Chrome opens its own window for the owner (#345); the words carry no model detail.
 const certificateCard = {...hostCard, computerReason: 'certificate', desktop: {...hostCard.desktop,
   host_request: {...hostCard.desktop.host_request, reason: 'certificate', detail: ''}}};
+// Why Chrome could not choose the certificate by itself (R-COMP-CERT-02): the core says a code and the window says it in words.
+const certificateWhy = code => ({...certificateCard, desktop: {...certificateCard.desktop,
+  host_request: {...certificateCard.desktop.host_request, detail: code}}});
+// Chrome is choosing the certificate itself, with no window: nothing waits for the owner, and the Computer view says what happens.
+const certificateAuto = keychain => ({running:"fresh",runningMember:1, desktop:{transport:"host",target:"chrome-tab",state:"running",ready:true,control:"member",
+  signing_in:{host:"intranet.example.test",keychain},
+  works:[{id:"chrome-tab",turn_id:2,transport:"host",state:"running",tool:"browser_open",reason:""}]}});
 const hostCardPreview = [member(1), wait('[data-computer-card="card-pc"] .desktop-last:not([hidden])')];
 const hostTake = [...hostCardPreview, click('[data-computer-card="card-pc"] [data-act="card-takeover"].pri'),
   wait('.desktop-panel[data-expanded][data-interactive="true"] iframe[src*="transport=host"]')];
@@ -44,6 +51,18 @@ export default [
     [...hostCardPreview, check('desktop-host-certificate')], certificateCard),
   scene('desktop-host-certificate', 'The same words stand in the larger view above the live page',
     [...hostTake, wait('[data-desktop="return"]:not([hidden])'), check('desktop-host-certificate')], certificateCard),
+  scene('desktop-host-certificate-auto', 'While Chrome chooses the certificate by itself the Computer view says so, and no card waits for the owner',
+    [member(1), wait('.desktop-screen[data-host-browser] iframe[src*="transport=host"]:not([hidden])'), wait('[data-computer-state-text]'),
+      check('desktop-host-certificate-auto')], certificateAuto(false)),
+  scene('desktop-host-certificate-auto-keychain', 'The first time on a Mac, the view also says what macOS may ask and what to choose',
+    [member(1), wait('.desktop-screen[data-host-browser] iframe[src*="transport=host"]:not([hidden])'), wait('[data-computer-state-text]'),
+      check('desktop-host-certificate-auto:keychain')], certificateAuto(true)),
+  scene('desktop-host-certificate-unmatched-card', 'When Chrome could not choose a certificate the card says so, then the window and the button',
+    [...hostCardPreview, check('desktop-host-certificate-why:unmatched')], certificateWhy('certificate_unmatched')),
+  scene('desktop-host-certificate-refused-card', 'When the computer did not let Chrome use the certificate the card says so, then the window and the button',
+    [...hostCardPreview, check('desktop-host-certificate-why:refused')], certificateWhy('certificate_refused')),
+  scene('desktop-host-certificate-unmatched', 'The same sentence stands in the larger view above the live page',
+    [...hostTake, wait('[data-desktop="return"]:not([hidden])'), check('desktop-host-certificate-why:unmatched')], certificateWhy('certificate_unmatched')),
   scene('desktop-host-takeover', 'Take control opens Chrome in the large viewer and a title bar press preserves the same page and owner input',
     [...hostTake, wait('[data-desktop="return"]:not([hidden])'), check('desktop-stream'), click('.window-chrome [data-window-drag]'),
       check('desktop-host-outside-press'), {action:'desktop-owner-typing'}, check('desktop-host-frame')], hostCard),

@@ -37,6 +37,9 @@ export interface DesktopState {
   works?: DesktopWork[];
   transport?: ComputerTransport | "idle";
   host_request?: DesktopWork;
+  /** Chrome is choosing the page's client certificate by itself, with no window (R-COMP-CERT-02): the site, and whether macOS
+   *  may ask the owner about the certificate's key, which is said once. */
+  signing_in?: { host: string; keychain: boolean };
   preview_allowed?: boolean;
   teaching?: api.TeachingDraft;
   teach_available?: boolean;
@@ -342,10 +345,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(locationHeader, 'hidden', expanded);
     const transport = selected();
     const selectedState = requested?.status ?? (transport === actual() ? state : undefined);
-    const statusText = transport === "idle" || !selectedState
-      ? t("memberComputer.idle") : computerStateLabel(selectedState);
+    const signing = transport === "host" ? selectedState?.signing_in : undefined;
+    const statusText = signing ? t(signing.keychain ? "memberComputer.certificateAutoKeychain" : "memberComputer.certificateAuto", { p0: signing.host })
+      : transport === "idle" || !selectedState ? t("memberComputer.idle") : computerStateLabel(selectedState);
     const showStatus = !!state?.transport
-      && (selectedState?.state !== "running" || !!selectedState.lifecycle || !!selectedState.error);
+      && (!!signing || selectedState?.state !== "running" || !!selectedState.lifecycle || !!selectedState.error);
     paint(status, "hidden", !showStatus);
     patchHTML(status, showStatus ? `<span data-computer-state-text>${esc(statusText)}</span>` : "");
     const dockerMissing = transport === "docker" && selectedState?.error === "docker_missing";

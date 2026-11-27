@@ -35,6 +35,20 @@ describe("a computer card", () => {
       .toContain("螢幕上開了一個 Google Chrome 視窗，請在那裡選擇憑證，再按「我完成了」。");
   });
 
+  test("a certificate Chrome could not choose by itself says why in one sentence, then the window and the button (R-COMP-CERT-02)", () => {
+    const why = (note: string) => visible(computerCardHTML(card({ browser: true, reason: "certificate", app: "Chrome", note })));
+    setLocale("en");
+    expect(why("certificate_unmatched")).toContain("Chrome could not choose a certificate for this site by itself. A Chrome window opened on your screen. Choose the certificate there, then press “I'm done”.");
+    expect(why("certificate_refused")).toContain("Your computer did not let Chrome use the certificate. A Chrome window opened on your screen.");
+    setLocale("zh-TW");
+    expect(why("certificate_unmatched")).toContain("Chrome 無法自己為這個網站選擇憑證。螢幕上開了一個 Chrome 視窗，請在那裡選擇憑證，再按「我完成了」。");
+    expect(why("certificate_refused")).toContain("電腦不允許 Chrome 使用這張憑證。");
+    // The core's code is never shown, and a note on another reason, or a model's own words, stay as they were.
+    for (const note of ["certificate_unmatched", "certificate_refused"]) expect(why(note)).not.toContain("certificate_");
+    expect(visible(computerCardHTML(card({ browser: true, reason: "sign_in", app: "Chrome", note: "certificate_unmatched" })))).toContain("certificate_unmatched");
+    expect(visible(computerCardHTML(card({ browser: true, reason: "certificate", app: "Chrome", note: "請選擇公司憑證" })))).toContain("請選擇公司憑證");
+  });
+
   test("names the window to use, says the computer is the owner's and offers 接手 and 我完成了, its × skipping", () => {
     const html = computerCardHTML(card());
     expect(visible(html)).toBe("電腦 需要你 請在「Google Chrome」登入你的帳號，完成後交還控制 接手 我完成了");

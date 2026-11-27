@@ -5,6 +5,7 @@ import { t } from "./i18n";
 import { esc, ico } from "./ui";
 import { btn, patchHTML } from "./ui";
 import { cardHTML, cardPromptText, waitingCloseHTML } from "./card";
+import { certificateNoteText } from "./computer-card";
 
 export interface DesktopWork {
   id: string;
@@ -19,6 +20,8 @@ export interface DesktopWork {
 
 export function desktopWorkText(work: DesktopWork): string {
   if (work.state === "waiting_control") {
+    const certificate = work.reason === "certificate" ? certificateNoteText(work.detail, "Chrome", t("desktop.done")) : undefined;
+    if (certificate) return certificate;
     if (work.detail) return work.detail;
     if (work.reason === "certificate") return t("memberComputer.certificate", { p0: "Chrome", p1: t("desktop.done") });
     const reasons = { sign_in: "desktop.need.sign_in", password: "desktop.need.password", two_factor: "desktop.need.two_factor",
