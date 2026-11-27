@@ -353,7 +353,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (allowed && !element.closest('.cmp-input, .message-link, .url-chip, .local-command, .message-code pre code, .msg .note code, .bot-scopes code, .mb-row-p, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg, .dl-code')) for (const value of strings) {
       let copy = productPattern ? value.replace(productPattern, "") : value;
       if (element.matches('[data-skl="pick-file"]')) copy = copy.replace(/\.(?:zip|tar\.gz|tgz|md)\b/g, "");
-      for (const [word] of copy.replace(/\{input\}/g, "").replace(keyPattern, "").replace(IANA_ZONE_ID, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").matchAll(/[A-Za-z]{2,}/g)) {
+      for (const [word] of copy.replace(/\{input\}/g, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").replace(keyPattern, "").replace(IANA_ZONE_ID, "").matchAll(/[A-Za-z]{2,}/g)) {
         if (allowed.has(word.toLowerCase()) || seenWords.has(word)) continue;
         seenWords.add(word); mixedLanguage.push({ ...description, word });
       }

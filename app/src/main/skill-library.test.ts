@@ -268,7 +268,7 @@ test("each row of the access menu leads with who it names, a face or the team's 
   const { root } = await setup();
   press(root, '[data-skl="access"][data-key="pack:2"]');
   const menu = document.querySelector(".skl-access-menu")!;
-  const rows = [...menu.querySelectorAll<HTMLElement>("[data-access], [data-member]")];
+  const rows = [...menu.querySelectorAll<HTMLElement>('[data-access="all"], [data-member]')];
   // No check on the left any more: the face, the name, then the check's place at the right edge, on every row.
   expect(rows.map(row => [...row.children].map(part => part.className))).toEqual(rows.map(() => ["mlead", "mt", "ck"]));
   const all = menu.querySelector('[data-access="all"]')!;
@@ -280,6 +280,82 @@ test("each row of the access menu leads with who it names, a face or the team's 
   // 小晴 and 小森 may use 研究工具: their checks stand at the right, and 小葵 and the whole team keep only the check's place.
   expect([...menu.querySelectorAll("[data-member]")].map(row => !!row.querySelector(".ck:last-child svg"))).toEqual([true, true, false]);
   expect(all.querySelector(".ck svg")).toBeNull();
+});
+
+/** A library whose team has `count` characters, so that the access menu has many rows. */
+async function setupTeam(count: number) {
+  const team = Array.from({ length: count }, (_, at) => ({ id: at + 1, name: at < 3 ? ["小晴", "小森", "小葵"][at]! : `角色${at + 1}` }));
+  api.membersList.mockResolvedValue({ members: [{ id: 0, name: "Raphael" }, ...team] });
+  const state = { packages: packages() };
+  api.core.mockImplementation(async (method: string, params: Record<string, unknown>) => {
+    if (method === "skills.library.list") return { packages: state.packages, members: team };
+    if (method === "skills.library.update") return { package: { ...state.packages[1], ...params } };
+    return {};
+  });
+  const root = document.createElement("div");
+  document.body.append(root);
+  const library = createSkillLibrary(root, () => { root.innerHTML = skillLibraryHTML(library.view()); });
+  await library.load();
+  press(root, '[data-skl="access"][data-key="pack:2"]');
+  return { root, menu: document.querySelector<HTMLElement>(".skl-access-menu")!, team };
+}
+
+test("the access menu is short however many characters there are: the whole team, a search once there are many, a list that scrolls, and 移除所有人 at the foot", async () => {
+  const few = await setupTeam(6);
+  // Six characters or fewer need no search.
+  expect(few.menu.querySelector("[data-skl-search]")).toBeNull();
+  expect([...few.menu.children].map(part => part.className.replace("menu-sep", "sep"))).toEqual(["skl-access-top", "sep", "skl-access-list", "sep", "skl-access-foot"]);
+  closeMenu();
+  document.body.replaceChildren();
+  const many = await setupTeam(25);
+  expect([...many.menu.children].map(part => part.className.replace("menu-sep", "sep"))).toEqual(["skl-access-top", "sep", "lang-search skl-access-search", "skl-access-list", "sep", "skl-access-foot"]);
+  expect(many.menu.querySelector<HTMLInputElement>("[data-skl-search]")?.placeholder).toBe("搜尋角色");
+  expect(many.menu.querySelectorAll(".skl-access-list [data-member]")).toHaveLength(25);
+  expect(many.menu.querySelector('.skl-access-foot [data-access="none"]')?.textContent).toBe("移除所有人");
+  // The list is the only thing that scrolls, and it is capped at six rows.
+  const css = readFileSync(join(__dirname, "skill-library.css"), "utf8");
+  expect(css).toMatch(/\.skl-access-list \{[^}]*max-height: calc\(6 \* var\(--h-menu\)\)[^}]*overflow-y: auto/);
+});
+
+test("the menu's search keeps what is ticked, and finds a character by its name", async () => {
+  const { menu } = await setupTeam(25);
+  const search = menu.querySelector<HTMLInputElement>("[data-skl-search]")!;
+  search.value = "角色25";
+  search.dispatchEvent(new Event("input", { bubbles: true }));
+  const names = [...menu.querySelectorAll(".skl-access-list [data-member]")].map(row => row.textContent);
+  expect(names.length).toBeGreaterThan(0);
+  expect(names.length).toBeLessThan(25);
+  expect(names).toContain("角色25");
+  expect(names).not.toContain("小晴");
+  // What was typed stays in the field while a name is ticked, and the other names are still ticked as they were.
+  (menu.querySelector('[data-member="25"]') as HTMLElement | null)?.click();
+  expect(search.value).toBe("角色25");
+  search.value = "沒有這個人";
+  search.dispatchEvent(new Event("input", { bubbles: true }));
+  expect(menu.querySelector(".skl-access-list")?.textContent).toBe("找不到這個角色");
+  search.value = "";
+  search.dispatchEvent(new Event("input", { bubbles: true }));
+  expect(menu.querySelectorAll(".skl-access-list [data-member]")).toHaveLength(25);
+  expect(menu.querySelector('[data-member="1"]')?.getAttribute("aria-checked")).toBe("true");
+});
+
+test("移除所有人 sets the package to nobody, keeps the menu open, and never touches a character", async () => {
+  const { root, menu } = await setupTeam(25);
+  const none = menu.querySelector<HTMLElement>('[data-access="none"]')!;
+  expect(none.getAttribute("aria-disabled")).toBe("false");
+  none.click();
+  expect(api.core).toHaveBeenLastCalledWith("skills.library.update", { key: "pack:2", access: [] });
+  expect(document.querySelector(".skl-access-menu")).not.toBeNull();
+  expect([...document.querySelectorAll(".skl-access-menu [data-member]")].every(row => row.getAttribute("aria-checked") === "false")).toBe(true);
+  expect(document.querySelector('.skl-access-menu [data-access="all"]')?.getAttribute("aria-checked")).toBe("false");
+  expect(document.querySelector('.skl-access-menu [data-access="none"]')?.getAttribute("aria-disabled")).toBe("true");
+  expect(accessOf(root, "pack:2")).toBe("還沒給任何人");
+  // Nothing more to remove: pressing it again asks nothing of the core.
+  api.core.mockClear();
+  (document.querySelector('.skl-access-menu [data-access="none"]') as HTMLElement).click();
+  expect(api.core).not.toHaveBeenCalled();
+  // Only access moved: no call touched a member.
+  expect(api.core.mock.calls.length).toBe(0);
 });
 
 test("the access menu still opens with a face on every row when the roster cannot be read", async () => {

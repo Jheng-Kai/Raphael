@@ -15,10 +15,7 @@
 .skl-url { display: flex; align-items: center; gap: var(--sp-1); }
 .skl-url > .field { flex: 1 1 auto; min-width: 0; }
 .skl-error { margin: 0; color: var(--err); font-size: var(--fs-sm); }
-.skl-error .skl-link { margin-inline-start: var(--sp-1); }
-/* What an action of the importer that is no button but a word is: plain text in the link's colour. */
-.btn.skl-link { min-height: 0; padding: 0; border: 0; background: transparent; color: var(--link); font-size: inherit; line-height: inherit; vertical-align: baseline; }
-.btn.skl-link:hover:not(:disabled) { background: transparent; text-decoration: underline; }
+.skl-import > .skl-alone { justify-self: start; }
 .skl-bar { height: 6px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
 .skl-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 200ms ease; }
 .skl-step { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
@@ -80,7 +77,13 @@
 .skl-doc .ans { margin: 0 0 var(--sp-3); font: var(--weight-regular) var(--fs-sm)/1.7 var(--ui); color: var(--text); }
 .skl-doc .rich-block { margin: 0 0 var(--sp-3); }
 
-.skl-access-menu { max-height: min(360px, calc(100vh - 16px)); }
+/* However many characters there are, the menu is short: the whole team, a search once there are many, six rows in view and the rest
+   scrolling inside it, and 移除所有人 at its foot. */
+.skl-access-menu { max-height: none; overflow: visible; min-width: 220px; }
+.skl-access-list { max-height: calc(6 * var(--h-menu)); overflow-x: hidden; overflow-y: auto; }
+.skl-access-menu .lang-none { padding-inline: var(--sp-2); }
+.skl-access-foot [aria-disabled="true"] { color: var(--text-3); cursor: default; }
+.skl-access-foot [aria-disabled="true"]:hover { background: transparent; }
 
 @media (max-width: 800px) {
   .skl-pack { --skl-control-space: calc(140px + 2 * var(--h-ctl) + 3 * var(--sp-2)); }

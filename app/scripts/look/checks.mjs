@@ -849,6 +849,32 @@ export function checkRendered(name, context = {}) {
       const anchor = rowOf('pack:2').querySelector('.skl-access').getBoundingClientRect(), frame = menu.getBoundingClientRect();
       require(frame.top >= anchor.bottom - 1 && frame.bottom <= innerHeight + 1, 'the menu stands under its button, inside the window');
     }
+    if (['skill-library-access', 'skill-library-access-many', 'skill-library-access-search', 'skill-library-access-clear'].includes(name)) {
+      // The menu of who may use a package is short however many characters there are (R-SKILL-17): the whole team, a search once there are
+      // more than six, at most six rows in view with the rest scrolling inside it, and 移除所有人 at the foot.
+      const menu = document.querySelector('.skl-access-menu'), list = menu.querySelector('.skl-access-list'), total = name === 'skill-library-access' ? 3 : 25;
+      const order = [...menu.children].map(part => part.className.replace('menu-sep', 'sep').split(' ')[0] || part.getAttribute('role')).join();
+      require(order === (total > 6 ? 'skl-access-top,sep,lang-search,skl-access-list,sep,skl-access-foot' : 'skl-access-top,sep,skl-access-list,sep,skl-access-foot'), `the menu is the whole team, ${total > 6 ? 'a search, ' : ''}the characters, 移除所有人 (${order})`);
+      require(!!menu.querySelector('[data-skl-search]') === (total > 6), `the search stands there once there are more than six characters (${total})`);
+      const box = list.getBoundingClientRect(), rows = [...list.querySelectorAll('[data-member]')];
+      const inView = rows.filter(row => { const r = row.getBoundingClientRect(); return r.top >= box.top - 1 && r.bottom <= box.bottom + 1; });
+      require(inView.length <= 6 && (total <= 6 || inView.length >= 4), `at most six rows are in view (${inView.length} of ${rows.length})`);
+      if (name === 'skill-library-access-search') require(rows.length > 0 && rows.length < total && rows.every(row => row.textContent.includes('小')), `the search keeps the names that match (${rows.length})`);
+      else require(rows.length === total, `every character is listed (${rows.length})`);
+      if (total > 6) require(list.scrollHeight > list.clientHeight + 1 || name === 'skill-library-access-search', 'the rest scrolls inside the menu');
+      const foot = menu.querySelector('.skl-access-foot [data-access="none"]'), frame = menu.getBoundingClientRect(), f = foot.getBoundingClientRect();
+      require(foot.textContent.trim() === '移除所有人' && f.top >= box.bottom - 1 && f.bottom <= frame.bottom + 1, '移除所有人 stands at the foot of the menu');
+      require(frame.height <= 28 * 9 + 40 && frame.top >= 0 && frame.bottom <= innerHeight + 1 && frame.right <= innerWidth + 1, `the whole menu is short and inside the window (${Math.round(frame.height)} px)`);
+      require(menu.scrollHeight <= menu.clientHeight + 1, 'the menu itself does not scroll: only its list does');
+      const anchor = rowOf('pack:2').querySelector('.skl-access span');
+      if (name === 'skill-library-access-clear') {
+        require(anchor.textContent.trim() === '還沒給任何人' && foot.getAttribute('aria-disabled') === 'true', 'the package is for nobody now, and there is nothing more to remove');
+        require([...menu.querySelectorAll('[data-member]')].every(row => row.getAttribute('aria-checked') === 'false') && menu.querySelector('[data-access="all"]').getAttribute('aria-checked') === 'false', 'no one is ticked');
+        const calls = window.__look.calls.filter(call => call.method === 'skills.library.update' && call.params.key === 'pack:2');
+        require(calls.length === 1 && Array.isArray(calls[0].params.access) && calls[0].params.access.length === 0, 'the core was told: nobody');
+        require(window.__look.calls.every(call => !/delete|members\.update|members\.remove/.test(call.method)), 'no character was touched');
+      } else require(foot.getAttribute('aria-disabled') === 'false' && anchor.textContent.trim() === '小晴、小森', 'the package is for the two it named, and 移除所有人 can take them away');
+    }
     if (['skill-library-import', 'skill-library-import-link', 'skill-library-import-over'].includes(name)) {
       // The importer, idle (R-SKILL-26): a dashed drop zone with ONE button and one line for an address; nothing else, no rule
       // line, no lone button at the foot, no sign-in-like link to Raphael.

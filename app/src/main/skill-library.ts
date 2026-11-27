@@ -22,6 +22,7 @@ import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { isTopLayer } from "./dismissals";
 import { confirmDelete, openDialog, type Dialog } from "./member-dialogs";
+import { findsName } from "./find-match";
 import { faceHTML, groupFacesHTML, RAPHAEL_ID } from "./members";
 import { replyContentHTML } from "./message-content";
 import { rememberLayerBack } from "./nav-history";
@@ -87,6 +88,8 @@ const tooLarge = (name: string, size: number): string => t("skillLib.sizeUpload"
 const SKIPPED_FOLDERS = new Set(["node_modules", ".git", "__pycache__", "__MACOSX"]);
 /** And the files a Mac leaves beside every file (`.DS_Store`, `._name`): the core leaves them out too, so they are not even sent. */
 const leftover = (name: string): boolean => name === ".DS_Store" || name.startsWith("._");
+/** More characters than this and the menu of who may use a package gets a search field; it never shows more than six at once. */
+const ACCESS_SEARCH_FROM = 6;
 /** The longest pasted text that is sent in Raphael's message as it is; a longer one goes as a file beside it. */
 const INLINE_TEXT = 1500;
 
@@ -251,7 +254,7 @@ function importBodyHTML(v: SkillLibraryView): string {
     return `<div class="skl-import is-busy">` +
       `<div class="skl-bar" role="progressbar" aria-label="${esc(importTitle(v))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><span style="width:${percent}%"></span></div>` +
       `<p class="d skl-step" role="status">${esc(stepWords(v.step))}</p>` +
-      actionRow({ primary: { label: esc(t("common.cancel")), attrs: ` data-skl="import-cancel"${v.stopping || v.step.kind === "install" ? " disabled" : ""}` }, cls: "skl-actions" }) +
+      actionRow({ secondary: btn(esc(t("common.cancel")), "", ` data-skl="import-cancel"${v.stopping || v.step.kind === "install" ? " disabled" : ""}`), cls: "skl-actions" }) +
       `</div>`;
   }
   if (v.notSkill) {
@@ -268,7 +271,8 @@ function importBodyHTML(v: SkillLibraryView): string {
     btn(esc(t("skillLib.choose")), "sm", ' data-skl="pick"') + `</div>` +
     `<div class="skl-url">${fieldHTML(address, v.draft, { id: "skl-input", icon: "link", label: address })}` +
     iconBtn("arrowRight", t("skillLib.import"), ` data-skl="import-go"${v.draft.trim() ? "" : " disabled"}`) + `</div>` +
-    (v.error ? `<p class="skl-error" role="alert">${esc(v.error)}${v.alone ? ` ${btn(esc(t("skillLib.alone")), "sm skl-link", ' data-skl="import-alone"')}` : ""}</p>` : "") +
+    (v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : "") +
+    (v.error && v.alone ? btn(esc(t("skillLib.alone")), "sm skl-alone", ' data-skl="import-alone"') : "") +
     `</div>`;
 }
 
@@ -678,43 +682,79 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
     await bring({ file: { name: file.name, data: base64(await file.arrayBuffer()) } }, { file });
   };
   /**
-   * Who may use a package: the whole team, or the characters ticked; the menu stays open while names are ticked. Each row
-   * leads with who it names, as the @ menu does: a character's face, and for the whole team the team's own picture (its
-   * first faces in one square, as the sidebar draws the team); the check, when chosen, stands at the right.
+   * Who may use a package (R-SKILL-17), in a menu that stays short however many characters there are: the whole team at the top,
+   * a search field once there are more than a few, at most six characters in view with the rest scrolling inside the menu, and at
+   * the foot 移除所有人, the one action that sets the package to nobody (it takes everyone's access away and never a character). It
+   * stays open while names are ticked. Each row leads with who it names, as the @ menu does: a character's face, and for the
+   * whole team the team's own picture (its first faces in one square, as the sidebar draws the team); the check, when chosen,
+   * stands at the right.
    */
   const chooseAccess = (anchor: HTMLElement, key: string): void => {
     const face = (m: LibraryMember): Face => faces.get(m.id) ?? m;
     const team = (): string => groupFacesHTML(state.members.filter(m => m.id !== RAPHAEL_ID).map(face), 20);
     const parts = (lead: string, name: string, on: boolean): string =>
       `<span class="mlead" aria-hidden="true">${lead}</span><span class="mt">${esc(name)}</span><span class="ck">${on ? ico("check") : ""}</span>`;
-    const items = (access: Access): string =>
-      `<button type="button" role="menuitemradio" tabindex="-1" data-access="all" aria-checked="${access === "all"}">${parts(team(), t("vault.everyone"), access === "all")}</button>` +
-      `<div class="menu-sep" role="separator"></div>` +
-      state.members.map(m => {
+    const searchable = state.members.length > ACCESS_SEARCH_FROM;
+    let query = "";
+    const top = (access: Access): string =>
+      `<button type="button" role="menuitemradio" tabindex="-1" data-access="all" aria-checked="${access === "all"}">${parts(team(), t("vault.everyone"), access === "all")}</button>`;
+    const rows = (access: Access): string => {
+      const shown = state.members.filter(m => !query.trim() || findsName([m.name], query.trim()));
+      return shown.length ? shown.map(m => {
         const on = access === "all" || access.includes(m.id);
         return `<button type="button" role="menuitemcheckbox" tabindex="-1" data-member="${m.id}" aria-checked="${on}">${parts(faceHTML(face(m), 20), m.name, on)}</button>`;
-      }).join("");
-    const menu = openPopover(anchor, items(byKey(key)?.access ?? "all"), { className: "menu skl-access-menu", role: "menu", label: t("vault.access") });
+      }).join("") : `<p class="lang-none">${esc(t("skillLib.accessNone"))}</p>`;
+    };
+    const none = (access: Access): string =>
+      `<button type="button" role="menuitem" tabindex="-1" data-access="none" aria-disabled="${Array.isArray(access) && access.length === 0}">` +
+      `<span class="mt">${esc(t("skillLib.accessClear"))}</span></button>`;
+    const find = searchable
+      ? `<label class="lang-search skl-access-search">${ico("search")}<input type="search" data-skl-search autocomplete="off" spellcheck="false" placeholder="${esc(t("skillLib.accessSearch"))}" aria-label="${esc(t("skillLib.accessSearch"))}"></label>`
+      : "";
+    const access0 = byKey(key)?.access ?? "all";
+    const menu = openPopover(anchor,
+      `<div class="skl-access-top">${top(access0)}</div><div class="menu-sep" role="separator"></div>${find}` +
+      `<div class="skl-access-list" role="group" aria-label="${esc(t("vault.access"))}">${rows(access0)}</div>` +
+      `<div class="menu-sep" role="separator"></div><div class="skl-access-foot">${none(access0)}</div>`,
+      { className: "menu skl-access-menu", role: "menu", label: t("vault.access") });
+    /** The menu's rows drawn again for the access now: the search field stays, with what was typed in it. */
+    const paint = (access: Access): void => {
+      menu.querySelector(".skl-access-top")!.innerHTML = top(access);
+      menu.querySelector(".skl-access-list")!.innerHTML = rows(access);
+      menu.querySelector(".skl-access-foot")!.innerHTML = none(access);
+    };
+    const search = menu.querySelector<HTMLInputElement>("[data-skl-search]");
+    search?.addEventListener("input", () => { query = search.value; paint(byKey(key)?.access ?? "all"); });
+    search?.addEventListener("keydown", event => {
+      if (event.key !== "Enter" || event.isComposing) return;
+      const first = menu.querySelector<HTMLElement>("[data-member]");
+      if (first) { event.preventDefault(); first.click(); }
+    });
     menu.addEventListener("click", event => {
       const pick = (event.target as Element).closest<HTMLElement>("[data-access], [data-member]");
       const p = byKey(key);
       if (!pick || !p) return;
       let access: Access;
       if (pick.dataset.access === "all") access = "all";
-      else {
+      else if (pick.dataset.access === "none") {
+        if (pick.getAttribute("aria-disabled") === "true") return;
+        access = [];
+      } else {
         const id = Number(pick.dataset.member);
         const now = p.access === "all" ? state.members.map(m => m.id) : p.access;
         access = now.includes(id) ? now.filter(other => other !== id) : [...now, id];
         if (state.members.length && access.length === state.members.length) access = "all";
       }
       p.access = access;
-      menu.innerHTML = items(access);
-      (menu.querySelector<HTMLElement>(pick.dataset.access ? "[data-access]" : `[data-member="${pick.dataset.member}"]`))?.focus();
+      paint(access);
+      const again = pick.dataset.access ? `[data-access="${pick.dataset.access}"]` : `[data-member="${pick.dataset.member}"]`;
+      menu.querySelector<HTMLElement>(again)?.focus();
       const label = anchor.querySelector("span");
       if (label) label.textContent = accessText(access, state.members);
       void change({ key, access });
       if (access === "all") { closeMenu(); anchor.focus({ preventScroll: true }); }
     });
+    (search ?? menu.querySelector<HTMLElement>('[aria-checked="true"]') ?? menu).focus({ preventScroll: true });
   };
   /** A package's trash, on its page: the red dialog asks, and only its red button deletes the package. */
   const removePackage = async (key: string): Promise<void> => {

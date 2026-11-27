@@ -1473,7 +1473,13 @@ export function installMock(fixture, config = {}, target = window) {
     // Settings reads the hidden list as it opens, before the list's section is drawn; the sidebar keeps the roster it already read.
     switch (method) {
       // Team skills (skill-library.ts, members/service.py skills.library.*).
-      case "skills.library.list": return { packages: data.skillLibrary, members: data.members.filter(m => m.id !== 0).map(m => ({ id: m.id, name: m.name })) };
+      case "skills.library.list": {
+        const team = data.members.filter(m => m.id !== 0).map(m => ({ id: m.id, name: m.name }));
+        // `skillMembers`: a team of this many characters (the access menu stays short however many there are).
+        const names = ["小晴", "小森", "小葵", "阿宏", "小米", "老周", "Mia", "Noah", "Ava", "小月", "阿德", "Leo"];
+        for (let at = team.length; at < (variant.skillMembers ?? 0); at++) team.push({ id: 100 + at, name: `${names[at % names.length]}${Math.floor(at / names.length) + 1}` });
+        return { packages: data.skillLibrary, members: team };
+      }
       case "skills.library.update": {
         const pack = data.skillLibrary.find(item => item.key === p.key);
         if (!pack) throw new Error("Invalid params: unknown package");

@@ -56,6 +56,15 @@ export default [
     ...list, click('[data-skl="access"][data-key="pack:2"]'), wait(".skl-access-menu [data-member]"), check("skill-library-access")]),
   // The importer (R-SKILL-26) in its states: idle, a file dragged over it, a file chosen, what is no skill, the import under way at
   // each step, cancelled back to idle, and the failures below.
+  // The menu of who may use a package stays short however many characters there are (R-SKILL-17).
+  scene("skill-library-access-many", "With 25 characters the menu stays short: the whole team, a search, six rows in view and the rest scrolling, and 移除所有人 at its foot", [
+    ...list, click('[data-skl="access"][data-key="pack:2"]'), wait(".skl-access-menu [data-member]"), check("skill-library-access-many")], { skillMembers: 25 }),
+  scene("skill-library-access-search", "Typing in the menu's search narrows the characters to those that match, and what is ticked stays ticked", [
+    ...list, click('[data-skl="access"][data-key="pack:2"]'), wait(".skl-access-menu [data-skl-search]"), type(".skl-access-menu [data-skl-search]", "小"),
+    wait('.skl-access-menu [data-member="1"]'), check("skill-library-access-search")], { skillMembers: 25 }),
+  scene("skill-library-access-clear", "移除所有人 sets the package to nobody, takes the ticks away, and the menu stays open", [
+    ...list, click('[data-skl="access"][data-key="pack:2"]'), wait(".skl-access-menu [data-member]"), click('.skl-access-menu [data-access="none"]'),
+    wait('.skl-access-menu [data-access="none"][aria-disabled="true"]'), check("skill-library-access-clear")], { skillMembers: 25 }),
   scene("skill-library-import", "匯入 opens the importer: a dashed drop zone with one button, one line for an address, nothing at the foot", [
     ...importing, check("skill-library-import")]),
   scene("skill-library-import-link", "An address pasted in the line waits for its small arrow or Enter", [
