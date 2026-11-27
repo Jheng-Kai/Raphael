@@ -6,8 +6,13 @@ While the guide is up the window is the card itself: guide-window.ts
 sizes it to 1080 x 720 under the control strip (on a screen
 whose free area is smaller it takes that area less a 32 px edge, never below the app's 720 x 480), centres it,
 turns off resizing and maximizing (no maximize
-button, no resize edges, a double-click on the strip does nothing) and gives back the earlier size, place
-and maximized state when the guide ends; `guide-window-fixed` in the onboarding scene checks the requests.
+button, no resize edges, a double-click on the strip does nothing) and, when the guide ends, gives back only the resizing and
+maximizing: the window keeps the size and place the guide had, so the step into the app is a step into a page and not a new
+window (R-GUIDE-04). A first run opens at that size already (lib.rs `opening_size`: 1080 x 752, centred), and the window's
+backdrop is painted with its theme (`backdrop`: black in dark, the sidebar's grey in light, never the webview's white) from
+the window's creation and again whenever its theme changes, so no light strip shows at its edge while it is shown or resized.
+`guide-window-fixed` in the onboarding scene checks the requests while the guide is up, `guide-window-kept` in
+`after-onboarding` those at its end: one size and one place request in all, none after the guide.
 The welcome's language is a quiet button at the card's top left (globe, the language's own name, chevron; its
 name is its aria-label) that opens the language picker (language-picker.ts: each language in its own script, a
 search field once there are more than eight).
@@ -87,6 +92,19 @@ Settings has no 導覽 entry any more;
    opens, inside the card, the choice of service with its key, and for images the model picker. That choice dims the whole
    window like every dialog, the caption strip included (R-UI-141); the window buttons stay on top of the dim.
 
+R-GUIDE-02: the store's apps (the built-in catalog, Composio's state and Composio's apps) are read in the background from the
+welcome on, so the services step opens on its tiles and never on a lone spinner (`onboarding-services` checks
+`onboarding-services-ready` the moment the step is drawn); the spinner stays only for a read that has not answered yet.
+Composio's key field is on this step already (`onboarding-services-composio`, `onboarding-composio-key`,
+`onboarding-composio-saved`); a saved key reads the store again behind the tiles already shown.
+
+R-GUIDE-03: an ability's dialog opens and closes over a page that does not move. The guide drew the abilities step again whole
+at each change, so its rows played their entrance again under the dimmed page and after it (a flash); only what the abilities
+hold is drawn again now (`swapHTML`, as Settings does), and the title, the floating slimes, the column and the foot stay the same
+elements. Scene `onboarding-abilities-still` (motion on) opens 看圖片, closes it with × and again with Esc, and checks that every
+part is the same element at the same place, the page is not scrolled, and no row, title or slime is coming in (checks
+`onboarding-abilities-still-before`, `-open` and `-closed`; it fails on the old drawing).
+
 Every choice can be gone past without choosing; the first slime asks only for its name. The last step's primary button finishes; a first
 run then saves the device setting `onboarded`, a rerun from Settings does not.
 
@@ -99,7 +117,7 @@ state.
 ## Driving it with look
 
 ```powershell
-npm run look -- onboarding onboarding-slime onboarding-tools onboarding-back-hover onboarding-back-focus settings-owner onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- onboarding onboarding-slime onboarding-tools onboarding-back-hover onboarding-back-focus settings-owner onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice onboarding-abilities-still onboarding-slime-press after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 Keep the welcome and each step's PNGs, the contact sheet and the report. Each scene presses the
@@ -128,6 +146,15 @@ The look mock signs no one in to ChatGPT, has all three command-line tools ready
 OpenRouter key set; `integrations.connect` is cancelled there, so only a managed app proves a
 completed sign-in. Credentials, real browser logins, command-line sign-in and native persistence
 remain separate checks.
+
+## Every slime answers a press
+
+R-GUIDE-01: each slime of the guide (the one being made, each picker slime, the three floating by a title) is pushed down
+by a press and springs back, as the sidebar's slimes do (`slime.css`, "a squish that follows the press and the release";
+the guide's pictures are given back only the transition their still rule stopped, in the motion-allowed block, so reduced
+motion keeps them still). A floating slime and the large one only squish: they take no focus and change no step. Scene
+`onboarding-slime-press` (motion on) presses each with the real mouse (`slime-press` in driver.mjs: scale while held, back
+after, the press reaches the slime, the step unchanged) and once more with reduced motion, where nothing squishes.
 
 ## UI audit regression coverage
 

@@ -190,6 +190,12 @@ pub fn run() {
                 }
             }
             if window.label() == MAIN_WINDOW
+                && matches!(event, WindowEvent::ThemeChanged(_))
+                && let Some(webview) = window.app_handle().get_webview_window(MAIN_WINDOW)
+            {
+                paint_backdrop(&webview);
+            }
+            if window.label() == MAIN_WINDOW
                 && let WindowEvent::Focused(focused) = event
             {
                 MAIN_FOCUSED.store(*focused, std::sync::atomic::Ordering::SeqCst);
@@ -317,7 +323,7 @@ pub fn run() {
             // ---- Main window ----
             // Created here rather than from the config so that it gets the webview data folder
             // like the overlay does, after the migration has put the old data there.
-            create_main_window(app.handle())?;
+            create_main_window(app.handle(), &device)?;
             log::info!(
                 "start-up: main window created {} ms after launch",
                 launched_at.elapsed().as_millis()
@@ -581,8 +587,38 @@ pub(crate) fn webview_data_dir(app: &AppHandle) -> tauri::Result<PathBuf> {
         .join(data_layout::WEBVIEW_DIR))
 }
 
+/// The first run's window is the guide's card (guide-window.ts: its width and height under the 32 px control strip), so the
+/// guide never resizes the window it opened in, and the app keeps those bounds when the guide ends: a step from the guide to the
+/// app is a step into a page, not a new window.
+const GUIDE_WINDOW: (f64, f64) = (1080.0, 720.0 + 32.0);
+
+/// The size the main window opens at: the guide's while the guide is still to come, else the config's designed one.
+fn opening_size(onboarded: bool) -> Option<(f64, f64)> {
+    (!onboarded).then_some(GUIDE_WINDOW)
+}
+
+/// What shows behind the page, in the colours of the app's own `--side`: a webview paints white until its page has,
+/// and a window that is shown or resized shows that white at its edge. It follows the theme the window wears.
+fn backdrop(theme: tauri::Theme) -> tauri::window::Color {
+    match theme {
+        tauri::Theme::Light => tauri::window::Color(247, 247, 247, 255),
+        _ => tauri::window::Color(0, 0, 0, 255),
+    }
+}
+
+/// Paints the window's backdrop for the theme it wears now (dark when that cannot be read).
+pub(crate) fn paint_backdrop<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+    let theme = window.theme().unwrap_or(tauri::Theme::Dark);
+    if let Err(err) = window.set_background_color(Some(backdrop(theme))) {
+        log::warn!("could not paint the window's backdrop: {err}");
+    }
+}
+
 /// Builds the main window from its entry in the config, with the shared webview data folder.
-fn create_main_window(app: &AppHandle) -> tauri::Result<()> {
+fn create_main_window(
+    app: &AppHandle,
+    device: &device_settings::DeviceSettings,
+) -> tauri::Result<()> {
     let Some(config) = app
         .config()
         .app
@@ -593,13 +629,23 @@ fn create_main_window(app: &AppHandle) -> tauri::Result<()> {
         log::error!("the config has no main window");
         return Ok(());
     };
+    // Dark until the window says which theme it wears (a light one is painted just below, before the window is shown).
+    let first_paint = match device.appearance {
+        device_settings::Appearance::Light => tauri::Theme::Light,
+        _ => tauri::Theme::Dark,
+    };
     let mut builder = tauri::WebviewWindowBuilder::from_config(app, config)?
-        .data_directory(webview_data_dir(app)?);
+        .data_directory(webview_data_dir(app)?)
+        .background_color(backdrop(first_paint));
+    if let Some((width, height)) = opening_size(device.onboarded) {
+        builder = builder.inner_size(width, height).center();
+    }
     if startup_journey() {
         builder = builder
             .initialization_script(include_str!("../../scripts/look/native/startup-probe.js"));
     }
-    builder.build()?;
+    let window = builder.build()?;
+    paint_backdrop(&window);
     Ok(())
 }
 
@@ -775,6 +821,28 @@ mod window_state_tests {
                 | StateFlags::FULLSCREEN
         ));
         assert!(!flags.intersects(StateFlags::VISIBLE | StateFlags::DECORATIONS));
+    }
+
+    #[test]
+    fn the_first_run_opens_at_the_guides_size_and_a_later_launch_at_the_designed_one() {
+        // The guide's card under its control strip (guide-window.ts); the app that follows keeps it, so nothing resizes.
+        assert_eq!(opening_size(false), Some((1080.0, 752.0)));
+        assert_eq!(opening_size(true), None);
+    }
+
+    #[test]
+    fn the_window_is_painted_dark_or_light_with_its_theme_never_white_behind_a_page() {
+        assert_eq!(
+            backdrop(tauri::Theme::Dark),
+            tauri::window::Color(0, 0, 0, 255)
+        );
+        assert_eq!(
+            backdrop(tauri::Theme::Light),
+            tauri::window::Color(247, 247, 247, 255)
+        );
+        for theme in [tauri::Theme::Dark, tauri::Theme::Light] {
+            assert_ne!(backdrop(theme), tauri::window::Color(255, 255, 255, 255));
+        }
     }
 
     #[test]
