@@ -3,6 +3,7 @@
 The list stays the same whatever the owner asks: the request's words
 choose what find_tools returns, never what the model is listed."""
 
+from pathlib import Path
 import json
 
 import httpx
@@ -143,6 +144,11 @@ async def test_default_production_prompt_stays_below_the_measured_pre_unit_budge
     system, tools = captured[0]
     # feat/members has 58 for this same production fixture; 51 before the fixed list.
     assert len(tools) == 42
+    # The prompt names the member's folders under this machine's profile: with the home folder as one word the budget is
+    # the same everywhere (CI's C:\Users\runneradmin made it three tokens longer than a short local name).
+    home = str(Path.home())
+    for form in (json.dumps(home)[1:-1], home):
+        system = system.replace(form, "HOME")
     assert estimate_tokens(system + json.dumps(tools, ensure_ascii=False, separators=(",", ":"))) <= budget
 
 

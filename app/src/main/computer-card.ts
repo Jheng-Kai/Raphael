@@ -9,6 +9,14 @@ import { t } from "./i18n";
 import type { AgentTurn, ComputerCard } from "./types";
 import { btn, esc, ico } from "./ui";
 
+/** Why Chrome could not choose the certificate by itself, as the core says it on the card (a code, never words): what happened
+ *  in one sentence, then the window the owner chooses in and the button that ends the step (R-COMP-CERT-02). */
+export function certificateNoteText(note: string | null | undefined, window: string, done: string): string | undefined {
+  if (note === "certificate_refused") return t("memberComputer.certificateRefused", { p0: window, p1: done });
+  if (note === "certificate_unmatched") return t("memberComputer.certificateUnmatched", { p0: window, p1: done });
+  return undefined;
+}
+
 /** Why it is the owner's, naming the window to use. */
 function reasonText(reason: string, window: string): string {
   switch (reason) {
@@ -27,7 +35,8 @@ const windowOf = (card: ComputerCard): string => card.app || t("card.pcTitle");
 
 /** What the card says of where the owner's turn stands. */
 export function computerStateText(card: ComputerCard): string {
-  return card.browser && card.note && card.note !== "still" ? card.note : reasonText(card.reason, windowOf(card));
+  const certificate = card.reason === "certificate" ? certificateNoteText(card.note, windowOf(card), t("card.pcDone")) : undefined;
+  return certificate ?? (card.browser && card.note && card.note !== "still" ? card.note : reasonText(card.reason, windowOf(card)));
 }
 
 export function computerCardHTML(card: ComputerCard): string {

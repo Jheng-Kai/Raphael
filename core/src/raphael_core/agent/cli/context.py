@@ -51,7 +51,8 @@ def resumed_user(user, sections, turns, previous, *, summary="", summary_through
 def fresh_user(owner_text, attachments, additions, note, records, *, turns=(), summary="", sections=None, owner_words=(),
                window=None, reserve=0, byte_limit=None, current_user=None):
     """The first message of a fresh session. The request, file names, additions and receipts are never cut; length is no
-    error unless they alone outgrow the model's window (or the provider's `byte_limit`). What is left holds, in this
+    error unless they alone outgrow the model's known window (or the provider's `byte_limit`): with no window known
+    (`window` None) the brain is asked and decides itself, never refused on a guess. What is left holds, in this
     order: the sections (memory, team), the conversation summary, the owner's own recent words (`owner_words`, newest
     first, capped), then recent turns, newest first. Records are whole or not there at all."""
     parts = [current_user if current_user is not None else f"<question>\n{owner_text}\n</question>"]
@@ -64,7 +65,7 @@ def fresh_user(owner_text, attachments, additions, note, records, *, turns=(), s
     mandatory = "\n\n".join(parts)
     hard, soft = fresh_budget(window, reserve, byte_limit)
     used = len(mandatory.encode("utf-8"))
-    if used > hard:
+    if used > hard and (window is not None or byte_limit is not None):
         # Never silently cut the owner's instructions or a file name to fit a model.
         raise ValueError("context_overflow")
 

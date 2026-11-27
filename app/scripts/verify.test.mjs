@@ -82,7 +82,7 @@ describe("a verify run of only what changed (--changed)", () => {
     }
     expect(reads.length).toBeGreaterThan(3);
     for (const [file, test] of reads) expect(READ_BY_CORE_TESTS[file] ?? [], `${test} reads ${file}`).toContain(test);
-  });
+  }, 30_000); // It lists and reads every core test file: about 3 s alone, past 5 s twice under a loaded verify.
   it("runs the frontend tests that read a changed file as text, which vitest related does not follow", () => {
     const { textReaders } = verifyModule;
     const texts = { "src/main/agent-sizing.test.ts": 'read("agent.css")', "src/main/other.test.ts": 'import "./agent"', "scripts/look/a.test.mjs": 'join(app, "src/main/agent.css")' };

@@ -102,7 +102,7 @@ WORDS = {
     "browser_upload_count": "This file chooser takes one file.",
     "browser_upload_path": "Upload only files inside your work folder, never a private or system place.",
     "bad_path": "The requested work file path is invalid.",
-    "browser_navigation_waiting": "Chrome is still waiting for this page. If it asks for a client certificate, use request_takeover with reason: certificate; Chrome then opens a window on the owner's screen to choose it.",
+    "browser_navigation_waiting": "Chrome is still waiting for this page. If it asks for a client certificate, use request_takeover with reason: certificate; Chrome then chooses the certificate by itself, and only if it cannot opens a window on the owner's screen to choose it.",
     "browser_owner_approval_required": "The owner must approve the exact outward action before it can run.",
     "browser_handback_stopped": "The owner stopped the handback. End this task without retrying the action.",
     "browser_handback_expired": "The owner did not return this tab in time. End this task without retrying the action.",
@@ -166,7 +166,7 @@ class HostComputerTools:
                              }},
             "browser_dialog": BROWSER_DIALOG,
             "browser_upload": BROWSER_UPLOAD,
-            "request_takeover": {"parameters": HOST_TAKEOVER, "description": TAKEOVER["description"] + " Use certificate when a page asks for a client certificate: Chrome opens a window on the owner's screen, where they choose it and then press Done."},
+            "request_takeover": {"parameters": HOST_TAKEOVER, "description": TAKEOVER["description"] + " Use certificate when a page asks for a client certificate: Chrome chooses it by itself, and only when it cannot opens a window on the owner's screen, where they choose it and then press Done."},
             **{name: {**DEFINITIONS[name], "description": DEFINITION_WORDS[name]} for name in READS | WRITES},
         })
 
@@ -381,15 +381,26 @@ class HostComputerTools:
             data, blocks, tab, reason = await self.browser_call(
                 name, arguments, approver, member, work, conversation_id, announce, can_hand_back=can_hand_back)
             if reason:
+                signed_in = False
                 try:
-                    if reason == "certificate":
-                        # Chrome's own chooser needs a window: Chrome is shown to the owner for this step (#345).
-                        await browser.show_for_owner(tab)
                     detail = data.get("detail", "")
-                    await self.cards.wait_for_browser(turn_id=turn_id, member_id=member, conversation_id=conversation_id,
-                                                      language=language, reason=reason, tab=tab, detail=detail, browser=browser)
-                    await browser.wait_popups(member)
-                    returned = browser.handback_tab(tab)
+                    if reason == "certificate":
+                        # Chrome chooses the certificate by itself first, in the background, with no window (R-COMP-CERT-02).
+                        why = await browser.sign_in_with_certificate(tab)
+                        signed_in = why is None
+                        if not signed_in:
+                            # What it could not do is said on the card, whose words then say a Chrome window opened. A page that
+                            # asks for one still has Chrome's own chooser, which needs a window (#345): Chrome is shown to the
+                            # owner for this step.
+                            detail = why or detail
+                            await browser.show_for_owner(tab)
+                    if signed_in:
+                        returned = tab
+                    else:
+                        await self.cards.wait_for_browser(turn_id=turn_id, member_id=member, conversation_id=conversation_id,
+                                                          language=language, reason=reason, tab=tab, detail=detail, browser=browser)
+                        await browser.wait_popups(member)
+                        returned = browser.handback_tab(tab)
                     if returned is None:
                         raise BrowserError("browser_tab_changed")
                     async with browser.action_lock(returned):
@@ -398,12 +409,14 @@ class HostComputerTools:
                 finally:
                     if browser.handback.get(member) is tab:
                         browser.handback.pop(member)
-                    if reason == "certificate":
+                    if reason == "certificate" and not signed_in:
                         # The choice stays valid only in this Chrome, so it keeps running; its window steps aside.
                         with suppress(BrowserError, OSError, TimeoutError, KeyError):
                             await browser.tuck_away(tab)
                 if data.get("owner_needed"):
                     data["status"] = "owner_step_still_needed"
+                elif signed_in:
+                    data["status"] = "certificate_chosen"
                 else:
                     data["status"] = "owner_finished"
             if placed := browser.take_downloads(member):

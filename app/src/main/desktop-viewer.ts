@@ -37,6 +37,9 @@ export interface DesktopState {
   works?: DesktopWork[];
   transport?: ComputerTransport | "idle";
   host_request?: DesktopWork;
+  /** Chrome is choosing the page's client certificate by itself, with no window (R-COMP-CERT-02): the site, and whether macOS
+   *  may ask the owner about the certificate's key, which is said once. */
+  signing_in?: { host: string; keychain: boolean };
   preview_allowed?: boolean;
   teaching?: api.TeachingDraft;
   teach_available?: boolean;
@@ -329,8 +332,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(panel, "hidden", !visible || !state);
     // The computer carries no words, face or buttons until its screen is up, and nothing is written over it. The one line
     // under it is an update of its image, which can take minutes (R-COMP-UPDATE-01): a state, never a notice or a toast.
-    const caption = panel.querySelector<HTMLElement>('.desktop-caption')!, updateLine = computerUpdateLine(state);
+    // Chrome choosing the page's certificate by itself is a state too (R-COMP-CERT-02): the same quiet line, which the larger view keeps.
+    const caption = panel.querySelector<HTMLElement>('.desktop-caption')!, signing = state?.transport === "host" ? state.signing_in : undefined;
+    const updateLine = signing ? t(signing.keychain ? "memberComputer.certificateAutoKeychain" : "memberComputer.certificateAuto", { p0: signing.host }) : computerUpdateLine(state);
     paint(caption, 'textContent', updateLine); paint(caption, 'hidden', !updateLine);
+    caption.toggleAttribute('data-certificate', !!signing);
     panel.toggleAttribute('data-desktop-update', !!updateLine);
     options.status?.(state?.state === "running");
     paint(frame, "title", t("desktop.open"));

@@ -165,8 +165,10 @@ signing for the Windows installer and the Apple silicon .app.tar.gz. The Mac bui
 Minisign signature, signed version and bundled app version before upload. After downloading both sets of
 assets the publish job assembles latest.json with windows-x86_64 and darwin-aarch64. If either key is absent, it warns once and layers
 tauri.release-no-updater.conf.json over the release config to disable updater artifacts; the
-installer, notices, BUILD-INFO and SHA256SUMS still build, verify and publish without .sig or
-latest.json. prepare-release-assets defaults to signed mode and requires a signature; explicit
+installer, notices, BUILD-INFO and SHA256SUMS still build and verify without .sig or
+latest.json. The release page publishes only the Windows installer and the macOS disk image, plus (signed)
+their .sig, the .app.tar.gz and latest.json; the checksums, BUILD-INFO and notices are checked in the workflow and the
+notices ship inside the installed app (licenses/). prepare-release-assets defaults to signed mode and requires a signature; explicit
 --updater disabled omits the feed and records the missing-key reason in BUILD-INFO. Publication
 uses the checked version job output rather than reading latest.json, and still requires the
 explicit workflow input. DeviceStore owns opt-in and a one-shot

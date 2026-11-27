@@ -5444,6 +5444,43 @@ export function checkRendered(name, context = {}) {
     }
     return {check: name, words: request.map(node => node.textContent.trim())};
   }
+  if (name.startsWith("desktop-host-certificate-auto")) {
+    // R-COMP-CERT-02: Chrome chooses the certificate itself, so nothing is asked of the owner: no card, no Done, no Chrome window
+    // to look for. The Computer view's caption under the page says what happens (the site by name), and on a Mac the first time
+    // what macOS may ask and which button to press.
+    const keychain = name.includes(":keychain");
+    const line = [...document.querySelectorAll('.desktop-caption[data-certificate]')].filter(visible);
+    require(line.length === 1, `one line says Chrome is signing in (${line.length})`);
+    const text = line[0].textContent.replace(/\s+/g, ' ').trim();
+    require(text.includes('intranet.example.test') && !text.includes('{p'), `the line names the site and is whole: ${text}`);
+    if (document.documentElement.lang === "zh-TW") {
+      require(/憑證/.test(text) && /登入/.test(text), `the words say the certificate signs in: ${text}`);
+      require(keychain === /永遠允許/.test(text), `only the first time on a Mac names macOS’s own “永遠允許”: ${text}`);
+    } else require(keychain === /macOS/.test(text) || document.documentElement.lang !== "en", `the Mac words appear only for the first time: ${text}`);
+    require(!document.querySelector('[data-computer-card]') && !document.querySelector('.desktop-request:not([hidden])'), 'nothing waits for the owner');
+    require(!line[0].closest('.desktop-panel')?.hasAttribute('data-request'), 'the panel has no owner request');
+    const box = line[0].getBoundingClientRect(), panel = line[0].closest('.desktop-panel').getBoundingClientRect();
+    require(box.left >= panel.left - 0.5 && box.right <= panel.right + 0.5, 'the line stays inside the Computer panel');
+    require(line[0].scrollWidth <= line[0].clientWidth + 1, 'the line is whole, not cut');
+    require(name.includes(":large") === line[0].closest('.desktop-panel').hasAttribute('data-expanded'), 'the preview or the larger view as the scene says');
+    return {check: name, words: text};
+  }
+  if (name.startsWith("desktop-host-certificate-why")) {
+    // R-COMP-CERT-02: Chrome could not choose by itself, so the owner chooses in a window that opened. The card and the larger
+    // view say why in one sentence (never the core's code), then what to do and which button ends it.
+    const request = [...document.querySelectorAll('[data-computer-card] .card-body, .desktop-request, [data-desktop-request]')].filter(visible);
+    require(request.length, 'the certificate step shows its words');
+    const refused = name.endsWith(":refused");
+    for (const node of request) {
+      const text = node.textContent.replace(/\s+/g, ' ').trim();
+      require(text && !text.includes('{p') && !text.includes('certificate_'), `the words are whole and carry no code: ${text}`);
+      if (document.documentElement.lang === "zh-TW") {
+        require(/視窗/.test(text) && /憑證/.test(text) && /「我完成了」/.test(text), `the words say a window opened and name Done: ${text}`);
+        require(refused ? /不允許/.test(text) : /無法自己/.test(text), `the sentence says why: ${text}`);
+      }
+    }
+    return {check: name, words: request.map(node => node.textContent.trim())};
+  }
   if (name === "desktop-host-frame" || name === "desktop-host-card-frame") {
     const card = name === "desktop-host-card-frame";
     const frame = document.querySelector('.desktop-screen[data-host-browser] iframe[src*="transport=host"]:not([hidden])');

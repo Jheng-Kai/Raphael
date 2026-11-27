@@ -2522,7 +2522,32 @@ text tests and the host Computer scenario cover it; no screen shows it.
 
 ## A page that asks for a certificate
 
-R-COMP-CERT-01. Chrome's certificate chooser needs a window, so a certificate step starts Raphael's
+R-COMP-CERT-02. A certificate step is tried first with no window at all: Chrome is started again in the
+background with the page's origin written into its own preferences as an auto-selected certificate
+(`write_auto_select`, the file `raphael-auto-certificates.json`), and the page is opened again. The
+Computer view says Chrome is signing in with the owner's certificate (the first time on a Mac also what
+macOS may ask and which button to choose); when it cannot, the card says why in one sentence and the
+step is R-COMP-CERT-01. On a Mac no Chrome window is ever on the screen: member windows open minimized,
+selecting a tab brings none forward. Core: the new tests of `test_host_certificate.py` (the origin and
+the preferences shape, the writing before every start, the success, the unmatched, refused and asked-again
+cases, the busy and failed starts, the card and the windows) and `test_host_shown_chrome.py` (a taken-over
+Chrome shows nothing on a Mac) and, for a Mac or Windows throwaway machine only, `test_native_chrome_chooses_a_client_certificate_by_itself_and_no_window_of_it_is_on_the_screen`,
+which runs Raphael's own HostBrowser against a real Chrome with `tests/computer/mtls_fixture.py` (a client
+certificate in a keychain of its own on a Mac or in `Cert:\CurrentUser\My` on Windows, and two sites that require one;
+skipped unless `RAPHAEL_MTLS_FIXTURE` names the file the fixture wrote, and the fixture refuses to run anywhere but GitHub's
+runner, so it never runs on this PC or in CI; a workflow starts the fixture and sets it, with pyobjc's Quartz installed on a
+Mac to list the windows on the screen). On a real Windows Chrome (the windows-latest runner, a client certificate in
+`Cert:\CurrentUser\My`, the same preference format) the page waits with nothing chosen, the automatic choice loads it
+in 3.0 s with no chooser, the noted origin loads it in 0.1 s after a restart, a page with nothing to choose waits (so the
+card path follows after fifteen seconds), the background Chrome stays on its desktop of its own with no window on the
+owner's desktop, and after the owner is done nothing is on it. Measured on a real Mac (a macOS runner with Chrome, a client certificate in
+a keychain and a server that requires it, probe run in the pull request): a headless Chrome presents the
+certificate with the preference written while it was stopped, the preference survives quitting, a filter
+that matches nothing leaves the page waiting, a window placed at -32000 is on the screen (clamped), a window
+created minimized is not, loads, streams and takes input, and `Page.bringToFront` brings it back.
+
+R-COMP-CERT-01. Chrome's certificate chooser needs a window, so when Chrome could not choose by itself a
+certificate step starts Raphael's
 Chrome once more where the owner sees it, keeps every member's tab (same identity, set up and opened
 again, session cookies carried), and leaves that Chrome running with its window out of the way once
 the owner presses Done. That Chrome outlives the app (quit or update leave it running, noted in the
@@ -2537,13 +2562,19 @@ start again, the same Chrome and its in-memory cookie). App: `computer-card.test
 `desktop-timeline.test.ts`.
 
 ```powershell
-npm run look -- desktop-host-certificate-card desktop-host-certificate --theme both --width 1120,720,1920x1080
+npm run look -- desktop-host-certificate-card desktop-host-certificate desktop-host-certificate-auto desktop-host-certificate-auto-keychain desktop-host-certificate-auto-large desktop-host-certificate-unmatched-card desktop-host-certificate-refused-card desktop-host-certificate-unmatched --theme both --width 1120,720,1920x1080
 ```
 
 The card and the larger view say that a Chrome window opened on the screen and name the Done button
-(`memberComputer.certificate`, all fifteen languages; `--locale` shows one). Not proved offline: the
-chooser itself, the window on a Mac's screen and its minimized state (does a minimized Chrome keep
-painting the tabs the Computer view streams), the Windows window coming to the front, and a real site
-that requires a certificate; they need a Mac and such a site. The Mac's survival of the app quit (a
+(`memberComputer.certificate`, all fifteen languages; `--locale` shows one). When Chrome could not
+choose by itself they begin with one sentence of why (`memberComputer.certificateUnmatched` and
+`certificateRefused`, picked by the card's note code), and while it chooses the Computer view's caption under the page (also kept in the larger view)
+says so (`memberComputer.certificateAuto`, with the macOS words in `certificateAutoKeychain` the
+first time on a Mac). Not proved offline: the
+chooser itself, several matching certificates (Chrome
+takes the first), the keychain's own prompt the first time a certificate's key is used (the runner's key
+allows Chrome with no prompt), and a real site of a company that requires a certificate. The window on a
+Mac's screen, its minimized state and that a minimized Chrome keeps streaming were measured on a real Mac
+(see above). The Mac's survival of the app quit (a
 plain subprocess in its own session, taken over by its process id) is not run here either; Windows's is
 (the native test, and a Chrome made to leave the app's job).
