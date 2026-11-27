@@ -13455,6 +13455,11 @@ export function checkFrame(name, args) {
     const body = document.body.getBoundingClientRect();
     return { check: name, canvas: painted(document.documentElement) ?? painted(document.body), bodyLeft: body.left, bodyRight: body.right,
       firstTop: Math.min(...flow.map(element => element.getBoundingClientRect().top)), lastBottom: Math.max(...flow.map(element => element.getBoundingClientRect().bottom)),
+      image: getComputedStyle(document.documentElement).backgroundImage !== "none" || getComputedStyle(document.body).backgroundImage !== "none",
+      fades: [...document.querySelectorAll("[data-raphael-fade]")].map(fade => { const style = getComputedStyle(fade), colours = style.backgroundImage.match(/rgba?\([^)]*\)/g) ?? [];
+        const parts = text => (text?.match(/[\d.]+/g) ?? []).map(Number);
+        return { at: fade.dataset.raphaelFade, visible: style.display !== "none" && fade.getBoundingClientRect().height > 0, fixed: style.position === "fixed", pointer: style.pointerEvents,
+          colour: parts(colours[0]).slice(0, 3), clear: parts(colours[colours.length - 1])[3] === 0, height: Math.round(fade.getBoundingClientRect().height) }; }),
       innerHeight, scrollY: Math.round(scrollY), scrollMax: Math.max(0, document.documentElement.scrollHeight - innerHeight), foot: parseFloat(getComputedStyle(document.documentElement).paddingBottom) || 0, head: parseFloat(getComputedStyle(document.documentElement).paddingTop) || 0 };
   }
   // R-PAGE-16: nothing a person can press stands under what floats over the page. `args.zones` are the places of the composer, the answer line, the

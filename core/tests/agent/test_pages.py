@@ -1034,6 +1034,8 @@ def test_the_helper_says_the_pages_own_tone_and_fades_what_scrolls_under_the_win
     shade = _HELPER[_HELPER.index("const shade = () => {"):_HELPER.index("const lift = () => {")]
     assert "0.2126 * lin(colour[0]) + 0.7152 * lin(colour[1]) + 0.0722 * lin(colour[2]) > 0.179 ? 'light' : 'dark'" in shade
     assert "post('tone', {tone})" in shade and "'mixed'" in shade
+    assert "position:fixed;left:0;right:0;pointer-events:none" in shade and "linear-gradient(" in shade
+    assert "(at === 'top' ? 'to bottom' : 'to top')" in shade and "const on = room > 0 && colour;" in shade
     # A page opened again is told its tone again; it is read again after a press, a transition, a class or a theme change.
     assert "tone = '';" in _HELPER
     assert "addEventListener('click', settleSoon, true)" in _HELPER and "addEventListener('transitionend', settleSoon, true)" in _HELPER

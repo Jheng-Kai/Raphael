@@ -223,6 +223,7 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
   // composer for good: a part as tall as the window takes the room as its own padding, so its background still runs to the edge, and a smaller
   // one moves by it.
   let foot = 0, head = 0, moved = [], settle = 0, tone = '';
+  const fades = {};
   // The page's own ground (R-PAGE-17): the colour its root paints, else its body's, else (it paints nothing) the app's own colour behind the
   // frame, which follows the colour scheme. A page whose ground is not one opaque colour (a gradient, a picture, a translucent colour) has none.
   const numbers = text => { const match = /^rgba?[(]([^)]*)[)]$/.exec(text); return match ? match[1].split(/[ ,/]+/).filter(Boolean).map(Number) : null; };
@@ -237,10 +238,27 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
     return (own.length > 3 && own[3] !== 1) || colour.length < 3 || colour.some(Number.isNaN) ? null : colour.map(Math.round);
   };
   const lin = value => { value /= 255; return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4); };
-  // What the window's own buttons are drawn in over the page: its tone, light or dark (mixed when it has no one ground).
+  // What the window's own buttons are drawn in over the page (its tone, light or dark; mixed when it has no one ground) and a fade of that
+  // ground at the head and the foot, so what scrolls under the header's buttons and the composer fades out in the page's own colour, never the
+  // app's. The fades are fixed, take no pointer and are none for a page that has no one ground.
   const shade = () => {
     const colour = ground(), say = !colour ? 'mixed' : 0.2126 * lin(colour[0]) + 0.7152 * lin(colour[1]) + 0.0722 * lin(colour[2]) > 0.179 ? 'light' : 'dark';
     if (say !== tone) { tone = say; post('tone', {tone}); }
+    for (const [at, room] of [['top', head], ['bottom', foot]]) {
+      const on = room > 0 && colour;
+      if (!fades[at] && on) {
+        fades[at] = document.createElement('div');
+        fades[at].setAttribute('data-raphael-fade', at);
+        fades[at].style.cssText = 'position:fixed;left:0;right:0;pointer-events:none;z-index:2147483647;' + at + ':0';
+        document.documentElement.appendChild(fades[at]);
+      }
+      if (!fades[at]) continue;
+      fades[at].style.display = on ? 'block' : 'none';
+      if (!on) continue;
+      const solid = 'rgb(' + colour.join(',') + ')', clear = 'rgba(' + colour.join(',') + ',0)';
+      fades[at].style.height = (room + 16) + 'px';
+      fades[at].style.backgroundImage = 'linear-gradient(' + (at === 'top' ? 'to bottom' : 'to top') + ',' + solid + ' 0,' + solid + ' ' + Math.round(room * 0.85) + 'px,' + clear + ' 100%)';
+    }
   };
   const lift = () => {
     settle = 0;
