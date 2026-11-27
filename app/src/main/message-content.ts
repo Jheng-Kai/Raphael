@@ -174,7 +174,7 @@ const WORD_CHAR = /[\p{L}\p{N}]/u;
  * The owner's own words, drawn as Markdown the way a reply's are: but an address is a plain link in the words (not a chip with its
  * site's mark), a /name the owner's skill, an @ a mention, and a path just words, since it is the owner who wrote them.
  */
-export interface OwnerWords { mentions: readonly MentionTarget[]; skills?: ReadonlyMap<string, number> }
+export interface OwnerWords { mentions: readonly MentionTarget[]; skills?: ReadonlyMap<string, number>; /** A group draws an address as the chip a reply's is (R-UI-82). */ chips?: boolean }
 
 function inline(text: string, query: string, markdown: boolean, urls: Set<string>, depth = 0, mentions: readonly MentionTarget[] = [], files?: KnownFiles, owner?: OwnerWords): string {
   let out = "", at = 0, plain = "";
@@ -186,7 +186,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
     const url = messageUrl(raw);
     if (!url) return null;
     urls.add(url);
-    if (owner) return `<a class="message-link" href="${esc(url)}" data-act="open-url" data-url="${esc(url)}" rel="noreferrer noopener">${label === undefined || !label.trim() ? esc(raw) : highlightHTML(label, query)}</a>`;
+    if (owner && !owner.chips) return `<a class="message-link" href="${esc(url)}" data-act="open-url" data-url="${esc(url)}" rel="noreferrer noopener">${label === undefined || !label.trim() ? esc(raw) : highlightHTML(label, query)}</a>`;
     return linkChipHTML(url, label === undefined || !label.trim() ? null : highlightHTML(label, query), query);
   };
   while (at < text.length) {
@@ -248,7 +248,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
     const raw = /^https?:\/\//i.test(text.slice(at, at + 8)) ? bareUrl(text.slice(at)) : "";
     if (raw) {
       // The owner's address stays words (the owner's text links it): its underscores and stars are not emphasis.
-      if (owner && markdown && messageUrl(raw)) { urls.add(messageUrl(raw)!); plain += raw; at += raw.length; continue; }
+      if (owner && !owner.chips && markdown && messageUrl(raw)) { urls.add(messageUrl(raw)!); plain += raw; at += raw.length; continue; }
       const html = link(raw);
       if (html) { flush(); out += html; at += raw.length; continue; }
     }
@@ -462,8 +462,8 @@ function ownerBlockHTML(block: MessageBlock, query: string, owner: OwnerWords): 
  * The owner's own message as Markdown, the way a reply is drawn (headings, lists, tasks, quotes, code, tables, equations, toggles):
  * what the composer showed is what the bubble shows. Its addresses, /skills and @mentions are the owner's (OwnerWords).
  */
-export function ownerMessageHTML(text: string, query: string, mentions: readonly MentionTarget[], skills?: ReadonlyMap<string, number>): string {
-  const owner: OwnerWords = { mentions, skills };
+export function ownerMessageHTML(text: string, query: string, mentions: readonly MentionTarget[], skills?: ReadonlyMap<string, number>, chips = false): string {
+  const owner: OwnerWords = { mentions, skills, chips };
   return parseMessageBlocks(text).map(block => ownerBlockHTML(block, query, owner)).join("");
 }
 

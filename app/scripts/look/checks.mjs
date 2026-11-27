@@ -6873,7 +6873,7 @@ export function checkRendered(name, context = {}) {
     require(keys.every(call => call.conversationId === composed.conversationId && (call.memberId ?? 0) === (composed.memberId ?? 0)), "the key and the composer name the same conversation");
     require(!calls.some(call => call.command === "agent_ask_text"), "no second, typed message was sent");
     const form = [...document.querySelectorAll('.composer')].find(visible);
-    require(form.querySelector('textarea').value === "" && !form.querySelector('.cmp-chip'), "the composer is empty, as after a typed send");
+    require(form.querySelector('.cmp-input').value === "" && !form.querySelector('.cmp-chip'), "the composer is empty, as after a typed send");
     return { check: name, member: composed.memberId ?? 0, conversation: composed.conversationId, files: composed.attachments.length };
   }
   if (name === "thread-clear-of-fade") {
@@ -7625,7 +7625,7 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('#app-popover'), "picking closes the menu");
     require(input.value === "請幫我整理這份報告 /review ", `the name stands where the slash was, after the words: ${JSON.stringify(input.value)}`);
     require(input.selectionStart === input.value.length && document.activeElement === input, "the caret is after the name, in the field");
-    const chip = [...document.querySelectorAll('.composer .cmp-mirror .mention-chip')].map(node => node.textContent);
+    const chip = [...document.querySelectorAll('.composer .cmp-input .cmp-skill')].map(node => node.textContent);
     require(chip.length === 1 && chip[0] === "/review", `the picked name is drawn as one chip: ${JSON.stringify(chip)}`);
     return { check: name, value: input.value };
   }
@@ -12037,7 +12037,7 @@ export function checkRendered(name, context = {}) {
   if (name === "composer-pair") {
     const form = [...document.querySelectorAll(".composer")].find(visible);
     const send = form.querySelector(".cmp-send"), voice = form.querySelector(".cmp-voice");
-    const hasDraft = !!form.querySelector("textarea").value.trim();
+    const hasDraft = !!form.querySelector(".cmp-input").value.trim();
     const shown = hasDraft ? send : voice, gone = hasDraft ? voice : send, a = shown.getBoundingClientRect();
     require(a.width === 32 && a.height === 32, "the one right-hand control is 32px");
     require(gone.getBoundingClientRect().width === 0, "send and the emblem share one slot: only one shows");

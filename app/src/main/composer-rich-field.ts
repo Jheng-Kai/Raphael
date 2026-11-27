@@ -302,6 +302,8 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
     state: EditorState.create({ schema: S, doc: documentOf(""), plugins }),
     nodeViews: composerNodeViews,
     attributes: { class: "cmp-input", role: "textbox", "aria-multiline": "true", enterkeyhint: "send", autocapitalize: "off" },
+    // Escape is the page's (it cancels a task, closes a menu): the editor would swallow it as it does Enter.
+    handleDOMEvents: { keydown: (_view, event) => event.key === "Escape" },
     clipboardTextSerializer: slice => fragmentToMarkdown(slice.content),
     clipboardTextParser: (words, _context, plain) => plain || !looksLikeMarkdown(words) ? literalSlice(words) : markdownSlice(words),
     transformPastedHTML: normalizePastedHTML,

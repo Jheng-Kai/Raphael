@@ -89,3 +89,9 @@ describe("a reply draws the same Markdown, and copies back as it was written", (
     expect(el.querySelector<HTMLDetailsElement>("details")!.open).toBe(true);
   });
 });
+
+test("a group draws the owner's address as the chip a reply's is", () => {
+  const el = document.createElement("div");
+  el.innerHTML = ownerMessageHTML("see https://example.com/page", "", [], undefined, true);
+  expect(el.querySelector("a.link-chip")?.getAttribute("data-url")).toBe("https://example.com/page");
+});
