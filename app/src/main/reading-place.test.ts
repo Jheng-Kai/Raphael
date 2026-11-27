@@ -3,7 +3,9 @@
 // place it had, it does not read as "at the bottom". What stands under the thread growing or shrinking is the thread's one stick
 // to the bottom (message-rich.test.ts).
 import { afterEach, expect, test, vi } from "vitest";
-import { followLines, keepReadingPlace, NUDGE_PX, SETTLE_MS } from "./reading-place";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { followLines, keepReadingPlace, LINE_STEP_PX, NUDGE_PX, SETTLE_MS } from "./reading-place";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
@@ -98,15 +100,18 @@ const frame = (frames: (() => void)[]): void => { frames.splice(0).forEach(run =
  * the thread. The observers the page made hand their callbacks back, in the order they were made.
  */
 const LINE = 20;
-function textIn(scroller: HTMLElement, chars = 2000): { model: { perLine: number; base: number; top: number; client: number }; fire(): void; topOf(at: number): number } {
+function textIn(scroller: HTMLElement, chars = 2000): { model: { perLine: number; base: number; top: number; client: number; col: number }; column: HTMLElement; fire(): void; topOf(at: number): number } {
   const callbacks: (() => void)[] = [];
   vi.stubGlobal("ResizeObserver", class { constructor(callback: () => void) { callbacks.push(callback); } observe() {} disconnect() { callbacks.length = 0; } });
   const item = document.createElement("div");
   item.className = "item";
   item.append(document.createTextNode("字".repeat(chars)));
-  scroller.append(item);
+  const column = document.createElement("div");
+  column.className = "ra-col";
+  column.append(item);
+  scroller.append(column);
   document.body.append(scroller);
-  const model = { perLine: 20, base: 100, top: 0, client: 600 };
+  const model = { perLine: 20, base: 100, top: 0, client: 600, col: 600 };
   const topOf = (at: number): number => model.base + Math.floor(at / model.perLine) * LINE - model.top;
   const rect = (top: number, height: number): DOMRect => ({ top, bottom: top + height, left: 0, right: 10, width: 10, height } as DOMRect);
   vi.spyOn(document, "createRange").mockImplementation(() => {
@@ -119,12 +124,13 @@ function textIn(scroller: HTMLElement, chars = 2000): { model: { perLine: number
   });
   item.getBoundingClientRect = () => rect(model.base - model.top, Math.ceil(chars / model.perLine) * LINE);
   scroller.getBoundingClientRect = () => rect(0, model.client);
+  column.getBoundingClientRect = () => ({ ...rect(model.base - model.top, 400), width: model.col } as DOMRect);
   Object.defineProperties(scroller, {
     scrollTop: { configurable: true, get: () => model.top, set: (value: number) => { model.top = Math.max(0, value); } },
     clientWidth: { configurable: true, get: () => 600 }, clientHeight: { configurable: true, get: () => model.client },
     scrollHeight: { configurable: true, get: () => model.base + Math.ceil(chars / model.perLine) * LINE + 40 },
   });
-  return { model, fire: () => callbacks.slice().forEach(run => run()), topOf };
+  return { model, column, fire: () => callbacks.slice().forEach(run => run()), topOf };
 }
 
 test("a dragged edge leaves the column its own width: no word is held at an old width, covered or cut", () => {
@@ -199,7 +205,10 @@ test("each frame is measured for its own lines before the line read is put back,
   const order: string[] = [];
   scroller.addEventListener("conversation-measure", () => order.push("measure"));
   const letGo = followLines();
-  at.model.perLine = 15;
+  // Frames in which the column keeps its width do not measure; the one that crosses a step does.
+  at.fire();
+  expect(order).toEqual([]);
+  at.model.perLine = 15; at.model.col = 552;
   at.fire();
   expect(order).toEqual(["measure"]);
   letGo();
@@ -281,4 +290,31 @@ test("a scroll of the person's own in the nudge's frame is not taken back", () =
   at.scroller.scrollTop = 2000;
   frame(at.frames);
   expect(at.scroller.scrollTop).toBe(2000);
+});
+
+test("a dragged edge steps the column's width: a grid through the width it has, taken at the press and given back at the release", () => {
+  vi.stubGlobal("requestAnimationFrame", (run: () => void) => { run(); return 1; });
+  const scroller = document.createElement("div");
+  scroller.className = "ra-scroll";
+  const at = textIn(scroller);
+  at.model.top = 160; at.model.col = 611;
+  keepReadingPlace(scroller, ".item", 4, false);
+  expect(scroller.dataset.stepping).toBeUndefined();
+  const letGo = followLines();
+  // 611 = 25 * 24 + 11: the grid is 11 px (less a hair, so the width it has is never rounded down a step) plus whole steps.
+  expect(scroller.dataset.stepping).toBe("");
+  expect(parseFloat(at.column.style.getPropertyValue("--step-r"))).toBeCloseTo(10.98, 2);
+  expect(LINE_STEP_PX).toBe(24);
+  letGo();
+  expect(scroller.dataset.stepping).toBeUndefined();
+  expect(at.column.style.getPropertyValue("--step-r")).toBe("");
+  scroller.remove();
+});
+
+test("the stylesheet steps the column's width down to the grid and never past the pane", () => {
+  const css = readFileSync(join(__dirname, "agent.css"), "utf8");
+  const rule = css.match(/\.ra-scroll\[data-stepping\] > \.ra-col \{([^}]*)\}/)?.[1] ?? "";
+  expect(rule).toContain("round(down, calc(100% - var(--step-r)), 24px)");
+  expect(rule).toContain("min(var(--pa-colw)");
+  expect(css).toMatch(/@property --step-r \{ syntax: "<length>"; inherits: false;/);
 });

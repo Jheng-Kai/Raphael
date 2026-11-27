@@ -82,8 +82,8 @@ export default [
     // What a drag may cost (R-PERF-25): a style write restyles the elements that read the width, a hundred or so, where the width held on
     // the root or the page restyled the whole window (1,000 to 1,500 elements) for each move; and no more than a few frames are later than 50 ms.
     // With `anchor` (R-PERF-27): no text reaches past the conversation's own area (the list, the panel and the window never cover or cut a word), the
-    // line read keeps its place on the screen to within a pixel, nothing jumps and comes back in the next frame, and a frame's own work stays near a frame (24 ms at its 95th percentile: this PC is shared, the same drags run at 5 to 15 ms when it is quiet).
-    const probe = step => ({ action: "resize-probe", limits: step.edge ? { recalcElementsPerWrite: 300, framesOver50: 8, wholeSteps: 0, ...(step.anchor ? { overflowMax: 1.5, hscrollMax: 0, anchorDrift: 1, flicker: 2, workMsP95: 24 } : {}) } : {}, ...step });
+    // line read keeps its place on the screen to within a pixel, nothing jumps and comes back in the next frame, the column's width changes only by whole steps (`colOffGrid`), and a frame's own work stays inside a frame (16 ms at its 95th percentile).
+    const probe = step => ({ action: "resize-probe", limits: step.edge ? { recalcElementsPerWrite: 300, framesOver50: 8, wholeSteps: 0, ...(step.anchor ? { overflowMax: 1.5, hscrollMax: 0, anchorDrift: 1, flicker: 2, colOffGrid: 0, workMsP95: 16 } : {}) } : {}, ...step });
     const middle = [{ action: "scroll", selector: ".page-agent .thread > li:nth-child(5)", block: "start" }, { action: "wait", selector: ".page-agent .thread > li:nth-child(5)" }];
     return [
       scene("sidebar-resize-smooth", "Dragging the list's edge draws every frame and moves no word under the panes: the conversation takes the width it has at every moment and the line read, here the last one of a conversation at its bottom, stays where it stands", [...ready, wide(probe({ edge: ".side-edge", dx: -100, moves: 100, watch: words, anchor: true, shots: 3 }))], { dragThread: true }),

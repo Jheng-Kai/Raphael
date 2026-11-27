@@ -25,7 +25,7 @@ import { summarizeTrace } from "./drag-probe.mjs";
  * `toggle` instead of an edge opens and closes a pane (the list: "sidebar", the panel: a selector to press) and measures the same.
  * `limits` fails the step. Throws an error that carries `assertion`.
  */
-export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = [], everyWord = false, anchor = false, shots = 0, limits = {}, ...rest }, directory) {
+export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = [], everyWord = false, anchor = false, shots = 0, step = 24, limits = {}, ...rest }, directory) {
   // `LOOK_RESIZE_THROTTLE=4` slows the page's CPU four times, as a PC with a quarter of this one's speed.
   const throttle = Number(process.env.LOOK_RESIZE_THROTTLE) || rest.throttle || 1;
   await page.waitForFunction(() => {
@@ -85,6 +85,7 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
       // The conversation's own boxes (`anchor`): the area its words may fill (the stage between the panes), the line the owner reads, and
       // every text of the stage, read each frame against that area.
       const scroller = anchor ? document.querySelector(".page-agent:not([hidden]) .ra-scroll") : null, stage = scroller?.closest(".ra-stage") ?? scroller;
+      const column = scroller?.querySelector(":scope > .ra-col");
       const area = () => { const box = stage.getBoundingClientRect(); return { left: Math.max(0, box.left), right: Math.min(innerWidth, box.right) }; };
       const stageTexts = scroller ? [...stage.querySelectorAll("*")].filter(node => {
         if (!(node instanceof HTMLElement) || node.closest("[hidden], [aria-hidden='true'], svg")) return false;
@@ -142,7 +143,7 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
             const out = Math.max(now.left - box.left, box.right - now.right);
             if (out > over) { over = out; who = seen.stageNames[at]; }
           });
-          row.over = over; row.overWho = who; row.hscroll = scroller.scrollWidth - scroller.clientWidth; row.line = lineTop(); row.scrollTop = scroller.scrollTop; row.gap = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
+          row.over = over; row.overWho = who; row.hscroll = scroller.scrollWidth - scroller.clientWidth; row.line = lineTop(); row.scrollTop = scroller.scrollTop; row.gap = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop; row.col = column?.getBoundingClientRect().width;
         }
         for (const entry of watch) {
           const node = document.querySelector(entry.selector);
@@ -354,6 +355,19 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
         overflowMax: round(Math.max(0, ...rows.map(row => row.over ?? 0)), 1), overflowFrames: rows.filter(row => (row.over ?? 0) > 1.5).length,
         overflowWho: [...new Set(rows.filter(row => (row.over ?? 0) > 1.5).map(row => row.overWho))].slice(0, 6),
         hscrollMax: Math.max(0, ...rows.map(row => row.hscroll ?? 0)),
+      });
+      // The column's width goes in steps while the edge is held (R-PERF-27): it changes only by whole steps (`colOffGrid` counts the frames
+      // that moved it by anything else) and the paragraphs wrap again only in those frames (`colSteps`, against `moves` pointer moves out and back).
+      const cols = rows.filter(row => row.pressed && row.col != null).map(row => row.col);
+      let colSteps = 0, colOffGrid = 0;
+      cols.forEach((width, at) => {
+        if (!at || Math.abs(width - cols[at - 1]) < 0.01) return;
+        colSteps++;
+        const change = Math.abs(width - cols[at - 1]), off = Math.abs(change / step - Math.round(change / step)) * step;
+        if (off > 0.2) colOffGrid++;
+      });
+      Object.assign(result, {
+        colSteps, colOffGrid, colStep: step, colWidths: [...new Set(cols.map(width => Math.round(width * 10) / 10))].length,
         ...(process.env.LOOK_SERIES ? { anchorSeries: rows.filter(row => row.pressed).map(row => [Math.round((row.line ?? -1) * 10) / 10, Math.round(row.scrollTop * 10) / 10, Math.round(row.nav)]) } : {}),
       });
     }

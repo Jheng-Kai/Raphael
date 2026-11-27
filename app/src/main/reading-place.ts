@@ -63,7 +63,7 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
   let frame = 0, settle = 0, cancelNudge = (): void => {};
   const paint = (): void => { cancelNudge(); cancelNudge = repaintView(scroller, slack); };
   // A drag of an edge in the window (`followLines`) owns the place until it is let go: the line read, or the bottom.
-  let drag: { line: Line | null; want: number; observer: ResizeObserver | null } | null = null;
+  let drag: { line: Line | null; want: number; observer: ResizeObserver | null; lines: number } | null = null;
   const resized = (): void => {
     const now = lineWidth();
     // Not drawn: the width it had stays the one to compare with when it is drawn again, and the place it had with it.
@@ -108,13 +108,22 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
     const bottom = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= slack;
     const line = bottom ? null : readLine(scroller, items);
     if (!bottom && !line) return null;
-    const own = drag = { line, want: line ? (lineTop(line) ?? 0) - scroller.getBoundingClientRect().top : 0, observer: null as ResizeObserver | null };
+    const own = drag = { line, want: line ? (lineTop(line) ?? 0) - scroller.getBoundingClientRect().top : 0, observer: null as ResizeObserver | null, lines: column.getBoundingClientRect().width };
+    // The column's width goes in steps (agent.css `data-stepping`): the grid of widths it may take passes through the width it has
+    // now, so nothing wraps again when the edge is taken, and a width never passes the space the pane leaves.
+    const stepped = column !== scroller;
+    if (stepped) {
+      column.style.setProperty("--step-r", `${((own.lines % LINE_STEP_PX) - 0.02).toFixed(2)}px`);
+      scroller.dataset.stepping = "";
+    }
     // A place in the middle is the owner's: the thread does not follow its newest turn while the lines move under it.
     if (line) scroller.dispatchEvent(new CustomEvent("conversation-hold"));
     const keep = (): void => {
       if (drag !== own || !scroller.clientHeight) return;
-      // Folds and the like are measured for the lines of this frame before the place is read (the page listens).
-      scroller.dispatchEvent(new CustomEvent("conversation-measure"));
+      // Folds and the like are measured for the lines of this frame before the place is read (the page listens); the lines change
+      // only in the frames where the column crosses a step.
+      const lines = column.getBoundingClientRect().width;
+      if (lines !== own.lines) { own.lines = lines; scroller.dispatchEvent(new CustomEvent("conversation-measure")); }
       if (!own.line) { scroller.scrollTop = scroller.scrollHeight; return; }
       const at = lineTop(own.line);
       if (at === null) return;
@@ -129,6 +138,8 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
     return () => {
       if (drag !== own) return;
       own.observer?.disconnect();
+      if (stepped) { delete scroller.dataset.stepping; column.style.removeProperty("--step-r"); }
+      own.lines = -1;
       keep();
       drag = null;
       width = lineWidth() || width;
@@ -146,6 +157,8 @@ interface Keeper { press(): (() => void) | null }
 const keepers = new Set<Keeper>();
 /** A line's top that is still the same to the eye: a move of less than this is the browser's rounding of the scroll to a device pixel. */
 const LINE_SLACK_PX = 0.5;
+/** The steps of the column's width while an edge is dragged (px): the lines wrap again when the width crosses one, not at every pixel. Keep it equal to `--step` in agent.css. */
+export const LINE_STEP_PX = 24;
 
 /** A position in a text: the character that starts a line the owner reads. Its top is where that line stands. */
 export interface Line { text: Text; offset: number }

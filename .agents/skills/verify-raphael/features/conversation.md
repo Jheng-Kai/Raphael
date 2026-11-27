@@ -61,8 +61,10 @@ old width, so no word is covered by the list or the panel. `followLines` (`readi
 taken: each conversation finds the line its owner reads (`readLine`: the first line whole in view, by its text position, or the bottom for a
 thread at its bottom) and makes one ResizeObserver, told after the page's own, that puts that line back where it stood in the frame of each
 change. A thread read in the middle is told to hold its place (`conversation-hold`); the page's message folds are measured in the same frame
-(`conversation-measure`), so a fold never lags the width by a frame. The paragraphs around the line wrap again as the width says; the line
-read does not move. Letting go measures once more and gives the page its own anchor back.
+(`conversation-measure`), so a fold never lags the width by a frame. The column's width goes in steps of 24 px while the edge is held (`data-stepping`, `--step-r` and the `.ra-scroll[data-stepping] > .ra-col`
+rule in `agent.css`: the pane's width rounded down to a grid through the width the column had at the press, never past the pane), so the
+paragraphs wrap again when the width crosses a step, a few times for a drag, and not at every pixel; the line read does not move, and the
+words move sideways with the column between steps. Letting go sets the exact width once. Letting go measures once more and gives the page its own anchor back.
 
 ```powershell
 npm run look -- follow-reply-bottom follow-reply-reading follow-reply-near follow-open-pictures chat send-prompt busy-team-follow busy-team-anchor generated-image picture-message picture-message-menu picture-message-reply page-composer-grows member-settings-back-bottom member-settings-back-kept conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom owner-question-brought owner-question-pending-page owner-question-pending-room --theme both --width 1120,720,1920x1080
