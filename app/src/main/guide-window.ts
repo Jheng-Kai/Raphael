@@ -1,7 +1,8 @@
 // The guide is a card of its own size: while it is up the window is exactly the
-// card under the control strip, cannot be resized or maximized, and afterwards it returns to the size, place and
-// maximized state it had.
-import { LogicalSize, type PhysicalPosition, type PhysicalSize } from "@tauri-apps/api/window";
+// card under the control strip and cannot be resized or maximized. The first run opens the window at that size already
+// (lib.rs `opening_size`), and when the guide ends the window keeps its size and place and is only given its resizing back:
+// the step from the guide into the app is a step into a page, not into a new window, and nothing resizes under it.
+import { LogicalSize, type PhysicalSize } from "@tauri-apps/api/window";
 
 /** The card (`.ob-card` in styles.css): roomy enough for a store of three columns. */
 export const GUIDE_WIDTH = 1080;
@@ -12,12 +13,8 @@ const MIN_WIDTH = 720, MIN_HEIGHT = 480, MARGIN = 32;
 /** The native operations this needs, so a test can stand in for the window. */
 export interface GuideWindow {
   isMaximized(): Promise<boolean>;
-  outerSize(): Promise<PhysicalSize>;
-  outerPosition(): Promise<PhysicalPosition>;
   unmaximize(): Promise<void>;
-  maximize(): Promise<void>;
   setSize(size: LogicalSize | PhysicalSize): Promise<void>;
-  setPosition(position: PhysicalPosition): Promise<void>;
   setResizable(resizable: boolean): Promise<void>;
   setMaximizable(maximizable: boolean): Promise<void>;
   center(): Promise<void>;
@@ -34,17 +31,12 @@ let restore: (() => Promise<void>) | null = null;
  */
 export async function fitGuideWindow(win: GuideWindow, controls: number, root: HTMLElement = document.documentElement, room?: ScreenRoom): Promise<void> {
   if (restore) return;
-  const maximized = await win.isMaximized();
-  // The size to give back is the window's ordinary one, read once it is no longer maximized: read while maximized it is
-  // the whole screen, and giving that back made the screen-sized window what 「還原」 returned to.
-  if (maximized) await win.unmaximize();
-  const size = await win.outerSize(), position = await win.outerPosition();
+  if (await win.isMaximized()) await win.unmaximize();
+  // What the window gives back is only what the card took away. Its bounds stay the guide's: a resize on the way into the
+  // app showed the webview's own background at the window's edge, and made the app a new window.
   restore = async () => {
     await win.setResizable(true);
     await win.setMaximizable(true);
-    await win.setSize(size);
-    await win.setPosition(position);
-    if (maximized) await win.maximize();
   };
   const free = room ? await room().catch(() => null) : null;
   const width = free ? Math.max(MIN_WIDTH, Math.min(GUIDE_WIDTH, Math.floor(free.width - MARGIN))) : GUIDE_WIDTH;
@@ -56,7 +48,7 @@ export async function fitGuideWindow(win: GuideWindow, controls: number, root: H
   root.dataset.windowFixed = "true";
 }
 
-/** Gives the window back what it had before the guide. */
+/** Lets the window be resized and maximized again, at the size and place the guide left it. */
 export async function releaseGuideWindow(root: HTMLElement = document.documentElement): Promise<void> {
   const back = restore;
   restore = null;

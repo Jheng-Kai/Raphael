@@ -6685,6 +6685,19 @@ export function checkRendered(name, context = {}) {
     require(field?.getAttribute('placeholder') === "關於 Slack 的設定，直接問我", `the field asks about the Slack setup that waits: ${field?.getAttribute('placeholder')}`);
     return { check: name };
   }
+  if (name === "guide-window-kept") {
+    // Leaving the guide gives the window its resizing back and nothing else: the one size request is the guide's own, and no
+    // size, place or maximize request follows it, so the app is entered at the bounds the guide had (R-GUIDE-04).
+    const calls = (window.__look.windowCalls ?? []).map(call => call.command);
+    require(document.documentElement.dataset.windowFixed === undefined, "the window is no longer fixed once the guide is over");
+    require(calls.filter(command => command === "set_size").length === 1, `one size request in all, the guide's own: ${calls.join(", ")}`);
+    require(!calls.some(command => ["set_position", "maximize"].includes(command)), `no place or maximize request at all: ${calls.join(", ")}`);
+    // The guide's own start ends with its centring; what follows is the end of the guide, which gives back the resizing only.
+    const end = (window.__look.windowCalls ?? []).slice(calls.lastIndexOf("center") + 1);
+    require(end.every(call => ["set_resizable", "set_maximizable"].includes(call.command)), `nothing but the resizing comes back at the end: ${end.map(call => call.command).join(", ")}`);
+    require(end.some(call => call.command === "set_resizable" && call.args.value === true) && end.some(call => call.command === "set_maximizable" && call.args.value === true), "the window is resizable and maximizable again");
+    return { check: name };
+  }
   if (name === "guide-window-fixed") {
     // The guide's window is its card, fixed; the language dropdown stands without a label.
     const calls = window.__look.windowCalls ?? [], size = JSON.stringify(calls.find(call => call.command === "set_size")?.args ?? {});

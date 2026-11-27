@@ -6,8 +6,13 @@ While the guide is up the window is the card itself: guide-window.ts
 sizes it to 1080 x 720 under the control strip (on a screen
 whose free area is smaller it takes that area less a 32 px edge, never below the app's 720 x 480), centres it,
 turns off resizing and maximizing (no maximize
-button, no resize edges, a double-click on the strip does nothing) and gives back the earlier size, place
-and maximized state when the guide ends; `guide-window-fixed` in the onboarding scene checks the requests.
+button, no resize edges, a double-click on the strip does nothing) and, when the guide ends, gives back only the resizing and
+maximizing: the window keeps the size and place the guide had, so the step into the app is a step into a page and not a new
+window (R-GUIDE-04). A first run opens at that size already (lib.rs `opening_size`: 1080 x 752, centred), and the window's
+backdrop is painted with its theme (`backdrop`: black in dark, the sidebar's grey in light, never the webview's white) from
+the window's creation and again whenever its theme changes, so no light strip shows at its edge while it is shown or resized.
+`guide-window-fixed` in the onboarding scene checks the requests while the guide is up, `guide-window-kept` in
+`after-onboarding` those at its end: one size and one place request in all, none after the guide.
 The welcome's language is a quiet button at the card's top left (globe, the language's own name, chevron; its
 name is its aria-label) that opens the language picker (language-picker.ts: each language in its own script, a
 search field once there are more than eight).
