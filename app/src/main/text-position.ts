@@ -1,3 +1,4 @@
+import { richFieldOf } from "./composer-rich-handle";
 const anchors = new WeakMap<HTMLInputElement | HTMLTextAreaElement, { prefix: string; rect: () => DOMRect }>();
 
 /** A completion stays at the token's start while its query changes. Scroll and resize can still move it. */
@@ -11,6 +12,8 @@ export function completionAnchor(input: HTMLInputElement | HTMLTextAreaElement, 
 
 /** Measure a text position using the field's font, wrapping, padding and scroll offset. */
 export function textPositionRect(input: HTMLTextAreaElement | HTMLInputElement, position: number, parent: Element = document.body): DOMRect {
+  const rich = richFieldOf(input);
+  if (rich) return rich.caretRect(position);
   const style = getComputedStyle(input), bounds = input.getBoundingClientRect();
   if (position === 0 && style.direction === "ltr" && (style.textAlign === "start" || style.textAlign === "left") && style.textIndent === "0px") {
     return new DOMRect(bounds.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft) - input.scrollLeft,

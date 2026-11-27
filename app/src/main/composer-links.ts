@@ -20,7 +20,11 @@ export function linkRanges(text: string): LinkRange[] {
   return ranges;
 }
 
-/** The words as they leave the field: already whole. */
+/** An item or a quote line the editor keeps open at the end (`2. `, `- [ ] `, `>`): it holds no words. */
+const OPEN_END = /(?:^|\n)(?: *(?:[-+*]|\d{1,9}[.)])(?: \[[ xX]\])? | *>)$/;
+
+/** The words as they leave the field: every address whole, and no empty item left open at the end. */
 export function wholeLinks(text: string): string {
+  for (let next = text.replace(OPEN_END, ""); next !== text; next = text.replace(OPEN_END, "")) text = next;
   return text;
 }

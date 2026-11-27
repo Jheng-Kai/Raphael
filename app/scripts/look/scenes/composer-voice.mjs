@@ -14,6 +14,6 @@ export default [
     [...quick, check("composer-voice-idle"), listening, wait(recording), check("composer-voice-recording"), click(".cmp-voice"), wait('.composer[data-task-state="ack"]'), check("composer-voice-sent")], { ownerVoice: "pending" }),
   // One press sends everything: the recording, the picture and the typed words, in Raphael's quick conversation and in a member's.
   ...[["quick", 0, quick], ["member", 1, [member(1)]]].map(([name, id, open]) => scene(`composer-voice-attachment-${name}`, "A picture and words in the composer go out with the recording in one press",
-    [...open, paste(".composer textarea", { image: "clipboard.png" }), wait(".composer .cmp-chip img.cmp-thumb"), type(".composer textarea", "Look at this picture"),
+    [...open, paste(".composer .cmp-input", { image: "clipboard.png" }), wait(".composer .cmp-chip img.cmp-thumb"), type(".composer .cmp-input", "Look at this picture"),
       { action: "main-event", event: { type: "Dictation", phase: "listening", agent: true, member_id: id } }, wait(recording), click(".cmp-voice"), wait('.composer[data-task-state="ack"]'), check("composer-voice-attachment")], { ownerVoice: "pending" })),
 ];

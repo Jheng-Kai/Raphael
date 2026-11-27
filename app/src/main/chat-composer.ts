@@ -6,6 +6,7 @@ import { cancelGesture } from "../shared/cancel-gesture";
 import "../shared/cancel-gesture.css";
 import "../shared/task-action.css";
 import { bindComposerHistory } from "./composer-history";
+import { mountRichField } from "./composer-rich-field";
 import { bindComposerLearning, learnComposerCorrections } from "./composer-learning";
 import { ATTACH_MAX, TOTAL_MAX_BYTES, attachmentLimit, readComposerFile, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileKind, fileMime } from "./attachments";
 import { avatarHTML } from "./avatar";
@@ -79,7 +80,7 @@ export function drawTaskSlot(el: HTMLElement, state: ComposerTaskState, stopping
 export function composerHTML(folder = false): string {
   // The files wait in one row that scrolls sideways under the mouse wheel, with an arrow and a fade at an end with more (chip-scroll.ts, R-ATTACH-01).
   return `<div class="cmp-quote" hidden></div><div class="cmp-files" data-chip-row><div class="cmp-file" data-chip-scroll hidden></div>${chipSteps()}</div><div class="cmp-row">` +
-    `<div class="cmp-field"><textarea class="cmp-input" rows="1" autocomplete="off" enterkeyhint="send"></textarea><div class="cmp-mirror" aria-hidden="true"></div></div>` +
+    `<div class="cmp-field"><div class="cmp-input"></div></div>` +
     `<div class="cmp-bar"><button type="button" class="btn cmp-attach"${folder ? ' aria-haspopup="menu" aria-expanded="false"' : ' data-act="attach"'}>${ico("plus")}</button>` +
     `<button type="button" class="btn sm cmp-mode" aria-haspopup="menu" aria-expanded="false" data-mode="direct">${ico(MODES.direct.icon)}<span></span></button>` +
     (folder ? `<button type="button" class="btn sm cmp-work cmp-folder" aria-haspopup="menu" aria-expanded="false" hidden>${ico("folder")}<span class="owner-data"></span></button>` +
@@ -226,7 +227,7 @@ export function wavBytes(channels: readonly Float32Array[], rate: number): Uint8
 
 export function createChatComposer(options: { placeholder(): string; transcriptTarget?(): (text: string) => void; send(text: string, files: WireAttachment[]): Promise<void>; answerPage?(pageId: string, text: string): boolean; stopTask?(): Promise<void> }) {
   const el=document.createElement("form");el.className="composer";el.noValidate=true;el.innerHTML=composerHTML();
-  const input=el.querySelector<HTMLTextAreaElement>("textarea")!,send=el.querySelector<HTMLButtonElement>(".cmp-send")!,voice=el.querySelector<HTMLButtonElement>(".cmp-voice")!,picker=el.querySelector<HTMLInputElement>(".cmp-picker")!;
+  const input=mountRichField(el.querySelector<HTMLElement>(".cmp-input")!),send=el.querySelector<HTMLButtonElement>(".cmp-send")!,voice=el.querySelector<HTMLButtonElement>(".cmp-voice")!,picker=el.querySelector<HTMLInputElement>(".cmp-picker")!;
   const learning=bindComposerLearning(input);bindComposerHistory(input,()=>api.agentSent());
   const pageDraft = bindPageComposer(input);
   let taskRun=0, discardVoice=false, transcribing=false;

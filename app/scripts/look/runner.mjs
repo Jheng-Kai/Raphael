@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { createRequire } from "node:module";
@@ -17,6 +17,9 @@ import { coveredByTrafficLights, drawTrafficLights, trafficLights } from "./traf
 
 /** Product, model, unit, key names and external menu paths that stay in Latin letters in every language. */
 // Integrated model and service names, and bundled license attributions, stay in Latin letters.
+/** Where the installed packages really are: a worktree's `node_modules` may be a junction to another checkout's, and the dev server serves a package's own files (KaTeX's fonts) from there. */
+const modulesRoot = app => { try { return realpathSync(join(app, "node_modules")); } catch { return app; } };
+
 export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "ChatGPT", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Telegram", "Slack", "Discord", "Notion", "GitHub", "Mobbin", "MCP", "API", "URL", "CLI", "SSH", "STT", "PDF", "WAV", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Tailscale", "Funnel", "Cloudflare", "Tunnel", "ngrok", "Webhook", "HMAC", "SHA", "Signature", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Opus", "Sonnet", "Antigravity", "KEY=value", "Settings → Project Settings → API Keys"];
 
 LATIN_NAMES.push("1Password");
@@ -170,7 +173,7 @@ export async function run(options) {
         });
       } };
     }
-    server = await createServer({ configFile: false, root: app, cacheDir: join(directory, "vite-cache"), plugins: hostFeed ? [hostFeed] : [], server: { host: "127.0.0.1", port: 0, hmr: false, watch: null, fs: { allow: [app] } } });
+    server = await createServer({ configFile: false, root: app, cacheDir: join(directory, "vite-cache"), plugins: hostFeed ? [hostFeed] : [], server: { host: "127.0.0.1", port: 0, hmr: false, watch: null, fs: { allow: [app, modulesRoot(app)] } } });
     await server.listen();
     await warmupEntries(server, options.selected.map(scene => scene.entry || "index.html"), entry => readFile(join(app, entry), "utf8"));
     const address = server.httpServer.address();

@@ -52,3 +52,9 @@ test("each kept or dropped draft is told by its key, and a row reads its member'
     expect(told).toEqual(['member:3:41', 'member:3:main', 'room:2', 'member:3:main']);
   } finally { window.removeEventListener(DRAFT_EVENT, listen); }
 });
+
+test("a draft written in Markdown is previewed as plain words", () => {
+  writeDraftWords("member:9:main", { text: "# Plan\n\n- **one**\n- two\n\n> quoted" });
+  expect(unsentWords("member", 9)).toBe("Plan one two quoted");
+  writeDraftWords("member:9:main");
+});

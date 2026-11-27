@@ -35,7 +35,7 @@ import { messageExpandHTML } from "./message-preview";
 import { TYPED, VOICE, delegatedTurn, exchangeTurn, hasDetail, highlightHTML, sourceOf, type TurnPart } from "./conversation";
 import { receivedLineHTML } from "./exchange-line";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
-import { fileLinkStamp, linkedText, messageHTML, ownerTextHTML, replyContentHTML, type KnownFiles } from "./message-content";
+import { fileLinkStamp, linkedText, messageHTML, ownerMessageHTML, replyContentHTML, type KnownFiles } from "./message-content";
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
 import { mediaPicture, mediaVideo } from "./picture-message";
@@ -1297,7 +1297,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
       : asked
       ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
-        withReactions(bubbleHTML(said ? ownerTextHTML(turn.question.trim(), query, look.mentions ?? [], look.skills) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`)), queued ? queuedActionsHTML() : ""), turn.reactions?.owner) +
+        withReactions(bubbleHTML(said ? ownerMessageHTML(turn.question.trim(), query, look.mentions ?? [], look.skills) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`)), queued ? queuedActionsHTML() : ""), turn.reactions?.owner) +
         // The read-only earlier version has Copy. The current message's menu decides whether Edit is available.
         (earlierVersion(turn) ? messageActionsHTML(turn.created_at_ms, false, undefined, false)
           : messageActionsHTML(turn.created_at_ms, false, !queued && !secretCancel && cancellable ? "cancel" : "own")) +
@@ -1343,7 +1343,7 @@ export const dayHTML = (label: string): string => `<li class="day"><span>${esc(l
 export function pendingTurnHTML(question: string | null, _source: string, look: TurnLook, files: readonly TurnAttachment[] = [], request?: { id?: string; time: number; quote?: MessageQuote }, nowMs = Date.now(), expanded = false, showPresence = true, tail?: { progress?: string; words?: boolean }): string {
   void nowMs;
   const words =
-    question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : ownerTextHTML(question.trim(), "", look.mentions ?? [], look.skills);
+    question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : ownerMessageHTML(question.trim(), "", look.mentions ?? [], look.skills);
   return (
     `<li class="tn is-pending is-owner-only"${request?.id ? ` data-session="${esc(request.id)}"` : ""}>` +
     `<div class="me"><div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote, messageExpandHTML(question ?? "", expanded))}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +

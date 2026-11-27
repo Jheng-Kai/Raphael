@@ -370,7 +370,10 @@ describe("the composer with images and PDFs", () => {
       field().dispatchEvent(event);
       return event;
     };
-    expect(paste([], "只是文字").defaultPrevented).toBe(false);
+    // Words alone go into the field, where the editor writes them, and attach nothing.
+    paste([], "只是文字");
+    expect(field().value).toBe("只是文字");
+    expect(chips()).toEqual([]);
     expect(paste([new File([PNG], "", { type: "image/png" })]).defaultPrevented).toBe(true);
     await flush();
     expect(chips()).toEqual(["image.png"]);

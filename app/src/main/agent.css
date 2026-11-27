@@ -520,7 +520,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* The composer's line brightens under the pointer, and more while the owner is in it (pressed into it or typing) or it
    holds words. Never from the focus alone: opening a conversation focuses the composer, and a jump lights nothing (R-UI-118). */
 .composer:hover { border-color: var(--line-lit); }
-.composer[data-engaged], .composer:has(.cmp-input:not(:placeholder-shown)) { border-color: var(--line-focus); }
+.composer[data-engaged], .composer:has(.cmp-input:not(:placeholder-shown, [data-empty])) { border-color: var(--line-focus); }
 /* The shadow is always black and focus changes nothing, so opening a conversation (which focuses the field)
    lights no halo around it in the dark theme. */
 .cmp-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
@@ -570,10 +570,10 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .page-agent .btn.cmp-attach:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .btn.cmp-attach .i { width: 20px; height: 20px; }
 /* The field grows with its text by itself, up to six lines: measured from script, every keystroke laid out the whole thread. */
-.cmp-input { flex: 1; min-width: 0; min-height: var(--pa-cmp-btn); max-height: min(calc(160px + 40 * var(--pa-u)), calc(6lh + 2px)); field-sizing: content; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: var(--pa-cmp-fs)/var(--pa-cmp-lh) var(--voice); padding: var(--pa-cmp-py) 4px; overflow-y: auto; }
+.cmp-input { flex: 1; min-width: 0; min-height: var(--pa-cmp-btn); max-height: min(calc(280px + 60 * var(--pa-u)), 45vh); field-sizing: content; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: var(--pa-cmp-fs)/var(--pa-cmp-lh) var(--voice); padding: var(--pa-cmp-py) 4px; overflow-y: auto; }
 .cmp-input::placeholder { color: var(--text-3); }
 .cmp-input:focus-visible { outline: 0; }
-/* The words live in the textarea. While they address someone, its text is not painted and the same words are drawn over it
+/* A plain textarea field keeps its words in it. While they address someone, its text is not painted and the same words are drawn over it
    (mention-field.ts) with each address as a chip; the caret, selection and input method stay the textarea's own. */
 .cmp-field { position: relative; min-width: 0; }
 .cmp-field > .cmp-input { display: block; width: 100%; }

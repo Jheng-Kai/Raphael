@@ -1,3 +1,5 @@
+import { plainWords } from "./composer-rich-markdown";
+
 /** Words, quotes and page provenance survive restart; file bytes stay in the live composer. */
 export const DRAFT_STORAGE_KEY = "raphael.composer.drafts";
 export interface DraftWords<Q> { text: string; quote?: Q; pageId?: string }
@@ -38,7 +40,8 @@ export function unsentWords(scope: "member" | "room", id: number): string {
   try { raw = localStorage.getItem(DRAFT_STORAGE_KEY); } catch { /* No storage: no drafts to show. */ }
   if (raw !== read.raw) {
     const words = new Map<string, string>();
-    for (const [key, value] of Object.entries(stored())) if (typeof value?.text === "string" && value.text.trim()) words.set(key, value.text);
+    // The sidebar only previews them: plain words, whatever Markdown the draft is written in.
+    for (const [key, value] of Object.entries(stored())) if (typeof value?.text === "string" && value.text.trim()) words.set(key, plainWords(value.text));
     read = { raw, words };
   }
   if (scope === "room") return read.words.get(`room:${id}`) ?? "";

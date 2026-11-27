@@ -410,7 +410,7 @@ test.each([false, true])("opening unread content follows its length (long: %s)",
 
 test("member drafts follow the composer owner through switching and page return", async () => {
   const agent = mount(); await flush();
-  const input = agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  const input = agent.el.querySelector<HTMLTextAreaElement>('.composer .cmp-input')!;
   input.value = 'Chief unfinished'; input.dispatchEvent(new Event('input'));
   await pick(3); expect(input.value).toBe('');
   input.value = 'Member unfinished'; input.dispatchEvent(new Event('input'));
@@ -429,7 +429,7 @@ test("Raphael's conversation and its quick questions keep their own drafts throu
   ];
   api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:structuredClone(conversations)}:{questions:[]});
   const agent=mount();await flush();
-  const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  const input=agent.el.querySelector<HTMLTextAreaElement>('.composer .cmp-input')!;
   input.value='First unfinished';input.dispatchEvent(new Event('input'));
   conversations[1].updated_at_ms=100;
   window.dispatchEvent(new CustomEvent('conversations-changed',{detail:0}));await flush();
@@ -449,7 +449,7 @@ test("typing defers storage work until the pause and a new page restores the sav
   vi.useFakeTimers();
   api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:[{id:1,member_id:0,title:'Sample',kind:'standard',is_default:1,updated_at_ms:1}]}:{questions:[]});
   const agent=mount();await flush();
-  const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  const input=agent.el.querySelector<HTMLTextAreaElement>('.composer .cmp-input')!;
   const read=vi.spyOn(localStorage,'getItem'),write=vi.spyOn(localStorage,'setItem');
   input.value='Unfinished long sample '.repeat(5000);input.dispatchEvent(new Event('input'));
   input.value+='Last word';input.dispatchEvent(new Event('input'));
@@ -459,7 +459,7 @@ test("typing defers storage work until the pause and a new page restores the sav
   expect(write.mock.calls.filter(([key])=>key==='raphael.composer.drafts')).toHaveLength(1);
   const text=input.value;agent.hide();agent.el.remove();
   const next=mount();await flush();
-  expect(next.el.querySelector<HTMLTextAreaElement>('.composer textarea')!.value.length).toBe(text.length);
+  expect(next.el.querySelector<HTMLTextAreaElement>('.composer .cmp-input')!.value.length).toBe(text.length);
   next.hide();
 });
 
@@ -470,7 +470,7 @@ test("a conversation the core folded into the member's one conversation drops it
   ];
   api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:structuredClone(conversations)}:{questions:[]});
   const agent=mount();await flush();
-  const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  const input=agent.el.querySelector<HTMLTextAreaElement>('.composer .cmp-input')!;
   input.value='Folded conversation draft';input.dispatchEvent(new Event('input'));agent.hide();agent.show();await flush();
   conversations=conversations.filter(item=>item.id!==2);
   window.dispatchEvent(new CustomEvent('conversations-changed',{detail:0}));await flush();
@@ -480,7 +480,7 @@ test("a conversation the core folded into the member's one conversation drops it
 
 test("a long draft keeps its words without repeated full-text height measurements", async () => {
  const agent=mount();await flush();
- const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+ const input=agent.el.querySelector<HTMLTextAreaElement>('.composer .cmp-input')!;
  const height=vi.fn(()=>100000);Object.defineProperty(input,'scrollHeight',{get:height,configurable:true});
  const text='Long sample draft '.repeat(10000);input.value=text;input.dispatchEvent(new Event('input'));
  expect(input.value).toBe(text);expect(height).not.toHaveBeenCalled();agent.hide();
@@ -915,7 +915,8 @@ describe("a sent message is taken back into the composer to be edited", () => {
     const agent = mount(); await flush(); await pick(3);
     pickMessage('[data-id="8"]', 'edit'); await flush();
     typeInto(box(), "corrected");
-    expect(press(box(), "Enter", { shiftKey: true }).defaultPrevented).toBe(false);
+    // Shift+Enter is the editor's (the next line), not a send.
+    press(box(), "Enter", { shiftKey: true });
     expect(api.agentAskText).not.toHaveBeenCalled();
     expect(press(box(), "Enter").defaultPrevented).toBe(true); await flush();
     expect(api.agentAskText).toHaveBeenCalledTimes(1);
@@ -1934,7 +1935,7 @@ test("an approval retry never answers a replacement question", async () => {
 test("a burst of turn events while typing makes one history request and preserves the draft and nodes", async () => {
   vi.useFakeTimers();
   const agent = mount(); await flush(); await pick(3);
-  const input = agent.el.querySelector<HTMLTextAreaElement>(".composer textarea")!;
+  const input = agent.el.querySelector<HTMLTextAreaElement>(".composer .cmp-input")!;
   input.value = "Keep typing this draft"; input.dispatchEvent(new Event("input"));
   const node = $('.tn[data-id="31"]');
   api.agentHistoryList.mockClear();
