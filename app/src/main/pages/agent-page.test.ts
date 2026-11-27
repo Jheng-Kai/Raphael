@@ -181,7 +181,7 @@ test("the header has no computer button, and an idle computer adds nothing to th
   const agent = mount();
   try {
     await flush();
-    expect(agent.el.querySelector('.mb-head [data-act="computer"], .mb-head .btn.ra-tool:not([hidden]):not([data-act="status"])')).toBeNull();
+    expect(agent.el.querySelector('.mb-head [data-act="computer"], .mb-head .btn.ra-tool:not([hidden]):not([data-act="status"]):not([data-act="raphael-more"])')).toBeNull();
     const title = agent.el.querySelector<HTMLElement>(".conversation-trigger")!;
     expect(title.classList.contains("is-computer-active")).toBe(false);
     expect(title.getAttribute("aria-label")).not.toContain("正在使用電腦");

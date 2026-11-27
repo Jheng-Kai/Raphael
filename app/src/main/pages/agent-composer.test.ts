@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { setLocale } from "../i18n";
-import { TYPED_MAX_CHARS, draftText, greetingLine, sendsOnEnter, typedQuestion } from "./agent";
+import { TYPED_MAX_CHARS, draftText, sendsOnEnter, typedQuestion } from "./agent";
 
 afterEach(() => setLocale("zh-TW"));
 
@@ -47,19 +47,5 @@ describe("a draft from 「試試看」", () => {
     const show = /show\(arg\) \{([\s\S]*?)\n    \},/.exec(page)![1];
     expect(show).toContain("putDraft(draft)");
     expect(show).not.toMatch(/send\(|requestSubmit/);
-  });
-});
-
-describe("the empty page", () => {
-  test("Raphael's line is the overlay's greeting to a question, in the language of the window, without its last stop", () => {
-    const notices = readFileSync(path.resolve(import.meta.dirname, "..", "..", "..", "src-tauri", "src", "notices.rs"), "utf8");
-    const block = /pub const GREETING: Notice = Notice \{([^}]*)\}/.exec(notices)![1];
-    const greeting = (field: string): string => new RegExp(`${field}: "([^"]+)"`).exec(block)![1];
-    for (const [locale, field] of [["zh-TW", "zh"], ["en", "en"], ["ja", "ja"]] as const) {
-      setLocale(locale);
-      expect(greetingLine(), locale).toBe(greeting(field).replace(/[。.]》$/, "》"));
-    }
-    setLocale("zh-TW");
-    expect(greetingLine()).toBe("《告。主人，請下達指示》");
   });
 });

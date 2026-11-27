@@ -5,7 +5,7 @@
  * mark lists the connected providers, and 新增供應商 under them leads to Settings. Choosing a model saves it and turns back.
  *
  * Each member answers on its own model, so a member's conversation writes that member's and moves no one else. Raphael's is
- * what Settings writes, and a quick conversation's what 快速提問 writes.
+ * what Settings writes. Its quick questions (Alt+Space) are answered on 快速提問's model, chosen in Settings, never here.
  * The core holds the choice and every list. This reads them again whenever the core says one changed, which is how a
  * choice made in Settings reaches the button, and how a CLI's models reach it: the core asks the CLI only after the
  * first read, in the background.
@@ -17,7 +17,7 @@ import * as api from "./api";
 import { t } from "./i18n";
 import {
   chooserSources, effortOf, effortSliderHTML, modelPickerHTML, modelPickerSelection, modelRefWith, moveEffortSlider, orderedEfforts, pickerModelsFor, buttonFaceHTML,
-  sourceMarkHTML, concreteModel, chooserPrice, splitEffort, usableFor, reasonText, fitFor, effortText, refsOf, sourceConnected, holdsCurrent, type ChooserSource, type ModelPickerLook,
+  sourceMarkHTML, concreteModel, chooserPrice, usableFor, reasonText, fitFor, effortText, refsOf, sourceConnected, holdsCurrent, type ChooserSource, type ModelPickerLook,
 } from "./model-picker";
 import { knownCatalog, knownClis, rememberCatalog, rememberClis } from "./brain-lists";
 import { RAPHAEL_ID } from "./members";
@@ -37,16 +37,16 @@ type View = "now" | "models" | "sources";
 
 export interface ComposerBrainHost {
   onEvent?: (handler: (event: MainEvent) => void) => unknown;
-  /** Whether the open conversation is the quick one, which answers on 快速提問's model. */
-  quick?: () => boolean;
+  /** The answer model was read again: it may have been chosen (or lost) since the page last looked. */
+  changed?: () => void;
 }
 
 /** The way to Settings' list of providers to connect, through the notices' own repair (missing.ts bindMissing). */
 const addSourceHTML = (cls: string): string =>
   btn(`${ico("plus")}<span>${esc(t("providers.add"))}</span>`, cls, ' data-missing-repair="models" data-missing-resource="connect"');
 
-export function mountComposerBrain(slot: HTMLElement, member: () => Member, host: ComposerBrainHost = {}): { draw(): void; reload(): void } {
-  let catalog: ModelCatalog | null = knownCatalog(), clis: CliBrain[] = knownClis(), answerModel = "", quickModel = "", quickEffort = "low", generation = 0;
+export function mountComposerBrain(slot: HTMLElement, member: () => Member, host: ComposerBrainHost = {}): { draw(): void; reload(): void; answerChosen(): boolean | undefined } {
+  let catalog: ModelCatalog | null = knownCatalog(), clis: CliBrain[] = knownClis(), answerModel = "", settingsRead = false, generation = 0;
   let providers: ModelProvider[] | undefined, chatgpt: ChatGptStatus | null | undefined;
   let menu: HTMLElement | null = null, source = "", query = "", view: View = "now";
   let modelTries = 0, modelTimer: ReturnType<typeof setTimeout> | undefined;
@@ -55,8 +55,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
 
   const look = (): ModelPickerLook => {
     const who = member(), own = (who.id !== RAPHAEL_ID && who.model) || answerModel;
-    const current = host.quick?.() ? `${(quickModel || own).split("?effort=")[0]}?effort=${quickEffort}` : own;
-    return { role: "answer", current, catalog, clis, providers, chatgpt, label: t("members.brain"), key: "composer-brain" };
+    return { role: "answer", current: own, catalog, clis, providers, chatgpt, label: t("members.brain"), key: "composer-brain" };
   };
   const chosen = (): { model: CatalogModel | undefined; effort: string } => {
     const o = look(), models = pickerModelsFor(o);
@@ -84,13 +83,6 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
   }
 
   async function write(model: string): Promise<void> {
-    if (host.quick?.()) {
-      const split = splitEffort(model, pickerModelsFor(look()));
-      await api.settingsSet("quick_model", split.model);
-      quickModel = split.model;
-      if (split.effort) { await api.settingsSet("quick_effort", split.effort); quickEffort = split.effort; }
-      return;
-    }
     const who = member();
     if (who.id !== RAPHAEL_ID) { await api.membersUpdate(who.id, { model }); who.model = model; return; }
     const result = await api.settingsSet("agent_model", model);
@@ -356,13 +348,15 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     if (settingsResult.status === "fulfilled") {
       const settings = settingsResult.value?.settings;
       answerModel = settings?.agent_model ?? "";
-      quickModel = settings?.quick_model ?? "";
-      quickEffort = settings?.quick_effort ?? "low";
+      settingsRead = true;
       favorites = settings?.model_favorites?.answer ?? [];
     }
     draw();
+    host.changed?.();
   }
   host.onEvent?.(event => { if (CHANGES.includes(event.type)) void reload(true); });
   draw(); void reload(true);
-  return { draw, reload: () => void reload() };
+  /** Whether Raphael has an answer model: undefined until the settings are read, which says nothing either way. */
+  const answerChosen = (): boolean | undefined => settingsRead ? !!answerModel.split("?effort=")[0] : undefined;
+  return { draw, reload: () => void reload(), answerChosen };
 }

@@ -104,7 +104,7 @@ export function mountStatusLight(button: HTMLElement, o: {
       conversation === (member.main_conversation_id ?? null) ? String(member.id) : `${member.id}:${conversation}`;
     openMenu(button, people.map(row => ({
       value: valueOf(row),
-      label: row.conversation === (row.member.main_conversation_id ?? null) ? row.member.name : `${row.member.name} · ${t("conversations.quick")}`,
+      label: row.member.name,
       lead: `<span class="status-row-dot" data-kind="${esc(row.kind)}" aria-hidden="true"></span>${o.face(row.member)}`,
       group: t(GROUP[row.kind]),
     })), "", value => {

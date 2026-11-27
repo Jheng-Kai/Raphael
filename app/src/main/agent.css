@@ -767,6 +767,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .ra-hero { width: 132px; height: 132px; }
 .ra-hi { max-width: 100%; margin: 0; min-height: 1.6em; font: 500 var(--pa-hi)/1.6 var(--voice); letter-spacing: 0.04em; color: var(--text); overflow-wrap: anywhere; }
 .ra-empty.is-failed .ra-hi { font-size: var(--pa-dfs); letter-spacing: 0; color: var(--text-2); }
+/* No answer model yet, so Raphael cannot speak: the one line that says so and the button that chooses it, where its words would stand. */
+.ra-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-2); max-width: 100%; color: var(--text-2); font-size: var(--pa-dfs); line-height: 1.6; }
+.ra-notice[hidden] { display: none; }
 .ra-slot { width: min(calc(560px + 160 * var(--pa-u)), 100%); margin-top: var(--sp-1); text-align: left; }
 
 /* ---------- the voice mode: Raphael flies up over the conversation ---------- */

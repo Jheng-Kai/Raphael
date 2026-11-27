@@ -1,4 +1,4 @@
-// The landing view holds routines and conversations, its bots and its library; the computer is the third tab only. Everything
+// The landing view holds routines, its bots and its library; the computer is the third tab only. Everything
 // the owner changes about a member lives on the member settings page (member-settings.ts), which the gear opens in the
 // main area where the conversation is.
 
@@ -6,7 +6,6 @@ import { clearLayerForward } from "./nav-history";
 import { noticeHTML } from "./missing";
 import "./messaging.css";
 import { openRoutineView } from "./routine-view";
-import { mountConversationList } from "./conversation-list";
 import * as api from "./api";
 import "./member-panel.css";
 import { getLocale, t } from "./i18n";
@@ -41,12 +40,9 @@ export interface DetailsHost {
   close(): void;
   /** The gear: the member settings page opens (or, when it is open, closes) in the main area. */
   openSettings?(): void;
-  openConversation?(member: number, conversation: number): void;
   openTurn?(member: number, conversation: number | undefined, turn: number): void;
   /** A page of the Library was pressed: it opens itself, whole, in the area beside the sidebar (R-PAGE-08). */
   openPage?(page: { id: string; title: string; conversation?: number; turn: number }): void;
-  /** The conversation open with this member, undefined for their default. */
-  conversationOf?(member: number): number | undefined;
 }
 
 export interface DetailsPanel {
@@ -115,27 +111,6 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   let routineLoads = 0;
   /** The member the panel was last drawn for. */
   let drawnFor: number | null = null;
-  const conversationHost = document.createElement("div");
-  let conversationMember: number | null = null;
-  let conversationList: ReturnType<typeof mountConversationList> | null = null;
-  /** Only Raphael has a choice of conversation: its main one and its quick questions. The chief of staff is a slime like the others. */
-  function drawConversations(): void {
-    const memberId = host.member().id;
-    if (conversationMember !== memberId) {
-      conversationList?.destroy(); conversationList = null; conversationMember = memberId;
-    }
-    const slot = body.querySelector<HTMLElement>('[data-slot="conversations"]');
-    if (!slot || !host.openConversation) return;
-    if (conversationHost.parentElement !== slot) slot.replaceChildren(conversationHost);
-    if (!conversationList) conversationList = mountConversationList(conversationHost, {
-      scope: host.app,
-      active: () => host.visible?.() ?? true,
-      memberId,
-      onOpen(id) { host.openConversation?.(memberId, id); },
-      current: () => host.conversationOf?.(memberId),
-    });
-  }
-
   // ---------- drawing ----------
 
   function whoHTML(member: Member): string {
@@ -193,7 +168,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     const sameMember = drawnFor === member.id;
     const focused = document.activeElement as HTMLElement | null;
     const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([stableMember(member), face, host.list()?.groups, routines, work, workFailed, tab, libraryFilter, getLocale(), !!host.openConversation, host.conversationOf?.(member.id),
+    const signature = JSON.stringify([stableMember(member), face, host.list()?.groups, routines, work, workFailed, tab, libraryFilter, getLocale(),
       // The bot cards redraw on their own state.
       tab === "details" ? channelViews(member.id).map(([kind, view]) => [kind, { ...view, token: "" }]) : null,
       (["setup-telegram", "setup-slack", "setup-discord"] as const).map((intent) => askPending(member.id, intent))]);
@@ -215,25 +190,17 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     patchHTML(tabBar, tabs(['details', 'library', 'computer'].map(id => ({id, label:t(({details:'members.panelTab.details', library:'members.panelTab.library', computer:'members.panelTab.computer'} as const)[id as DetailsTab]), attrs:` id="member-tab-${id}" data-det="tab" data-tab="${id}" aria-controls="${id === 'computer' ? 'member-computer-panel' : 'member-panel-body'}" tabindex="${tab === id ? 0 : -1}"`})), tab, {kind:'nav', plain:true, label:t('members.panel')}));
     body.setAttribute('aria-labelledby', `member-tab-${tab}`);
     if (tab === "details") {
-      const isRaphael = member.id === RAPHAEL_ID;
-      if (!body.querySelector('.mb-panel-routines') || !!body.querySelector('[data-slot="conversations"]') !== isRaphael) {
-        conversationHost.remove();
-        patchHTML(body, `<section class="mb-panel-routines" data-k="panel-routines"></section>` +
-          (isRaphael ? `<section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span></div><div data-slot="conversations" data-k="panel-conversations"></div></section>` : "") +
-          `<section class="mb-panel-suggest" data-k="panel-suggest"></section>`);
+      if (!body.querySelector('.mb-panel-routines')) {
+        patchHTML(body, `<section class="mb-panel-routines" data-k="panel-routines"></section><section class="mb-panel-suggest" data-k="panel-suggest"></section>`);
       }
-      // The skeleton is kept across draws, so its heading follows a language change here.
-      const heading = body.querySelector<HTMLElement>('[data-panel-conversations-heading]');
-      if (heading && heading.textContent !== t('members.panelConversations')) heading.textContent = t('members.panelConversations');
       patchHTML(body.querySelector('.mb-panel-routines')!, routinesHTML());
       const suggest = body.querySelector<HTMLElement>('.mb-panel-suggest');
       if (suggest) patchHTML(suggest, suggestHTML());
     } else if (tab === 'library') {
-      conversationHost.remove(); patchHTML(body, panelLibraryHTML(work, workFailed, Date.now(), libraryFilter)); libraryMedia.sync();
+      patchHTML(body, panelLibraryHTML(work, workFailed, Date.now(), libraryFilter)); libraryMedia.sync();
     } else {
-      conversationHost.remove(); patchHTML(body, '');
+      patchHTML(body, '');
     }
-    drawConversations();
     if (sameMember && focusKey) el.querySelector<HTMLElement>(`[data-k="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
     if (sameMember && scroll.scrollTop !== scrollTop) scroll.scrollTop = scrollTop;
   }
