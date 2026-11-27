@@ -117,9 +117,9 @@ def thumbprint(pem):
 def powershell(script):
     # Windows PowerShell with its own modules: a PowerShell 7 parent leaves a module path it cannot load them from.
     system = os.environ.get("SystemRoot", r"C:\Windows")
-    modules = rf"{system}\system32\WindowsPowerShell1.0\Modules"
-    return run(rf"{system}\System32\WindowsPowerShell1.0\powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script,
-               environment={"PSModulePath": modules})
+    home = Path(system) / "System32" / "WindowsPowerShell" / "v1.0"
+    return run(home / "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script,
+               environment={"PSModulePath": str(home / "Modules")})
 
 
 def main():
