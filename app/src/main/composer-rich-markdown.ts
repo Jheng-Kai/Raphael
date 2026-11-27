@@ -309,7 +309,8 @@ export interface Written { text: string; map: OffsetMap }
 
 interface Tok { kind: "text" | "atom" | "break"; text: string; marks: readonly Mark[]; pm: number; raw?: boolean }
 type Kind = "paragraph" | "inline";
-interface Context { full: boolean; kind: Kind; cell: boolean }
+/** `level` is how much is escaped: 0 only what must be, 1 the signs of emphasis and code, 2 every sign of Markdown. */
+interface Context { level: 0 | 1 | 2; kind: Kind; cell: boolean }
 
 const SPREAD = new Set(["strong", "em", "strike"]);
 const spreads = (marks: readonly Mark[]): boolean => marks.some(mark => SPREAD.has(mark.type.name));
@@ -344,7 +345,7 @@ function tokensOf(parent: PMNode, start: number, flat: boolean): Tok[] {
   return list;
 }
 
-const ESCAPABLE_FULL = /[*_~`$[\]<]/;
+const ESCAPABLE: readonly RegExp[] = [/(?!)/, /[*_~`]/, /[*_~`$[\]<]/];
 type Hazards = "paragraph" | "item" | "none";
 
 /** Where, in the first words of a line, the one character that would make it something else stands (a heading, an item...), or -1. */
@@ -379,10 +380,10 @@ function textChunks(tok: Tok, context: Context, hazard: number, final: boolean):
   }
   for (let i = 0; i < text.length; i++) {
     const ch = text[i]!;
-    if (!context.full && addresses.some(([start, end]) => i >= start && i < end)) continue;
+    if (context.level === 0 && addresses.some(([start, end]) => i >= start && i < end)) continue;
     const escape = i === hazard || (ch === "<" && /^<\/?(details|summary)\b/i.test(text.slice(i, i + 10)))
       || (ch === "\\" && (i === text.length - 1 ? !final : PUNCTUATION.test(text[i + 1]!)))
-      || (context.full && ESCAPABLE_FULL.test(ch))
+      || (context.level > 0 && ESCAPABLE[context.level]!.test(ch))
       || (context.cell && ch === "|");
     if (!escape) continue;
     flush(i);
@@ -451,11 +452,12 @@ function textblockLines(node: PMNode, start: number, kind: Kind, hazards: Hazard
   const toks = tokensOf(node, start, kind === "inline");
   const lines: Tok[][] = [[]], breaks: number[] = [];
   for (const tok of toks) if (tok.kind === "break") { lines.push([]); breaks.push(tok.pm); } else lines[lines.length - 1]!.push(tok);
-  const build = (full: boolean): Line[] => lines.map((line, index) => [
-    { kind: "run" as const, t: "", pm: index === 0 ? start : breaks[index - 1]! + 1 }, ...lineChunks(line, { full, kind, cell }, hazards)]);
-  let written = build(false);
+  const build = (level: 0 | 1 | 2): Line[] => lines.map((line, index) => [
+    { kind: "run" as const, t: "", pm: index === 0 ? start : breaks[index - 1]! + 1 }, ...lineChunks(line, { level, kind, cell }, hazards)]);
+  let written = build(0);
   const risky = toks.some(tok => tok.kind === "atom" || (!tok.raw && (/[\\*_~`$[<!|]/.test(tok.text) || tok.marks.length)));
-  if (risky && !readsBack(written, lines, kind)) written = build(true);
+  // Each step escapes more, and the first that reads back as the same words is the one written.
+  for (const level of [1, 2] as const) if (risky && !readsBack(written, lines, kind)) written = build(level);
   return written;
 }
 

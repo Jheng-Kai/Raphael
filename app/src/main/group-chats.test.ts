@@ -161,7 +161,7 @@ test("mouse Back keeps the side thread's draft and Forward reopens a clean side 
   const back = () => window.dispatchEvent(new MouseEvent("mousedown", { button: 3, cancelable: true }));
   const stop = installNavInput(window, stepOpenLayer);
   try {
-    const input = view.el.querySelector<HTMLTextAreaElement>(".room-side-thread textarea")!;
+    const input = view.el.querySelector<HTMLTextAreaElement>(".room-side-thread .cmp-input")!;
     input.value = "Unsent side reply";
     back();
     expect(input.isConnected).toBe(true);

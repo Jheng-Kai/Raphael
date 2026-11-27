@@ -1,0 +1,74 @@
+/* The composer's field draws its words as they will read, with the marks a reply wears (message-rich.css, agent.css):
+   headings larger, lists with their markers and indents, a quote's bar, code on a recessed fill, equations drawn, a toggle with its
+   arrow. The field itself (size, font, padding, scrolling) is `.cmp-input` in agent.css. */
+.cmp-input { white-space: pre-wrap; white-space: break-spaces; overflow-wrap: anywhere; font-variant-ligatures: none; cursor: text; }
+.cmp-input.ProseMirror-hideselection *::selection { background: transparent; }
+.cmp-input[disabled], .cmp-input[readonly] { cursor: default; }
+.cmp-input > * { margin: 0; }
+.cmp-input p, .cmp-input h1, .cmp-input h2, .cmp-input h3, .cmp-input h4, .cmp-input h5, .cmp-input h6, .cmp-input li, .cmp-input blockquote { margin: 0; }
+/* An empty field shows what it is for, on the line the words would stand on. */
+.cmp-input .cmp-empty::before { content: attr(data-placeholder); float: inline-start; height: 0; color: var(--text-3); pointer-events: none; }
+
+.cmp-input h1, .cmp-input h2, .cmp-input h3, .cmp-input h4, .cmp-input h5, .cmp-input h6 { font-weight: var(--weight-semibold); line-height: 1.45; }
+.cmp-input h1 { font-size: var(--fs-h1); }
+.cmp-input h2 { font-size: var(--fs-lg); }
+.cmp-input h3, .cmp-input h4, .cmp-input h5, .cmp-input h6 { font-size: var(--fs-md); }
+.cmp-input :not(h1, h2, h3, h4, h5, h6) + :is(h1, h2, h3, h4, h5, h6) { margin-top: 0.3em; }
+
+.cmp-input ul, .cmp-input ol { margin: 0; padding-inline-start: 1.6em; }
+.cmp-input ul { list-style-type: disc; }
+.cmp-input ul ul { list-style-type: circle; }
+.cmp-input ul ul ul { list-style-type: square; }
+.cmp-input ol { list-style-type: decimal; }
+.cmp-input li { padding-inline-start: 0.15em; }
+.cmp-input li > :is(ul, ol) { margin: 0; }
+
+.cmp-input blockquote { padding-inline-start: var(--sp-3); border-inline-start: 3px solid var(--edge); color: var(--text-2); }
+.cmp-input hr { border: 0; border-top: 1px solid var(--edge); margin: var(--sp-2) 0; }
+.cmp-input hr.ProseMirror-selectednode { border-top-color: var(--focus); }
+
+.cmp-input code { font-family: var(--mono); font-size: var(--fs-xs); padding: 0.12em 0.3em; border-radius: var(--r-sm); background: var(--surface-2); }
+.cmp-input pre { position: relative; margin: var(--sp-1) 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); font: var(--fs-xs)/1.6 var(--mono); white-space: pre-wrap; }
+.cmp-input pre code { padding: 0; background: transparent; font: inherit; }
+.cmp-input pre[data-language]::before { content: attr(data-language); position: absolute; top: 2px; inset-inline-end: var(--sp-2); color: var(--text-3); font: var(--fs-2xs)/1.6 var(--mono); pointer-events: none; }
+.cmp-input a.composer-link, .cmp-input .cmp-link, .cmp-input .cmp-skill { color: var(--link); text-decoration: none; }
+.cmp-input del { text-decoration-thickness: 1px; }
+
+/* A task: its box stands where a bullet would. */
+.cmp-input li.cmp-task { list-style: none; position: relative; padding-inline-start: 0; }
+.cmp-input .cmp-task-box { position: absolute; inset-inline-start: -1.45em; top: 0.38em; display: grid; place-items: center; box-sizing: border-box; width: 1em; height: 1em; border: 1.5px solid var(--text-3); border-radius: var(--r-sm); color: var(--on-accent); cursor: pointer; }
+.cmp-input li.cmp-task[data-checked="true"] > .cmp-task-box { border-color: var(--accent-text); background: var(--accent-text); }
+.cmp-input li.cmp-task[data-checked="true"] > .cmp-task-body { color: var(--text-2); text-decoration: line-through; text-decoration-thickness: 1px; }
+.cmp-input .cmp-task-body > ul, .cmp-input .cmp-task-body > ol { text-decoration: none; }
+.cmp-input .cmp-task-box svg { width: 0.75em; height: 0.75em; }
+
+/* A toggle: the arrow and its title on one line, what it holds under it and a step in. */
+.cmp-input .cmp-toggle > :not(.cmp-toggle-head) { margin-inline-start: 1.4em; }
+.cmp-input .cmp-toggle[data-open="false"] > :not(.cmp-toggle-head) { display: none; }
+.cmp-input .cmp-toggle-head { display: flex; align-items: flex-start; gap: var(--sp-1); }
+.cmp-input .cmp-toggle-arrow { flex: none; display: grid; place-items: center; box-sizing: border-box; width: 1.4em; height: 1.45em; margin-inline-start: -0.1em; border-radius: var(--r-sm); color: var(--text-3); cursor: pointer; }
+.cmp-input .cmp-toggle-arrow:hover { background: var(--hover); color: var(--text); }
+.cmp-input .cmp-toggle-arrow svg { width: 1em; height: 1em; transition: transform 0.12s ease; }
+.cmp-input .cmp-toggle[data-open="true"] > .cmp-toggle-head .cmp-toggle-arrow svg { transform: rotate(90deg); }
+.cmp-input .cmp-toggle-title { flex: 1; min-width: 0; font-weight: var(--weight-medium); }
+
+/* An equation: inline it is one unit in the line, a block shows its LaTeX and, under it, the equation drawn. */
+.cmp-input .cmp-math { display: inline-block; border-radius: var(--r-sm); cursor: default; user-select: none; }
+.cmp-input .cmp-math.is-selected { background: var(--selection); }
+.cmp-input .cmp-math .katex { font-size: 1.05em; }
+.cmp-input .cmp-math-block { margin: var(--sp-1) 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); }
+.cmp-input .cmp-math-source { min-height: 1.6em; color: var(--text-2); font: var(--fs-xs)/1.6 var(--mono); white-space: pre-wrap; }
+.cmp-input .cmp-math-shown { margin-top: var(--sp-2); overflow-x: auto; text-align: center; user-select: none; }
+.cmp-input .cmp-math-block[data-empty="true"] .cmp-math-shown { display: none; }
+.cmp-input .math-source { color: var(--text-2); font-family: var(--mono); font-size: var(--fs-xs); }
+
+/* A table: the first row is the header. */
+.cmp-input table { display: block; max-width: 100%; margin: var(--sp-1) 0; overflow-x: auto; border-collapse: collapse; }
+.cmp-input td { min-width: 3em; padding: 0.1em 0.7em; border: 1px solid var(--edge); vertical-align: top; }
+.cmp-input tr:first-child > td { background: var(--surface-2); font-weight: var(--weight-semibold); }
+.cmp-input td[align="center"] { text-align: center; }
+.cmp-input td[align="right"] { text-align: end; }
+
+/* A mention: its mark stands where the @ is (the @ keeps its width, unseen), then the name. */
+.cmp-input .mention-slot { position: relative; display: inline-block; width: 0; height: 1lh; vertical-align: top; }
+.cmp-input .mention-slot .mention-ico { inset-block: 0; }

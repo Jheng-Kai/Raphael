@@ -131,6 +131,7 @@ import { btn, closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, 
 import { askInChat } from "../chat-ask";
 import { createRoomPane, currentRoomId, openGroupChat, roomExists } from "../group-chats";
 import { bindActionMode, bindComposerRow, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
+import { mountRichField } from "../composer-rich-field";
 import { mountComposerBrain } from "../composer-brain";
 import { mountComposerFolder } from "../composer-folder";
 import { mountComposerPlus } from "../composer-plus";
@@ -616,7 +617,7 @@ export function createAgent(app: AppContext, places?: {
   composer.className = "composer";
   composer.noValidate = true;
   composer.innerHTML = composerHTML(true);
-  const input = composer.querySelector<HTMLTextAreaElement>(".cmp-input")!;
+  const input = mountRichField(composer.querySelector<HTMLElement>(".cmp-input")!);
   const pageDraft = bindPageComposer(input);
   const correctionLearning = bindComposerLearning(input);
   const slashMenu = mountSlashMenu(input, { memberId, scope: app, changed: () => { presentationVersion++; render(); },
