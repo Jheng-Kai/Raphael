@@ -5,8 +5,10 @@
 
 DEFAULT_CONTEXT_TOKENS = 64000
 # The window of a CLI's models before one has reported its own (`context_window`): Claude Code reports 200K tokens
-# for its models, or 1M for the long-context ones, so the smaller is a safe start. Other CLIs start from the default.
-KNOWN_CONTEXT_TOKENS = {"claude": 200_000}
+# for its models, or 1M for the long-context ones, so the smaller is a safe start; Codex's models read 272K and more, and
+# 200K is as safe a start (the 64K default refused a skill's document called with / on every first turn after a start).
+# Other CLIs start from the default.
+KNOWN_CONTEXT_TOKENS = {"claude": 200_000, "codex": 200_000}
 # How full a native session may get before it is given up for a fresh one (80%). The measure is the last call's size, not a run's sum
 # (`context_tokens`), so the fifth left is real room for the turn's own tool work.
 CONTEXT_HEADROOM = .80

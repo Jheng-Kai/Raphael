@@ -52,9 +52,9 @@ for line in sys.stdin:
     elif msg.get("method") == "initialize": send({"id":msg["id"], "result":{}})
     elif msg.get("method") == "thread/start": send({"id":msg["id"], "result":{"thread":{"id":"synthetic"}}})
     elif msg.get("method") == "turn/start":
-        native = [item for item in msg["params"]["input"] if item["type"] == "skill"]
-        assert len(native) == 1 and native[0]["name"] == "assigned"
-        assert Path(native[0]["path"]) == paths[0]
+        # Codex is told of the skill (skills.config) and reads it when it needs it; a turn names none, since a `skill`
+        # input is the owner calling that skill (codex-rs skills/selection.rs).
+        assert [item for item in msg["params"]["input"] if item["type"] == "skill"] == []
         send({"method":"item/completed", "params":{"item":{"type":"agentMessage", "text":"Done"}}})
         send({"method":"turn/completed", "params":{"turn":{"status":"completed"}}})
         break
@@ -74,6 +74,46 @@ for line in sys.stdin:
     assert len(result["documents"]) == 1 and "Assigned task" in result["documents"][0]
     assert result["scripts"] == ["print('assigned')"]
 
+
+async def test_codex_is_told_of_every_skill_and_handed_none_of_their_documents_in_a_turn(tmp_path):
+    """A member given thirty skills on Codex: every turn named all of them as `skill` inputs, which Codex takes as the owner
+    calling each one (codex-rs skills/selection.rs, an explicit mention). In Codex itself a skill is known from its listing and
+    read when it is needed, and only the one the owner names is called; Raphael's / call carries that one in the words."""
+    skills = []
+    for index in range(30):
+        folder = tmp_path / "skills" / f"skill-{index}"
+        folder.mkdir(parents=True)
+        (folder / "SKILL.md").write_text(f"---\nname: skill-{index}\ndescription: Skill number {index}\n---\n" + "Step. " * 1500,
+                                         encoding="utf-8")
+        skills.append({"name": f"skill-{index}", "path": str(folder / "SKILL.md")})
+    record = tmp_path / "record.json"
+    script = tmp_path / "cli.py"
+    script.write_text('''import json, sys, tomllib
+from pathlib import Path
+args = sys.argv[2:]
+options = dict(item.split("=", 1) for item in args[3::2])
+registered = [item for item in tomllib.loads("v = " + options["skills.config"])["v"] if item["enabled"]]
+def send(value): print(json.dumps(value), flush=True)
+for line in sys.stdin:
+    msg = json.loads(line)
+    if msg.get("method") == "initialize": send({"id":msg["id"], "result":{}})
+    elif msg.get("method") == "thread/start": send({"id":msg["id"], "result":{"thread":{"id":"synthetic"}}})
+    elif msg.get("method") == "turn/start":
+        Path(sys.argv[1]).write_text(json.dumps({"registered": len(registered), "include": options["skills.include_instructions"],
+            "input": msg["params"]["input"]}))
+        send({"method":"item/completed", "params":{"item":{"type":"agentMessage", "text":"Done"}}})
+        send({"method":"turn/completed", "params":{"turn":{"status":"completed"}}})
+        break
+''', encoding="utf-8")
+    environment = {**os.environ, "CODEX_HOME": str(tmp_path / "empty-codex"), "HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+    (tmp_path / "workspace").mkdir()
+    driver = Driver("codex", [sys.executable, str(script), str(record)], home=tmp_path, environ=environment)
+    events = [event async for event in driver.run(user="Plan the week", system="Use only MCP actions", endpoint="http://127.0.0.1:1/mcp",
+        token="synthetic", permission=None, cwd=str(tmp_path / "workspace"), skills=skills)]
+    assert events[-1].kind == "final", events
+    result = json.loads(record.read_text())
+    assert result["registered"] == 30 and result["include"] == "true"
+    assert result["input"] == [{"type": "text", "text": "Plan the week"}]
 
 async def test_claude_skill_turn_does_not_set_auth_environment_or_read_credentials(tmp_path, monkeypatch):
     folder = tmp_path / "assigned"
