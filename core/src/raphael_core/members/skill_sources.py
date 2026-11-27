@@ -25,6 +25,7 @@ from .skill_errors import (front_matter, no_skill, not_utf8, oversized_file, ove
 from .skill_library import (MAX_ARCHIVE_ENTRIES, MAX_DISCOVERY_DEPTH, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, MAX_SCAN_ENTRIES,
                             MAX_UPLOAD_BYTES, junk, linked, walk)
 from .skill_plugins import relative_path
+from .skill_progress import report
 from .skill_references import DiskSource, MemorySource, attach_shared
 from .store import MemberError
 
@@ -202,7 +203,8 @@ def snapshot_entries(entries, read_entry, *, regular, member=None):
             count += 1
             break
     result = []
-    for root in roots:
+    for number, root in enumerate(roots, 1):
+        report("read", number, len(roots))
         snapshot = snapshots[root.casefold()]
         snapshot.byte_limit = snapshot.size + MAX_PACKAGE_BYTES - allocated
         previous = snapshot.size
@@ -532,13 +534,60 @@ def local_path(source):
     return Path(os.path.realpath(path))
 
 
+_ARCHIVE_HEADS = (b"PK\x03\x04", b"PK\x05\x06", b"\x1f\x8b", b"BZh", b"\xfd7zXZ\x00", b"\x28\xb5\x2f\xfd")
+# How far above a skill's folder its plugin or repository is looked for.
+SOURCE_LEVELS = 8
+
+
+def skill_folder_of(path):
+    """The folder of the skill a chosen file belongs to: the folder that holds a SKILL.md, when the file is that SKILL.md or any
+    other file inside that folder (a Windows file dialog cannot pick a folder, so the owner picks the document, or an action
+    file of it). None when the file is an archive or lies in no skill's folder: it is then what it is."""
+    try:
+        with path.open("rb") as stream:
+            head = stream.read(512)
+    except OSError:
+        return None
+    if head.startswith(_ARCHIVE_HEADS) or head[257:262] == b"ustar":
+        return None
+    for depth, folder in enumerate(path.parents):
+        if depth > SOURCE_LEVELS or linked(folder):
+            break
+        document = folder / "SKILL.md"
+        if document.is_file() and not linked(document):
+            return folder
+    return None
+
+
+def source_root(folder):
+    """The root of the source a skill's folder was cut from, where its document's links and named folders are looked for: its
+    plugin (the nearest `.claude-plugin/plugin.json` above it), else its repository (the nearest `.git`), else the folder that
+    holds the `skills` folder it is in, else the folder itself."""
+    for depth, parent in enumerate(folder.parents):
+        if depth >= SOURCE_LEVELS or linked(parent):
+            break
+        manifest = parent / PLUGIN_MANIFEST
+        if manifest.is_file() and not linked(manifest.parent) and not linked(manifest):
+            return parent
+        if (parent / ".git").exists():
+            return parent
+    # The usual layout of a repository of skills, taken out of its repository: `skills/<name>/SKILL.md` beside the folders it names.
+    if folder.parent.name.casefold() == "skills" and not folder.parent.parent.name.startswith(".") and folder.parent.parent != folder.parent:
+        return folder.parent.parent
+    return folder
+
+
 def local(source, plugins=False):
     """The skills of a folder or file on this computer; with `plugins`, a folder or archive that is a plugin of any kind
-    (skill_layouts.py) is that plugin, whole, as a `PluginTree`."""
+    (skill_layouts.py) is that plugin, whole, as a `PluginTree`. A chosen file that is a skill's document, or lies in a skill's
+    folder, is that folder."""
     path = local_path(source)
     if path.is_file():
         if path.stat().st_nlink > 1:
             raise refused_entry(str(path), "a hard link")
+        folder = skill_folder_of(path)
+        if folder is not None:
+            return local_folder(folder, False)
         with path.open("rb") as stream:
             data = stream.read(MAX_PACKAGE_BYTES + 1)
         if plugins and (found := plugin_of_archive(path.name, data)) is not None:
@@ -548,6 +597,10 @@ def local(source, plugins=False):
         raise MemberError("not_found", f"{path} does not exist on this computer", reason="source", file=str(path))
     if not path.is_dir():
         raise MemberError("source", f"{path} is neither a folder nor a file", reason="path", file=str(path))
+    return local_folder(path, plugins)
+
+
+def local_folder(path, plugins):
     if plugins:
         from .skill_layouts import PluginTree, folder_is_plugin, normalized
         from .skill_plugins import local_files
@@ -569,20 +622,23 @@ def local(source, plugins=False):
         if not folders:
             raise no_skill(str(path))
         result, size, count = [], 0, 0
-        for folder in sorted(folders):
+        for number, folder in enumerate(sorted(folders), 1):
+            report("read", number, len(folders))
             snapshot = folder_snapshot(folder, skill_links=True, byte_limit=MAX_PACKAGE_BYTES - size,
                                        entry_limit=MAX_PACKAGE_FILES - count,
                                        prefix=folder.relative_to(path).as_posix() + "/" if folder != path else "")
             files = snapshot.finish()
             # What the skill links to elsewhere in its plugin, else in the folder picked, comes with it.
-            root = path
+            # A folder that is a skill itself (picked, or a chosen file's) has its plugin or repository above it.
+            root, top = path, source_root(path) if folder == path else path
             for parent in (folder, *folder.parents):
                 manifest = parent / PLUGIN_MANIFEST
                 if not linked(manifest.parent) and not linked(manifest) and manifest.is_file():
                     files.plugin_manifest = True
                     root = parent
                     break
-                if parent == path:
+                if parent == top:
+                    root = top
                     break
             if folder != root:
                 attach_shared(files, snapshot, folder.relative_to(root).as_posix(), DiskSource(root))

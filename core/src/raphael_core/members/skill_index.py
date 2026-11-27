@@ -84,21 +84,27 @@ def skill_files(folder, inlined):
     return listing(folder, files, whole)
 
 
-def plugin_entry_points(root):
+def plugin_entry_points(root, document=""):
     """The lines naming a plugin's entry points: its commands, agents, hooks, scripts and programs by file, and what else it holds by
-    folder. The skills' own files are listed with each skill."""
+    folder. The skills' own files are listed with each skill. A folder the skill's `document` points to (its actions, say) is named
+    by file too, as the document sends the model to read them."""
+    from .skill_references import mentions
+
     files, whole = files_below(Path(root))
     lines, rest = [], {}
     for relative, size in files:
         top = relative.split("/")[0] if "/" in relative else "."
         if top not in ENTRY_POINTS and top != "skills":
             rest.setdefault(top, []).append(size)
-    for name in ENTRY_POINTS:
+    pointed = [name for name in sorted(rest) if name != "." and document and mentions(document, name)]
+    for name in (*ENTRY_POINTS, *pointed):
         group = [(relative, size) for relative, size in files if relative.split("/")[0] == name and "/" in relative]
         if group:
             lines.append(f"{name}:")
             lines += ["  " + line for line in listing(root, group, True)]
     for name, sizes in sorted(rest.items(), key=lambda item: (item[0] == ".", item[0])):
+        if name in pointed:
+            continue
         lines.append(f"{'files at the top' if name == '.' else name + '/'}: {len(sizes)} file{'s' if len(sizes) != 1 else ''}, {size_of(sum(sizes))}")
     if not whole:
         lines.append("and more files: the plugin holds too many to list")

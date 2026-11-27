@@ -80,6 +80,8 @@ Nothing here logs a name, a role, an instruction, a routine's title or prompt, o
 
 from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
+from contextlib import suppress
+from types import SimpleNamespace
 import base64
 import binascii
 import hashlib
@@ -108,10 +110,12 @@ from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from ..router import Router
 from ..slime_ids import current_avatar
 from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError, checked, sniff_ok
-from .capabilities import MemberCapabilities, download_skills
+from .capabilities import MemberCapabilities, download_skills, skill_metadata
 from .skill_layouts import PluginTree
 from .skill_packages import SkillPackages
 from .skill_intake import hand_over, needs_agent, routed
+from . import skill_progress
+from .skill_references import named_files
 from . import skill_git
 from .skill_paths import as_local
 from . import skill_sources
@@ -359,6 +363,8 @@ class MembersService:
         self._memory = memory
         self._language = language
         self._notify = notify
+        # The imports of Team skills under way, by the id the window gave each (skill_progress.py).
+        self._imports: dict[str, SimpleNamespace] = {}
         # Told each zone the window says (`members.viewing`): the calendar's own zone and the computers' clock follow it (app.py).
         self.timezone_seen: Callable[[str], None] | None = None
         # The record of the computers (computer/removals.py `ComputerData`): who has one, and what a deleted member owes.
@@ -420,6 +426,7 @@ class MembersService:
         methods = {
             "skills.library.list": self._packages_list,
             "skills.library.import": self._packages_import,
+            "skills.library.cancel_import": self._packages_cancel,
             "skills.library.update": self._packages_update,
             "skills.library.delete": self._packages_delete,
             "members.skills.list": self._skills_list,
@@ -985,16 +992,68 @@ class MembersService:
     async def _packages_import(self, params):
         """The one box of Team skills: whatever is a skill or a plugin imports directly, with no model and no agent. What is
         not one is no work of the dialog: the answer is `handoff`, what the window needs to give the material to Raphael's own
-        conversation (skill_intake.py)."""
-        # The window asks for the hand-off (the default); a member's tool never does: it is told why the material is no skill.
+        conversation (skill_intake.py). The window gives its import an `import_id`: what the import is doing is sent as
+        `skills.import_progress`, and `skills.library.cancel_import` stops it (skill_progress.py)."""
         params = dict(params) if isinstance(params, dict) else params
+        import_id = params.pop("import_id", None) if isinstance(params, dict) else None
+        if import_id is None:
+            return await self._packages_import_run(params)
+        if not isinstance(import_id, str) or not 0 < len(import_id) <= 64 or import_id in self._imports:
+            raise invalid_params("import_id must be a short text that no running import has")
+        token, loop = skill_progress.Token(), asyncio.get_running_loop()
+
+        def reporter(step, done, total):
+            event = {"import_id": import_id, "step": step, **({"done": done, "total": total} if total else {})}
+            with suppress(RuntimeError):  # the loop is closed
+                loop.call_soon_threadsafe(lambda: self._notify and self._notify("skills.import_progress", event))
+
+        task = asyncio.ensure_future(self._packages_import_run(params, token, reporter))
+        entry = self._imports[import_id] = SimpleNamespace(token=token, task=task, stopped=False)
+        try:
+            return await task
+        except asyncio.CancelledError:
+            if not entry.stopped:
+                token.event.set()  # the caller itself is gone: nothing goes on behind it
+                raise
+            raise _library_error(MemberError("cancelled", "the import was stopped")) from None
+        finally:
+            self._imports.pop(import_id, None)
+
+    async def _packages_cancel(self, params):
+        """Stop the import the window started with this `import_id`: its download or clone is ended and nothing of it is kept. False
+        when there is none (it finished, or is writing the library and finishes)."""
+        self._package_fields(params, ("import_id",))
+        entry = self._imports.get(params.get("import_id"))
+        if entry is None or entry.task.done() or not entry.token.cancel():
+            return {"cancelled": False}
+        entry.stopped = True
+        entry.task.cancel()
+        await asyncio.wait([entry.task], timeout=15)
+        return {"cancelled": True}
+
+    async def _packages_import_run(self, params, token=None, reporter=None):
+        if token is not None:
+            skill_progress.start(token, reporter)
+        # The window asks for the hand-off (the default); a member's tool never does: it is told why the material is no skill.
         handoff = params.pop("handoff", True) if isinstance(params, dict) else True
         if type(handoff) is not bool:
             raise invalid_params("handoff must be true or false")
+        # `alone`: the owner knows the text needs no other file and wants it as it is.
+        alone = params.pop("alone", False) if isinstance(params, dict) else False
+        if type(alone) is not bool:
+            raise invalid_params("alone must be true or false")
         try:
             params = routed(params)
         except MemberError as error:
             raise _library_error(error) from None
+        if isinstance(params, dict) and not alone:
+            text = params.get("text")
+            if isinstance(params.get("file"), dict) and str(params["file"].get("name", "")).lower().endswith((".md", ".markdown")):
+                # A lone SKILL.md dropped on the box has no folder with it either.
+                with suppress(MemberError, UnicodeError):
+                    text = skill_sources.uploaded_bytes(params["file"]).decode("utf-8-sig")
+            if isinstance(text, str):
+                self._text_alone_is_a_skill(text)
         if "files" in params:
             self._package_fields(params, ("files", "access", "name"))
         try:
@@ -1012,6 +1071,19 @@ class MembersService:
         # What was left out because its name is taken is named with who holds it (#313): the rest is in the library.
         return {"package": await self.packages.view_async(key), **({"skipped": skipped} if skipped else {})}
 
+    @staticmethod
+    def _text_alone_is_a_skill(text):
+        """Pasted text that is a skill but sends the model to other files cannot bring them: it is said, and the folder is asked
+        for, instead of a skill that reads nothing (R-SKILL-37)."""
+        try:
+            skill_metadata(text, writing=True)
+        except MemberError:
+            return  # no skill: the import says so (and the text is handed to Raphael)
+        named = named_files(text)
+        if named:
+            raise _library_error(MemberError("source", "this text names other files that pasted text cannot bring: choose the "
+                                             "skill's folder instead", reason="needs_files", file=named[0], files=named[:6]))
+
     async def _package_documents(self, params, plugins=False, keep=False):
         """What a source holds, as the documents to install: `(documents, source, origin, name)`. With `plugins`, a source that is
         a plugin of any kind (skill_layouts.py) is its `PluginTree` instead, so that the whole of it is kept."""
@@ -1021,16 +1093,16 @@ class MembersService:
                 raise invalid_params("text must be Markdown")
             return [("paste", {"SKILL.md": text.encode()})], "pasted text", "paste", ""
         if "file" in params:
-            files, name = await asyncio.to_thread(skill_sources.uploaded, params["file"], plugins)
+            files, name = await skill_progress.threaded(skill_sources.uploaded, params["file"], plugins)
             return files if plugins and isinstance(files, PluginTree) else ([("upload", f) for f in files], name, "upload", name)
         if "files" in params:
-            files, name = await asyncio.to_thread(skill_sources.uploaded_tree, params["files"], plugins)
+            files, name = await skill_progress.threaded(skill_sources.uploaded_tree, params["files"], plugins)
             return files if plugins and isinstance(files, PluginTree) else ([("upload", f) for f in files], name, "upload", name)
         source = params["source"]
         if not isinstance(source, str) or not source.strip():
             raise invalid_params("source must be a nonempty string")
         if source.startswith("local:"):
-            files, name = await asyncio.to_thread(skill_sources.local, source, plugins)
+            files, name = await skill_progress.threaded(skill_sources.local, source, plugins)
             return files if plugins and isinstance(files, PluginTree) else ([(source, f) for f in files], source, "source", name)
         where = skill_git.address(source)
         if where is not None:
@@ -1054,7 +1126,7 @@ class MembersService:
         parent = await asyncio.to_thread(folder_for, getattr(self, "member_folders", default_folders)(0)[0])
         folder = await skill_git.fetch(where, parent)
         try:
-            files, _ = await asyncio.to_thread(skill_sources.local, "local:" + str(folder), plugins)
+            files, _ = await skill_progress.threaded(skill_sources.local, "local:" + str(folder), plugins)
         except MemberError as error:
             if keep and needs_agent(error):
                 error.material = folder
@@ -1084,6 +1156,7 @@ class MembersService:
         if "plugin" in params and type(params["plugin"]) is not bool:
             raise invalid_params("plugin must be true or false")
         plugin, skipped = None, []
+        skill_progress.report("fetch")
         try:
             as_plugin = bool(params.get("plugin") or "marketplace" in params or "set_id" in params)
             if as_plugin:
@@ -1111,6 +1184,7 @@ class MembersService:
                 # The one box takes a plugin of any kind whole (skill_layouts.py); `plugin: false` asks for its skills only.
                 data = await self._package_documents(params, plugins=new_package and member == -1 and params.get("plugin") is not False,
                                                      keep=new_package and member == -1 and "plugin" not in params)
+                skill_progress.commit()
                 if isinstance(data, PluginTree):
                     plugin, as_plugin = await self.capabilities.import_tree(data, access=params.get("access")), True
             if as_plugin:
