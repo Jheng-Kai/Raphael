@@ -651,8 +651,7 @@ export function mountReportView(pages: PageView, people: () => ReportPeople): Re
     saving = true;
     try {
       const file = reportFile(current.title, current.report, people(), { style: fileStyle(themeWords()), font: labelFont() });
-      const saved = await api.reportSave(current.id, file);
-      toaster.show(t("page.report.saved", { p0: saved.place === "downloads" ? t("page.report.downloads") : saved.folder }));
+      await api.reportSave(current.id, file);
     } catch {
       toaster.show(t("page.report.saveFailed"));
     } finally {

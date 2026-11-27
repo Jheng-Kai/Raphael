@@ -501,7 +501,7 @@ test("the theme's words are read from the window's own stylesheet: light, and wh
   }
 });
 
-test("share saves the report on screen as a file, once a press, says where it went, and leaves the report open", async () => {
+test("share saves the report on screen as a file, once a press, shows no toast, and leaves the report open", async () => {
   const save = vi.spyOn(api, "reportSave").mockResolvedValue({ place: "downloads", folder: "Downloads" });
   const { stage, thread } = conversation();
   thread.querySelector<HTMLButtonElement>("button.pg-link")!.click();
@@ -526,13 +526,14 @@ test("share saves the report on screen as a file, once a press, says where it we
   expect(id).toBe("r1");
   expect(file).toContain("<title>團隊總覽報告</title>");
   expect(file).toContain('class="rp-team-at"');
-  expect(lastToast()).toBe("已存到「下載」");
+  // The file is shown selected in its folder: no toast says where it went (R-TOAST-01).
+  expect(document.querySelector(".toast")).toBeNull();
   expect(stage.classList.contains("is-page") && view.isConnected && !stage.querySelector<HTMLElement>(".pgv")!.hidden).toBe(true);
 
   save.mockResolvedValue({ place: "work", folder: "Raphael 輸出" });
   buttons[0]!.click();
   await flush();
-  expect(lastToast()).toBe("已存到「Raphael 輸出」");
+  expect(document.querySelector(".toast")).toBeNull();
   save.mockRejectedValue(new Error("[1005] The page is gone"));
   buttons[0]!.click();
   await flush();

@@ -478,8 +478,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     if (sharing) return;
     sharing = true;
     try {
-      const saved = await api.pageSave(live.id);
-      toaster.show(t("page.report.saved", { p0: saved.place === "downloads" ? t("page.report.downloads") : saved.folder }));
+      await api.pageSave(live.id);
     } catch {
       toaster.show(t("page.report.saveFailed"));
     } finally {

@@ -47,7 +47,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "拉斐爾打不開這台 Mac 的鑰匙圈，所以沒有送出任何要求。請檢查「鑰匙圈存取」後再試一次。",
     "missing.microphone": "無法取得麥克風，請到「系統設定 > 隱私權與安全性 > 麥克風」允許拉斐爾使用。",
     "brains.failVault": "登入憑證存不進 macOS 鑰匙圈，請再試一次。",
-    "keychain.asked": "下次需要金鑰時，macOS 會再問一次；選「永遠允許」就不再問。",
   },
   en: {
     "desktop.health.runHere": "Run these lines in Terminal on this Mac, then check the host again:",
@@ -63,7 +62,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "Raphael could not open the Keychain on this Mac, so nothing was sent. Check Keychain Access, then try again.",
     "missing.microphone": "Microphone access failed. Allow Raphael in System Settings > Privacy & Security > Microphone.",
     "brains.failVault": "Your sign-in could not be saved in the macOS Keychain. Try again.",
-    "keychain.asked": "macOS will ask once more the next time Raphael needs a key. Choose Always Allow and it won't ask again.",
   },
   ja: {
     "desktop.health.runHere": "この Mac の「ターミナル」で次の行を実行し、もう一度ホストを確認してください：",
@@ -79,7 +77,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "ラファエルがこの Mac のキーチェーンを開けなかったため、何も送信していません。「キーチェーンアクセス」を確認してからもう一度お試しください。",
     "missing.microphone": "マイクを利用できません。「システム設定 > プライバシーとセキュリティ > マイク」でラファエルを許可してください。",
     "brains.failVault": "サインイン情報を macOS のキーチェーンに保存できません。もう一度お試しください。",
-    "keychain.asked": "次にキーが必要になったとき、macOS がもう一度尋ねます。「常に許可」を選ぶと、それ以降は尋ねません。",
   },
   "zh-CN": {
     "desktop.health.runHere": "在这台 Mac 的“终端”运行以下命令，然后再点一次“检查主机”：",
@@ -95,7 +92,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "拉斐尔打不开这台 Mac 的钥匙串，所以没有发出任何请求。请检查“钥匙串访问”后再试一次。",
     "missing.microphone": "无法取得麦克风，请到“系统设置 > 隐私与安全性 > 麦克风”允许拉斐尔使用。",
     "brains.failVault": "登录凭证存不进 macOS 钥匙串，请再试一次。",
-    "keychain.asked": "下次需要密钥时，macOS 会再问你一次；选“始终允许”之后就不会再问。",
   },
   ko: {
     "desktop.health.runHere": "이 Mac의 터미널에서 아래 줄을 실행한 뒤 호스트를 다시 확인하세요:",
@@ -111,7 +107,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "라파엘이 이 Mac의 키체인을 열지 못해 아무것도 보내지 않았습니다. 키체인 접근을 확인한 뒤 다시 시도하세요.",
     "missing.microphone": "마이크 접근에 실패했습니다. 시스템 설정 > 개인정보 보호 및 보안 > 마이크에서 Raphael을 허용하세요.",
     "brains.failVault": "macOS 키체인에 로그인을 저장하지 못했습니다. 다시 시도하세요.",
-    "keychain.asked": "다음에 키가 필요할 때 macOS가 한 번 더 묻습니다. '항상 허용'을 선택하면 다시 묻지 않습니다.",
   },
   es: {
     "desktop.health.runHere": "Ejecuta estas líneas en Terminal en este Mac y vuelve a comprobar el host:",
@@ -127,7 +122,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "Raphael no pudo abrir el llavero de este Mac, así que no se envió nada. Revisa Acceso a Llaveros y vuelve a intentarlo.",
     "missing.microphone": "Falló el acceso al micrófono. Permite Raphael en Ajustes del Sistema > Privacidad y seguridad > Micrófono.",
     "brains.failVault": "No se pudo guardar el acceso en el llavero de macOS. Reintenta.",
-    "keychain.asked": "La próxima vez que Raphael necesite una clave, macOS volverá a preguntar. Elige «Permitir siempre» y no volverá a preguntar.",
   },
   fr: {
     "desktop.health.runHere": "Exécutez ces lignes dans Terminal sur ce Mac, puis revérifiez l’hôte :",
@@ -143,7 +137,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "Raphael n'a pas pu ouvrir le trousseau de ce Mac, rien n'a donc été envoyé. Vérifiez Trousseaux d’accès puis réessayez.",
     "missing.microphone": "L’accès au microphone a échoué. Autorisez Raphael dans Réglages Système > Confidentialité et sécurité > Microphone.",
     "brains.failVault": "Impossible d’enregistrer la connexion dans le trousseau macOS. Réessayez.",
-    "keychain.asked": "macOS redemandera la prochaine fois que Raphael aura besoin d’une clé. Choisissez « Toujours autoriser » et il ne redemandera plus.",
   },
   de: {
     "desktop.health.runHere": "Diese Zeilen im Terminal dieses Macs ausführen, danach den Host erneut prüfen:",
@@ -159,7 +152,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "Raphael konnte den Schlüsselbund dieses Macs nicht öffnen, deshalb wurde nichts gesendet. Prüfe die Schlüsselbundverwaltung und versuche es erneut.",
     "missing.microphone": "Mikrofonzugriff fehlgeschlagen. Raphael unter Systemeinstellungen > Datenschutz & Sicherheit > Mikrofon erlauben.",
     "brains.failVault": "Anmeldung konnte nicht im macOS-Schlüsselbund gespeichert werden. Erneut versuchen.",
-    "keychain.asked": "Wenn Raphael das nächste Mal einen Schlüssel braucht, fragt macOS noch einmal. Wähle „Immer erlauben“, dann fragt es nicht mehr.",
   },
   "pt-BR": {
     "desktop.health.runHere": "Execute estas linhas no Terminal deste Mac e verifique o host novamente:",
@@ -175,7 +167,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "O Raphael não conseguiu abrir as Chaves deste Mac, então nada foi enviado. Verifique o Acesso às Chaves e tente de novo.",
     "missing.microphone": "Falha ao acessar o microfone. Permita o Raphael em Ajustes do Sistema > Privacidade e Segurança > Microfone.",
     "brains.failVault": "Não foi possível salvar o login nas Chaves do macOS. Tente novamente.",
-    "keychain.asked": "O macOS vai perguntar mais uma vez na próxima vez que o Raphael precisar de uma chave. Escolha Sempre Permitir e ele não vai perguntar de novo.",
   },
   it: {
     "desktop.health.runHere": "Esegui queste righe nel Terminale di questo Mac, poi ricontrolla l’host:",
@@ -191,7 +182,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "Raphael non è riuscito ad aprire il portachiavi di questo Mac, quindi non è stato inviato nulla. Controlla Accesso Portachiavi e riprova.",
     "missing.microphone": "Accesso al microfono non riuscito. Consenti Raphael in Impostazioni di Sistema > Privacy e sicurezza > Microfono.",
     "brains.failVault": "Impossibile salvare l’accesso nel portachiavi di macOS. Riprova.",
-    "keychain.asked": "macOS lo chiederà di nuovo la prossima volta che Raphael avrà bisogno di una chiave. Scegli «Consenti sempre» e non lo chiederà più.",
   },
   ru: {
     "desktop.health.runHere": "Выполните эти строки в Терминале на этом Mac, затем проверьте хост снова:",
@@ -207,7 +197,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "Raphael не смог открыть связку ключей на этом Mac, поэтому ничего не было отправлено. Проверьте «Связку ключей» и повторите попытку.",
     "missing.microphone": "Ошибка доступа к микрофону. Разрешите Raphael в Системных настройках > Конфиденциальность и безопасность > Микрофон.",
     "brains.failVault": "Не удалось сохранить вход в связке ключей macOS. Повторите.",
-    "keychain.asked": "В следующий раз, когда Raphael понадобится ключ, macOS спросит ещё раз. Выберите «Всегда разрешать», и вопрос больше не появится.",
   },
   vi: {
     "desktop.health.runHere": "Chạy các dòng này trong Terminal trên máy Mac này, rồi kiểm tra lại máy chủ:",
@@ -223,7 +212,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "Raphael không mở được Chuỗi khóa của máy Mac này nên chưa gửi gì cả. Hãy kiểm tra Truy cập Chuỗi khóa rồi thử lại.",
     "missing.microphone": "Không truy cập được micrô. Cho phép Raphael trong Cài đặt hệ thống > Quyền riêng tư & Bảo mật > Micrô.",
     "brains.failVault": "Không lưu được đăng nhập trong Chuỗi khóa của macOS. Thử lại.",
-    "keychain.asked": "Lần tới Raphael cần khóa, macOS sẽ hỏi lại một lần. Chọn Luôn cho phép thì sẽ không hỏi nữa.",
   },
   th: {
     "desktop.health.runHere": "เรียกใช้บรรทัดเหล่านี้ใน Terminal บน Mac เครื่องนี้ แล้วตรวจสอบโฮสต์อีกครั้ง:",
@@ -239,7 +227,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "Raphael เปิดพวงกุญแจของ Mac เครื่องนี้ไม่ได้ จึงยังไม่ได้ส่งอะไรเลย โปรดตรวจสอบการเข้าถึงพวงกุญแจแล้วลองอีกครั้ง",
     "missing.microphone": "เข้าถึงไมโครโฟนไม่ได้ อนุญาต Raphael ในการตั้งค่าระบบ > ความเป็นส่วนตัวและความปลอดภัย > ไมโครโฟน",
     "brains.failVault": "บันทึกการเข้าสู่ระบบในพวงกุญแจ macOS ไม่ได้ ลองอีกครั้ง",
-    "keychain.asked": "ครั้งหน้าที่ Raphael ต้องใช้คีย์ macOS จะถามอีกครั้ง เลือก “อนุญาตเสมอ” แล้วจะไม่ถามอีก",
   },
   id: {
     "desktop.health.runHere": "Jalankan baris ini di Terminal pada Mac ini, lalu periksa host lagi:",
@@ -255,7 +242,6 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "Raphael tidak dapat membuka Rantai Kunci di Mac ini, jadi belum ada yang dikirim. Periksa Akses Rantai Kunci lalu coba lagi.",
     "missing.microphone": "Akses mikrofon gagal. Izinkan Raphael di Pengaturan Sistem > Privasi & Keamanan > Mikrofon.",
     "brains.failVault": "Login tidak dapat disimpan di Rantai Kunci macOS. Coba lagi.",
-    "keychain.asked": "macOS akan bertanya sekali lagi saat Raphael berikutnya butuh kunci. Pilih Selalu Izinkan agar tidak ditanya lagi.",
   },
   tr: {
     "desktop.health.runHere": "Bu satırları bu Mac’teki Terminal’de çalıştırın, sonra ana makineyi yeniden denetleyin:",
@@ -271,6 +257,5 @@ export const macCatalogs: Record<UiLocale, MacCatalog> = {
     "card.cause.vault": "Raphael bu Mac’in Anahtar Zinciri’ni açamadığı için hiçbir şey gönderilmedi. Anahtar Zinciri Erişimi’ni kontrol edip yeniden deneyin.",
     "missing.microphone": "Mikrofona erişilemedi. Sistem Ayarları > Gizlilik ve Güvenlik > Mikrofon’da Raphael’e izin verin.",
     "brains.failVault": "Oturum macOS Anahtar Zinciri’ne kaydedilemedi. Yeniden deneyin.",
-    "keychain.asked": "Raphael bir dahaki sefere anahtar gerektiğinde macOS yeniden soracak. Her Zaman İzin Ver'i seçersen bir daha sormaz.",
   },
 };
