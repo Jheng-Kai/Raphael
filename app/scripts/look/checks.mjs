@@ -3448,6 +3448,9 @@ export function checkRendered(name, context = {}) {
         require(!pill && !card.querySelector(':scope > .card-head > .card-close'), 'an answered question has no pill and no ×');
       } else if (card.matches('[data-member-template],[data-template-connection][data-connected="false"]')) {
         require(!pill, 'a template and its unconnected requests have no invented status');
+      } else if (card.matches('[data-card-state="cancelled"]') && !pill) {
+        // A card the owner's Stop closed keeps its title and what it showed and says nothing of the stop (R-CHAT-STOP-02): no word, and nothing to press.
+        require(!card.querySelector(':scope > .card-head > .card-close, .card-actions'), 'a card the Stop closed has neither buttons nor ×');
       } else {
         require(pill && pill.textContent.trim(), 'status always has a word');
         // A failed card's × closes the head at the right; otherwise the status does. A × in the head
@@ -4767,7 +4770,8 @@ export function checkRendered(name, context = {}) {
       require(calls.filter(call => call.command === "agent_retract").length === 1, "withdraw uses the existing path exactly once");
       require(document.querySelector('.composer').dataset.taskState === "running", "the first turn keeps working");
     } else if (name === "composer-queued-stop") {
-      require(document.querySelector('.cmp-input').value === "目前草稿\n\n第二個範例請求\n\n第三個範例請求", "Stop returns every queued draft after current words");
+      // The running turn showed nothing yet (`running: "fresh"`), so Stop takes it back too (R-CHAT-STOP-01): its words come first, then the queued ones.
+      require(document.querySelector('.cmp-input').value === "目前草稿\n\n幫我整理這週的研究重點，並列出下週的安排。\n\n第二個範例請求\n\n第三個範例請求", "Stop returns the running turn's words and every queued draft after current words");
       const stopped = calls.filter(call => call.method === "agent.history.stop");
       require(stopped.length === 1 && !/^(901|902)$/.test(stopped[0].params?.session_id ?? ''), "Stop targets the running turn exactly once");
     } else {
@@ -7823,6 +7827,39 @@ export function checkRendered(name, context = {}) {
   if (name === "room-reply-send") {
     require(window.__look.calls.some(call => call.method === 'rooms.send' && call.params.reply_to === 2), "reply reaches the core with the target message id");
     return { check: name, replyTo: 2 };
+  }
+  if (name === "room-stop-before") {
+    // The room before Stop: which messages stand, and that the member that had not spoken has no line.
+    window.__look.beforeRoomStop = [...document.querySelectorAll('.au-room-thread [data-room-message]')].filter(node => !node.querySelector('.live-presence')).map(node => [node.dataset.roomMessage, node.textContent.replace(/\s+/g, ' ').trim()]);
+    require(window.__look.beforeRoomStop.some(([, text]) => text.includes('主要流程都已通過')), 'a member has replied');
+    return { check: name, messages: window.__look.beforeRoomStop.length };
+  }
+  if (name === "room-stop-quiet") {
+    // R-CHAT-STOP-02 in a group chat: after a member showed something, Stop writes no wrap-up and no 未能回覆 line, and nothing that stood is gone.
+    const thread = document.querySelector('.au-room-thread'), before = window.__look.beforeRoomStop;
+    require(window.__look.calls.filter(call => call.method === 'rooms.stop').length === 1, 'Stop reached the core once');
+    require(!thread.querySelector('.au-room-wrapup, .room-intent-blocked'), 'no wrap-up and no line for a reply that never began');
+    require(!/已停止|已取消|未能回覆|stopped/i.test(thread.textContent), 'no word of the stop is in the thread');
+    for (const [id, text] of before.filter(([, text]) => text)) {
+      const now = thread.querySelector(`[data-room-message="${id}"]`);
+      require(now && now.textContent.replace(/\s+/g, ' ').trim() === text, `message ${id} stays as it was`);
+    }
+    require(!document.querySelector('.toast'), 'no toast');
+    return { check: name, kept: before.length };
+  }
+  if (name === "stop-closes-card") {
+    // A permission question the owner's Stop closed keeps its action and says nothing of the stop; its buttons are gone.
+    const before = window.__look.beforeStop, turn = document.querySelector('.tn[data-id="8201"]'), card = turn?.querySelector('[data-permission-card]');
+    require(before && card && visible(card), 'the card stays');
+    require(card.dataset.cardState === 'cancelled', 'the core closed it');
+    require(!card.querySelector('.card-status, [data-card-status-text]'), 'no status word is added');
+    require(!card.querySelector('[data-act^="perm"], [data-card-close], .card-actions'), 'its buttons are gone');
+    require(!/已取消|已中止|已停止|stopped|cancel/i.test(card.textContent), 'no word of the stop on the card');
+    require(card.textContent.includes('Get-Process') || card.querySelector('.local-command, .card-field'), 'what it showed (the action) is still there');
+    const bubble = turn.querySelector('.owner-message .bubble');
+    require(bubble && bubble.querySelector('.message-text').textContent === before.question, 'the owner message stays');
+    require(!turn.querySelector('.live-presence'), 'the member no longer shows itself at work');
+    return { check: name, card: card.dataset.permissionCard };
   }
   if (name === "room-stop") {
     require(window.__look.calls.some(call => call.method === 'rooms.stop' && call.params.room_id === 1), "stop reaches the core");

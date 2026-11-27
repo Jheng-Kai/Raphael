@@ -111,6 +111,7 @@ export function installMock(fixture, config = {}, target = window) {
       const said = { thinking: [{ seq: 1, kind: 'thinking', text: '先把摘要的來源、日期和不確定的地方分開，再挑出三個重點。' }],
         words: [{ seq: 1, kind: 'reply', text: '好，我先看一下這份範例研究摘要。' }], progress: [{ seq: 1, kind: 'progress', text: '正在讀範例摘要' }] }[variant.stopShown];
       if (said) turn.messages = said.map(message => ({ ...message, at_ms: data.now }));
+      if (variant.stopShown === 'card') Object.assign(turn, { status: 'confirm', permissions: structuredClone(data.permissionTurns.local.turn.permissions) });
       if (variant.stopShown === 'step') turn.steps = [{ kind: 'tool', tool: 'web_search', server: 'Raphael', outcome: 'ok', ms: 640, reason: null, at_ms: data.now }];
     }
     // The owner's message was edited after its member answered it: the history's turn is its second version, the first is kept
@@ -2048,7 +2049,10 @@ export function installMock(fixture, config = {}, target = window) {
           if (!answered(turn)) {
             data.turns = data.turns.filter(item => item !== turn);
             taken.push({session_id:turn.session_id,text:turn.question,attachments:turn.attachments,quote:turn.quote});
-          } else Object.assign(turn, { status: "cancelled", prefix: "", text: turn.messages.filter(message => message.kind === "reply").map(message => message.text).join("\n\n") });
+          } else {
+            for (const card of turn.permissions ?? []) if (card.state === "pending") card.state = "cancelled";
+            Object.assign(turn, { status: "cancelled", prefix: "", text: turn.messages.filter(message => message.kind === "reply").map(message => message.text).join("\n\n") });
+          }
           notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         }
         returned.unshift(...taken);
@@ -2259,7 +2263,20 @@ export function installMock(fixture, config = {}, target = window) {
         return { room };
       }
       case "rooms.delete": data.rooms = data.rooms.filter(item => item.id !== p.room_id); return { deleted: true };
-      case "rooms.stop": { for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id && ["running", "queued"].includes(item.state))) exchange.stop_requested = 1; for(const exchange of data.roomExchanges.filter(item=>item.room_id===p.room_id)){exchange.state="stopped";exchange.active_turn=null;}for(const message of data.messages.filter(item=>item.room_id===p.room_id&&item.status==="running")){message.status="error";message.text="已停止工作。";}for(const task of data.roomHandoffs.filter(item=>["queued","running","waiting"].includes(item.state)))task.state="cancelled";data.messages.push({...data.roomWrapupMessage,id:nextId(data.messages),reply_to:null,reply_to_member:null,text:"### 結論\n已停止本次工作，已完成的動作保留。\n\n### 待決定\n尚未完成的工作已取消。\n\n### 下一步\n等待你的新指示。"});notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true }; }
+      case "rooms.stop": {
+        const spoke = data.messages.some(item => item.room_id === p.room_id && item.member_id !== null && item.kind !== "wrapup" && item.status !== "running" && (item.text ?? "").trim());
+        for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id && ["running", "queued"].includes(item.state))) {
+          exchange.stop_requested = 1; exchange.reason = "owner";
+          for (const intent of exchange.reply_intents ?? []) if (["queued", "running"].includes(intent.state)) Object.assign(intent, { state: "blocked", reason: "owner" });
+        }
+        if (spoke) {
+          // A member had already shown something: Stop only stops. No wrap-up, and the replies that never began leave no mark.
+          for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id)) { exchange.state = "stopped"; exchange.active_turn = null; exchange.wrapup_sent = 1; }
+          data.messages = data.messages.filter(item => !(item.room_id === p.room_id && item.status === "running" && !(item.text ?? "").trim()));
+          for (const task of data.roomHandoffs.filter(item => ["queued", "running", "waiting"].includes(item.state))) task.state = "cancelled";
+          notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true };
+        }
+        for(const exchange of data.roomExchanges.filter(item=>item.room_id===p.room_id)){exchange.state="stopped";exchange.active_turn=null;}for(const message of data.messages.filter(item=>item.room_id===p.room_id&&item.status==="running")){message.status="error";message.text="已停止工作。";}for(const task of data.roomHandoffs.filter(item=>["queued","running","waiting"].includes(item.state)))task.state="cancelled";data.messages.push({...data.roomWrapupMessage,id:nextId(data.messages),reply_to:null,reply_to_member:null,text:"### 結論\n已停止本次工作，已完成的動作保留。\n\n### 待決定\n尚未完成的工作已取消。\n\n### 下一步\n等待你的新指示。"});notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true }; }
       case "rooms.send": { if (variant.ownerQuestion) for (const turn of data.turns) for (const item of turn.owner_questions ?? []) if (item.state === "asked" && item.kind === "ask_owner") { item.state = "cancelled"; item.result = { state: "cancelled", by: "message", said: p.text }; turn.task = { ...turn.task, state: "done", waiting_owner: 0 }; } const message = { thread_id:p.thread_id ?? 1, id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message", attachments: (p.attachments ?? []).map((file, index) => { const id = `${"f".repeat(30)}${String(index).padStart(2, "0")}.png`; (data.keptFiles ??= {})[id] = { mime: file.mime, data: file.data }; return { id, name: file.name, mime: file.mime }; }) }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
       case "brains.cli":
         // As the core does: a CLI's models come after the first read, in the background. With `codexLate` they come when the scene's

@@ -1,4 +1,4 @@
-import { scene, click, hover, type, wait, waitGone, page, key, scroll, room, newRoom, check, rightClick, member, focus } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitCall, waitGone, page, key, scroll, room, newRoom, check, rightClick, member, focus } from "./steps.mjs";
 
 const auto = [page("automations"), wait(".au-toolbar")];
 const calendar = [...auto, wait(".au-occurrence"), check("calendar-chips"), check("calendar-shell")];
@@ -146,6 +146,7 @@ export default [
   scene("room-reply-source-missing", "Deleted reply source stays unavailable", [room(1), check("room-reply-source-missing")], { roomMissingSource: true }),
   scene("room-reply-send", "Reply to a specific member through the composer", [room(1), hover('[data-room-message="2"] .chat-message'), click('[data-room-message="2"] [data-room-act="reply"]'), click('[data-room-act="cancel-reply"]'), check("room-reply-cancel"), click('[data-room-message="2"] [data-room-act="reply"]'), type('#room-message', '請補充檢查結果。'), key("Enter"), check("room-reply-send")]),
   scene("room-thinking", "One speaking row for queued member replies", [room(1), wait(".au-room-thinking"), check("room-thinking")], { roomThinking: true }),
+  scene("room-stop-after-reply", "Two Escapes after a member replied only stop the room: the messages stay, no wrap-up and no line for the member that had not spoken", [room(1), wait('.au-room-pane .composer[data-task-state="running"] .cmp-voice'), check("room-stop-before"), key("Escape"), key("Escape"), waitCall("rooms.stop"), wait('.au-room-pane .composer:not([data-task-state="running"])'), check("room-stop-quiet")], { roomThinking: true }),
   scene("room-stop", "Two Escapes stop the room through the shared composer slot", [room(1), wait('.au-room-pane .composer[data-task-state="running"] .cmp-voice'), key("Escape"),check("cancel-armed"),key("Escape"), check("room-stop")], { roomThinking: true }),
   scene("room-row-menu", "Room row actions, with header actions on compact screens", [{ action: "room-row-menu", id: 1 }, check("room-row-menu")]),
   ...["rename", "members", "delete"].map(action => scene(`room-${action}`, `Room ${action} dialog`, [room(1), click("[data-room-menu]"), click(`[data-pick="${action}"]`), ...(action === "delete" ? [check("delete-confirmation"),click('.mb-confirm [data-dlg="delete"]'),waitGone(".mb-confirm"), waitGone(".au-room-pane:not([hidden])"), check("deleted-view")] : [])])),

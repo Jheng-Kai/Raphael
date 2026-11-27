@@ -1,4 +1,4 @@
-import { cardDisclosureHTML, cardFailure, cardHTML } from "./card";
+import { cardDisclosureHTML, cardFailure, cardHTML, stoppedTurn } from "./card";
 import { connectionProposal } from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
@@ -8,7 +8,7 @@ import { btn, esc } from "./ui";
 
 const stateKeys = { draft: "mcp.draft", approval: "cards.waiting", testing: "mcp.testing", tested: "mcp.tested", enabled: "mcp.enabled", cancelled: "mcp.cancelled" } as const;
 
-export function mcpProposalHTML(card: ConnectionProposal, configure?: string): string {
+export function mcpProposalHTML(card: ConnectionProposal, configure?: string, stopped = false): string {
   const active = !["enabled", "cancelled", "testing", "approval"].includes(card.state);
   const attr = ` data-act="mcp-proposal"`;
   const action = (operation: string, text: string, primary = false, choice = ""): string =>
@@ -32,11 +32,11 @@ export function mcpProposalHTML(card: ConnectionProposal, configure?: string): s
   return cardHTML({ title: card.fields.name, mark: connectionMarkHTML(card.fields.name), status: card.error ? "failed" : card.state === "enabled" ? "done" : card.state === "tested" || card.state === "cancelled" ? "ready" : "waiting",
     statusText: card.error ? t("cards.failed") : t(stateKeys[card.state]), body: card.error ? t("cards.retained") : card.state === "approval" ? t("mcp.approval") : settled ? undefined : t("cards.mcpReview"),
     content: (settled ? cardDisclosureHTML(card.id, content) : content) + `<div class="mcp-error" role="alert"${card.error ? "" : " hidden"}>${card.error ? esc(t(card.error === "missing_secret" ? "mcp.missingSecret" : card.error === "local_disabled" ? "mcp.localDisabled" : "mcp.failed")) : ""}</div>`,
-    actions, cls: "mcp-proposal", attrs: ` data-mcp-proposal="${esc(card.id)}" data-mcp-revision="${card.revision}" data-mcp-fields="${esc(JSON.stringify(card.fields))}" data-card-state="${card.state}"`,
+    actions, cls: "mcp-proposal", ...(stopped && card.state === "cancelled" && !card.error ? { hideStatus: true } : {}), attrs: ` data-mcp-proposal="${esc(card.id)}" data-mcp-revision="${card.revision}" data-mcp-fields="${esc(JSON.stringify(card.fields))}" data-card-state="${card.state}"`,
   });
 }
 
-export const mcpProposalsHTML = (turn: AgentTurn): string => (turn.connection_proposals ?? []).map(card => mcpProposalHTML(card)).join("");
+export const mcpProposalsHTML = (turn: AgentTurn): string => (turn.connection_proposals ?? []).map(card => mcpProposalHTML(card, undefined, stoppedTurn(turn))).join("");
 
 export function mountMcpProposals(thread: HTMLElement, changed: () => void): void {
   const busy = new Set<string>();

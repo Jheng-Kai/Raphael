@@ -72,6 +72,8 @@ export default [
     ...stopSees('.tn[data-id="8201"] [data-reply] .message-text'), ...stopKeys, ...stopped, check('stop-keeps-reply'), hover('.ra-scroll')], stopOwn('words')),
   scene('stop-after-step', "Stop after the member took a step only stops it: the step line and the message stay, and no word of the stop follows", [
     ...stopSees('.tn[data-id="8201"] .live-presence'), ...stopPress, ...stopped, check('stop-keeps-reply'), hover('.ra-scroll')], stopOwn('step')),
+  scene('stop-closes-card', "Stop at a permission question closes its card as it was: its action stays, the buttons go and no status word is added, and the message stays", [
+    ...stopSees('.tn[data-id="8201"] [data-permission-card]'), ...stopKeys, waitCall('agent.history.stop'), wait('[data-permission-card][data-card-state="cancelled"]'), check('stop-closes-card'), hover('.ra-scroll')], stopOwn('card')),
   scene('stop-before-anything', "Stop before the member showed anything takes the message back: its bubble leaves the thread and its words are in the composer", [
     ...stopSees('.tn[data-id="8201"] .live-presence'), ...stopPress, ...takenBack, check('stop-takes-back'), hover('.ra-scroll')], stopOwn('nothing')),
   scene('stop-before-anything-esc', "Escape twice before the member showed anything takes the message back the same way", [

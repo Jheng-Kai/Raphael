@@ -417,7 +417,7 @@ the edit up with Escape (`message-edit-draft-back`: the words are back, the mess
 ### Stop and Escape twice only stop (R-CHAT-STOP-02, R-CHAT-STOP-01)
 
 ```powershell
-npm run look -- stop-after-thinking stop-after-words-esc stop-after-step stop-before-anything stop-before-anything-esc message-edit-open composer-queued-stop esc-main-armed --theme both --width 1120,720,1920x1080
+npm run look -- stop-after-thinking stop-after-words-esc stop-after-step stop-closes-card stop-before-anything stop-before-anything-esc message-edit-open composer-queued-stop owner-sendnow-order esc-main-armed --theme both --width 1120,720,1920x1080
 ```
 
 These scenes open member 1's conversation with its message 8201 still being worked on (`ownerThinking`), and the mock's `stopShown` says what the member has shown of its reply:
@@ -428,8 +428,11 @@ words, the step line). `stop-keeps-reply` asserts, after the composer's Stop (a 
 thread with its words and its box as before, what was shown there as it was, the member no longer at work, no cancel word anywhere in the thread (已取消, 已中止, 已停止,
 cancel, stopped), no toast or failure card, no failure styling or Run again, and the composer empty and idle. `stop-takes-back` asserts the case of nothing shown: one Stop
 call, the turn gone from the thread, its words in the composer, no word of the stop. `message-edit-open` is the separate action (編輯 in the ⋯ menu) and is unchanged;
-`composer-queued-stop` and `esc-main-armed` are the existing Stop consumers. A background task the owner stopped keeps its card without the word 已中止
-(`timeline.test.ts`), and a group chat's Stop writes no wrap-up after a member spoke (`test_room_intents.py`, `group-chats.test.ts`); neither has a look scene.
+`composer-queued-stop` and `esc-main-armed` are the existing Stop consumers, and `owner-sendnow-order` keeps the wording of a card closed by a newer message (the turn is superseded, not stopped).
+`stop-closes-card` (`stopShown: 'card'`) presses Escape twice at a permission
+question: the card is `cancelled` in the core, keeps its action, has no status, buttons or ×, and the message stays; `stopped-cards.test.ts` holds the same for connection, key, question,
+proposal and draft cards. The group chat's scene is `room-stop-after-reply` in `team-and-rooms.md`. The card of a background task (`taskCardHTML`, `timeline.ts`) is drawn nowhere in the
+app's thread today (only tests call `stepsHTML`), so no scene can show it: a task the owner stopped keeps its count with no 已中止 and no empty `.task-mark` slot in `timeline.test.ts`.
 
 ## An answered message is edited in its own bubble, and keeps its first exchange as a version (R-UI-163)
 

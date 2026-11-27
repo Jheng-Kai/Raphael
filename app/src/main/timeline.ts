@@ -514,7 +514,7 @@ function taskCardHTML(turn: AgentTurn, state: TimelineState): string {
     : task.state === "done" ? `<span class="task-check${ended ? " is-pop" : ""}">${ico("check")}</span>` : task.state === "cancelled" ? "" : ico("stop");
   const since = live ? task.started_at_ms ? ` data-since="${task.started_at_ms}"` : ` data-duration="${workMs(turn, 0)}"` : "";
   const summary = btn(
-    `<span class="task-mark">${mark}</span><span class="task-lead">${esc(lead)}</span>` +
+    (mark ? `<span class="task-mark">${mark}</span>` : "") + `<span class="task-lead">${esc(lead)}</span>` +
       (time ? `<span class="task-time num"${since}>${live ? "" : esc(time)}</span>` : "") +
       (bad ? `<span class="steps-bad">${esc(bad)}</span>` : "") +
       `<span class="steps-chev">${ico("down")}</span>`,

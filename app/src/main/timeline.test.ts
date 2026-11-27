@@ -408,7 +408,11 @@ describe("an owner message with its own answer during earlier work", () => {
     expect(card?.querySelector(".card-status")?.textContent?.trim()).toBe("已取消");
     expect(card?.querySelector(".card-body")?.textContent).toBe("已取消，沒有執行");
     expect(card?.querySelector(".card-close, .card-actions")).toBeNull();
-    expect(render({ ...work, status: "cancelled", permissions }, answer).querySelector(".permission-card .card-status")?.textContent?.trim()).toBe("已取消");
+    // The owner's Stop is quiet instead (R-CHAT-STOP-02): the same card in a stopped turn keeps its action and no status word.
+    const stopped = render({ ...work, status: "cancelled", permissions }, answer).querySelector(".permission-card");
+    expect(stopped?.querySelector(".card-status")).toBeNull();
+    expect(stopped?.textContent).toContain("Send a review");
+    expect(stopped?.textContent).not.toContain("已取消");
   });
 
   test("an answer for a message sent after work ended stays with its own bubble", () => {
@@ -711,6 +715,7 @@ describe("what a turn did", () => {
     expect(summaryText(stopped, T0).lead).toBe("1 個動作");
     const html = stepsHTML(stopped, emptyTimelineState());
     expect(visible(html)).not.toMatch(/中止|停止了|已取消/);
+    expect(html).not.toContain("task-mark"); // no empty slot where the stop icon was
     expect(html).not.toContain('data-act="stop"'); // nothing to stop any more, and a run again stays
     expect(html).toContain('data-act="rerun"');
     expect(workMs(stopped, T0 + 99_000)).toBe(5_000); // an ended task's time does not grow
