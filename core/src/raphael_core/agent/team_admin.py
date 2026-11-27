@@ -100,10 +100,25 @@ def delegated_management(request):
     if re.search(r'\b(?:implementation|code|tests?|regression|documentation)\b|程式碼|實作|測試|測试|ソースコード', request, re.I):
         return False
     request = re.sub(r"(?:do not|don't|never|不要|不得|勿)[^.;。\n]*", '', request, flags=re.I)
-    return bool(re.search(r'\b(?:call|use|invoke|run|execute)\b.{0,40}\b(?:' + tools + r'|create_member)\b', request, re.I)
-                or re.search(operation + r'.{0,60}' + subject, request, re.I)
-                or re.search(subject + r'.{0,40}' + operation, request, re.I)
-                or re.search(operation + r'.{0,40}(?:model|instructions|personality|模型|指令|性格).{0,20}(?:\bto\b|為|为|成)', request, re.I))
+    if re.search(r'\b(?:call|use|invoke|run|execute)\b.{0,40}\b(?:' + tools + r'|create_member)\b', request, re.I):
+        return True
+    # A clause is judged alone: asking someone to verify or report on a feature is not asking to change a member.
+    # A clause that verifies (驗收, verify, QA) changes nothing. One that asks whether a member tool has an option
+    # (成員工具是否有設定…) only names the operation inside the question; a command that acts on a member
+    # ("report, then rename member 3") still counts.
+    checks = r'驗收|验收|驗證|验证|\bverif(?:y|ies|ication)\b|\bQA\b|\bacceptance\b'
+    asking = r'是否|有沒有|有没有|\b(?:whether|if|has|have)\b'
+    for clause in re.split(r'[。；;\n]|\.\s', request):
+        if re.search(checks, clause, re.I):
+            continue
+        acts = re.search(operation + r'.{0,60}' + subject, clause, re.I)
+        describes = re.search(subject + r'.{0,40}' + operation, clause, re.I)
+        if describes and re.search(asking, describes.group(), re.I):
+            describes = None
+        if (acts or describes
+                or re.search(operation + r'.{0,40}(?:model|instructions|personality|模型|指令|性格).{0,20}(?:\bto\b|為|为|成)', clause, re.I)):
+            return True
+    return False
 
 LEADERSHIP = (
     "\nEvery member has the same management tools in the owner's private chat. Use team_overview and your team administration tools "
