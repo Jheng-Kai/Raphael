@@ -20,6 +20,7 @@ from urllib.parse import quote, urlsplit
 import httpx
 
 from ..bots.homes import atomic
+from . import skill_git
 from .store import MemberError
 from .skill_errors import oversized_file, oversized_package, too_many_files
 from .skill_library import (SHARED, MAX_ARCHIVE_ENTRIES, MAX_DISCOVERY_DEPTH, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES,
@@ -702,6 +703,11 @@ class PluginSets:
             source, target = f"github:{marketplace}/{name}", plugin["target"]
         elif isinstance(source, str) and source.startswith("local:"):
             source, files, identity = await asyncio.to_thread(self._local_plugin_snapshot, source, set_id is not None)
+        elif skill_git.is_address(source):
+            # A Git address (SSH, or https of a forge) is fetched by the system's git, as a GitHub link is by its API.
+            where = skill_git.address(source)
+            files, identity = await skill_git.fetch_plugin(source, self.folder.parent / "git-fetch")
+            source = where.url
         else:
             from .skill_github import fetch_plugin
 

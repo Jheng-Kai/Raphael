@@ -11,9 +11,10 @@ import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
+import type { WireAttachment } from "./types";
 import { toaster } from "./ui";
 
-type FixedIntent = Exclude<api.AskIntent, `connect-app:${string}`>;
+type FixedIntent = Exclude<api.AskIntent, `connect-app:${string}` | "import-skill">;
 const WORDS: Record<FixedIntent, MessageKey> = {
   "setup-telegram": "chat.ask.setupTelegram",
   "setup-slack": "chat.ask.setupSlack",
@@ -42,6 +43,8 @@ function clear(key: string): void {
 
 /** The owner's words for `intent`, in the window's language: an app handed to Raphael is named (`name`). */
 export function askWords(intent: api.AskIntent, name = ""): string {
+  // The words of a hand-off are the material's own (what the owner put in the importer), so the caller says them.
+  if (intent === "import-skill") return name;
   if (intent.startsWith("connect-app:")) return intent === "connect-app:google" ? t("store.googleSetUp") : t("store.setUpInChat", { p0: name });
   return (t as unknown as (key: MessageKey) => string)(WORDS[intent as FixedIntent]);
 }
@@ -61,14 +64,15 @@ export function settleAsks(memberId: number, state: string): void {
   for (const key of [...pending.keys()]) if (key.startsWith(`${memberId}:`)) clear(key);
 }
 
-/** Sends the words and the intent to `memberId`'s conversation, once; a refusal (a turn already running) is told. */
-export function askInChat(memberId: number, intent: api.AskIntent, name = ""): void {
+/** Sends the words and the intent to `memberId`'s conversation, once; a refusal (a turn already running) is told. `words` and
+ *  `attachments` are the owner's own message of a hand-off (the importer of Team skills), which has no fixed words. */
+export function askInChat(memberId: number, intent: api.AskIntent, name = "", own: { words?: string; attachments?: WireAttachment[] } = {}): void {
   const key = keyOf(memberId, intent);
   if (pending.has(key)) return;
   pending.set(key, setTimeout(() => clear(key), PENDING_MAX_MS));
   changed();
   void Promise.resolve()
-    .then(() => api.agentAskText(askWords(intent, name), [], memberId, { intent }))
+    .then(() => api.agentAskText(own.words ?? askWords(intent, name), own.attachments ?? [], memberId, { intent }))
     .catch((error) => { clear(key); toaster.info(describeError(error)); });
 }
 

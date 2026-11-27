@@ -670,7 +670,9 @@ export function checkRendered(name, context = {}) {
     // A package's page stands in the list's place (R-SKILL-17): it has no importer of its own.
     const onPage = ['skill-library-open', 'skill-library-page-top', 'skill-library-skill-page', 'skill-library-doc-alone', 'skill-library-page-remove',
       'skill-library-plugin-imported', 'skill-library-skipped', 'skill-library-rename'].includes(name);
-    if (name !== 'member-skills-library' && !onPage) {
+    // A hand-off leaves Settings for Raphael's conversation: what stands there is checked below, not the list.
+    const handedOff = name.startsWith('skill-library-handoff') && name !== 'skill-library-handoff-back';
+    if (name !== 'member-skills-library' && !onPage && !handedOff) {
       const pane = document.querySelector('.modal-scrim .skl');
       require(pane?.getAttribute('aria-label') === '團隊技能', 'the Settings section names Team skills');
       const head = pane.closest('.set-content').querySelector('.set-head');
@@ -866,7 +868,7 @@ export function checkRendered(name, context = {}) {
       if (name === 'skill-library-import-link') require(field.value === 'https://example.com/team-handbook', 'the link stands in the box');
       if (name === 'skill-library-import-menu') {
         const menu = document.querySelector('.skl-pick-menu'), anchor = panel.querySelector('[data-skl="pick"]').getBoundingClientRect(), frame = menu.getBoundingClientRect();
-        require([...menu.querySelectorAll('button')].map(button => button.textContent.trim()).join() === '檔案,資料夾', 'the menu offers files or a folder');
+        require([...menu.querySelectorAll('button')].map(button => button.textContent.trim()).join() === '檔案（zip、SKILL.md…）,資料夾', 'the menu offers the files (a zip plainly among them) or a folder');
         require(frame.left >= 0 && frame.right <= innerWidth && frame.bottom <= innerHeight && (frame.top >= anchor.bottom - 1 || frame.bottom <= anchor.top + 1) && Math.abs(frame.left - anchor.left) <= 2, 'the menu stands against its button, at its left edge, inside the window');
       }
     }
@@ -878,19 +880,42 @@ export function checkRendered(name, context = {}) {
       require(!document.querySelector('.modal-body .skl-import, .modal-body #skl-input'), 'no importer stands in the page');
       if (name === 'skill-library') require(/skl-pack/.test(document.querySelector('.modal-body .skl').firstElementChild.innerHTML), 'the page starts with its lists');
     }
-    if (name === 'skill-library-converting' || name === 'skill-library-converted') {
-      const status = document.querySelector('.skl-import .skl-progress[role="status"]');
-      if (name === 'skill-library-converting') {
-        require(visible(status) && status.textContent.trim() === '拉斐爾 正在轉換成技能…（claude-sonnet-5）', `the card says which slime writes the skill and with which model (${status?.textContent})`);
-        require(document.querySelector('[data-skl="import-go"]').disabled && document.querySelector('#skl-input').disabled && document.querySelector('[data-skl="pick"]').disabled, 'the card holds still while it works');
-        require(!document.querySelector('.skl-error, .toast'), 'nothing else is said while it works');
-        const call = window.__look.calls.find(c => c.method === 'skills.library.import');
-        require(call?.params.file?.name === 'team-handbook.pdf', 'the dropped file went to the core whole, whatever its kind');
-      } else {
-        require(visible(status) && status.textContent.trim() === '拉斐爾 已轉換成「weekly-report」，請先看過內容再讓大家用。', `the card says who made the skill (${status?.textContent})`);
-        require(rowOf('skill:weekly')?.querySelector('.skl-single .d')?.textContent === '整理每週進度並寫成報告' && accessOf('skill:weekly') === '整個團隊', 'the skill is a row of its own, in the list');
-        require(!document.querySelector('.skl-error, .toast') && !document.querySelector('[data-skl="import-go"]').disabled, 'the box is free again and nothing else is said');
-      }
+    if (name.startsWith('skill-library-handoff') && name !== 'skill-library-handoff-back') {
+      // What is no skill leaves the importer for Raphael's own conversation (R-SKILL-28): the dialog and Settings are gone, the
+      // owner's words are the message with their source as readable words (a file as its own chip), Raphael has answered at once
+      // with what it found and its choices as a question card, and the hand-off was made once.
+      require(![...document.querySelectorAll('.skl-dlg, .modal-scrim .skl')].some(visible), 'the importer and Settings are closed');
+      const calls = window.__look.calls.filter(c => c.method === 'skills.library.import'), asks = window.__look.calls.filter(c => c.command === 'agent_ask_text' && c.intent === 'import-skill');
+      require(calls.length === 1 && asks.length === 1, `one import asked and one hand-off sent (${calls.length}, ${asks.length})`);
+      require(!asks[0].memberId, 'the hand-off goes to Raphael, the first member');
+      const mine = [...document.querySelectorAll('.thread .tn')].find(item => item.querySelector('.owner-message .message-text')?.textContent.includes('團隊技能'));
+      require(visible(mine), "the owner's message is in Raphael's conversation");
+      const words = mine.querySelector('.owner-message .message-text').textContent.trim();
+      if (name === 'skill-library-handoff') require(words === '請幫我把這個網頁做成團隊技能：https://example.com/handbook', `the words say the page (${words})`);
+      if (name === 'skill-library-handoff-repo') require(words.startsWith('請幫我把這個 Git 倉庫做成團隊技能：git@gitlab.example.com:group/handbook.git（已下載到 ') && words.includes('skill-sources'), `the words say the repository and where it was put (${words})`);
+      if (name === 'skill-library-handoff-file') {
+        require(words === '請幫我把這個檔案做成團隊技能：team-handbook.pdf', `the words say the file (${words})`);
+        require(asks[0].attachments?.length === 1 && asks[0].attachments[0].name === 'team-handbook.pdf', 'the file goes as the message\'s own attachment');
+        require(mine.querySelector('.me-files')?.textContent.includes('team-handbook.pdf') || mine.textContent.includes('team-handbook.pdf'), 'the file is a chip of the message');
+      } else require(!asks[0].attachments?.length, 'nothing is attached');
+      const card = document.querySelector('[data-owner-question="skill-choice"]');
+      require(visible(card) && card.querySelectorAll('button').length >= 3, 'Raphael asks which skill to make with a question card');
+      require(mine.textContent.includes('我看過了'), 'Raphael has said what it found, in one short message');
+      require(!document.querySelector('.toast, .skl-error'), 'nothing half-done is said anywhere');
+    }
+    if (name === 'skill-library-handoff-back') {
+      // Back in Settings: the hand-off left nothing behind in Team skills.
+      const field = document.querySelector('.skl-dlg #skl-input');
+      require(visible(field) && field.value === '', 'the box is empty again');
+      require(!document.querySelector('.skl-error') && !document.querySelector('.skl-progress')?.textContent && !document.querySelector('[data-skl="import-go"]').disabled, 'no error, no progress, 匯入 free');
+      require(document.querySelectorAll('.skl-pack').length === 3, 'no package was made by a hand-off');
+    }
+    if (name === 'skill-library-fetching') {
+      const row = document.querySelector('.skl-import-row'), status = row.querySelector('.skl-progress[role="status"]');
+      require(visible(status) && status.textContent.trim() === '正在從 gitlab.example.com 取得…', `the dialog says where it fetches from (${status?.textContent})`);
+      require(row.contains(document.querySelector('[data-skl="pick"]')) && getComputedStyle(status).whiteSpace === 'nowrap', 'it stands in the row of the choose button, on one line');
+      require(Math.abs(status.getBoundingClientRect().top - document.querySelector('[data-skl="pick"]').getBoundingClientRect().top) < 12, 'beside the button, not under it');
+      require(document.querySelector('[data-skl="import-go"]').disabled && document.querySelector('#skl-input').disabled && !document.querySelector('.skl-error, .toast'), 'the card holds still and says nothing else');
       const box = document.querySelector('.skl-import').getBoundingClientRect(), r = status.getBoundingClientRect();
       require(r.left >= box.left - 1 && r.right <= box.right + 1, 'the words stay inside the card');
     }
@@ -936,7 +961,8 @@ export function checkRendered(name, context = {}) {
       const expected = {
         'clash-single': ['pdf-read', 'pdf', '重新命名或刪除'], 'clash-package': ['tdd', 'pstack', 'office-kit', '重新命名或刪除'],
         'size': ['assets/demo-video.mp4', '256.0 MB'], 'repo': ['owner/missing'], 'network': ['GitHub', '網路'], 'document': ['skills/bad/SKILL.md', '第 4 行'],
-        'no-model': ['還沒有連上模型', '「模型」', '再匯入一次'], 'no-skill': ['做不成技能', '這是一份菜單'],
+        'git-sign-in': ['gitlab.example.com', 'SSH 金鑰'], 'git-host-key': ['gitlab.example.com', 'ssh gitlab.example.com', '終端機'],
+        'git-network': ['gitlab.example.com', '公司 VPN'], 'git-missing': ['沒有安裝 Git', '安裝'],
       }[name.slice('skill-library-failed-'.length)];
       require(visible(said) && expected.every(part => words.includes(part)), `the cause is said with what it names (${words})`);
       require(visible(document.querySelector('.skl-import #skl-input')) && document.querySelector('#skl-input').value && !document.querySelector('.toast'), 'the importer stays open with what was put in it, and nothing else is said');

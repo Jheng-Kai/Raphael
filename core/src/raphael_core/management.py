@@ -127,8 +127,10 @@ ACTIONS = (
     row("conversation_clear", "conversations.clear", "Clear the selected conversation (Raphael's one conversation, whose quick questions are in it). Read conversations.list for its ID.", {"id": ID}, ("id",), destructive=True),
     row("member_library_list", "skills.library.list", "List team skill packages and access.", {}),
     row("member_library_import", "skills.library.import",
-        "Import a team skill package from a GitHub or skills.sh link (a repository, a folder, a SKILL.md), owner/repo, a local folder or "
-        "file, pasted text or an uploaded file. No size limit refuses an ordinary skill. A source of several skills is one package; skills "
+        "Import a team skill package from a GitHub or skills.sh link (a repository, a folder, a SKILL.md), a Git address (git@host:group/repo.git, "
+        "ssh://, or an https address of a Git host, fetched with this computer's own git and keys), owner/repo, a local folder or "
+        "file, pasted text or an uploaded file. The folder of a skill you wrote (SKILL.md and its files) is imported as a local folder. "
+        "Only what already is a skill (SKILL.md with its front matter) imports: anything else is refused with no_skill. No size limit refuses an ordinary skill. A source of several skills is one package; skills "
         "imported alone whose names begin with the same word join one plugin by themselves. `plugin` imports a GitHub link or local "
         "folder that holds .claude-plugin/plugin.json as a plugin (its skills, commands and MCP cards).", {
         "source": TEXT, "text": TEXT, "file": obj({"name": TEXT, "data": TEXT}, ("name", "data")),
@@ -410,7 +412,6 @@ INTERACTION_RPCS = {
     **dict.fromkeys(("attachments.info", "attachments.upload"),
                    "Owner composer file selection and bounded upload; not model management tools."),
     "routines.run": "Only the owner's explicit routine test starts a manual run through the existing worker.",
-    "skills.library.convert": "The owner's importer follows a conversion it started; a finished one imports the package it made, as the owner's import would.",
     **dict.fromkeys(("members.viewing", "members.greet", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract", "agent.history.send_now",
                      "worker.cancel", "worker.rerun", "pages.open", "pages.viewing", "pages.video_base"),
                    "Existing owner conversation, work or presentation entry; not team administration."),
