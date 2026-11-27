@@ -81,7 +81,7 @@ choice of any picker (the narrow dropdown, the command palette's numbers, the se
 replacement, the calendar's members, a group chat's) and not a room member. It has an entry of its own in the account menu
 ([navigation](navigation.md#the-account-menu)) that opens its conversation space in the same chat view (`go("agent", "raphael")`): the
 details panel lists no conversations (it has the one, like every slime; its Alt+Space questions are turns of it), the
-share button is hidden and its header has a ⋯ with 清除對話 in its place (R-RAPHAEL-UI-06), and its face and name in the panel and on its settings page are shown, not edited. Its settings page keeps
+share button is hidden and its header has a ⋯ with 清除對話 in its place (R-RAPHAEL-UI-07), and its face and name in the panel and on its settings page are shown, not edited. Its settings page keeps
 tools, skills and commands, personality and instructions, notifications and the cover. Raphael stays the app's and the voice's name
 (dictation, the bottom-right voice and quick question, hotkeys, the app's own messages), and its names still reach it by @ (last
 among the people the menu offers).
