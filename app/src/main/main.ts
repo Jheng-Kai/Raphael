@@ -81,6 +81,7 @@ const DEFAULT_DEVICE: DeviceSettings = {
   auto_update: true,
   auto_learn: false,
   onboarded: false,
+  tour_offered: false,
   computer_apps: [],
 };
 

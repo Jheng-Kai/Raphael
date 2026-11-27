@@ -897,6 +897,8 @@ export interface DeviceSettings {
   /** Learn the words the owner corrects in pasted dictations; asks the cleanup model, off by default. */
   auto_learn?: boolean;
   onboarded: boolean;
+  /** Raphael has offered the guided tour of the main window (tour/), once; it never offers it again on its own. Settings from before lack it. */
+  tour_offered?: boolean;
   /**
    * The apps Raphael may always operate on this PC (the 一律允許 answer of a question), by the
    * executable's file name in lower case (`excel.exe`) and the name to show (`Microsoft Excel`).
@@ -1335,6 +1337,8 @@ export interface AppContext {
   cleared: Cleared;
   /** Closes the settings panel (it opens with `go("settings")`). */
   closeSettings(): void;
+  /** Starts Raphael's guided tour of the window (tour/), as the account menu's own entry does. */
+  startTour?(): void;
 }
 
 // ---------- connections (the plugins of the core and the store) ----------

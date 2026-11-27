@@ -152,6 +152,8 @@ pub struct DeviceSettings {
     pub update_receipt: String,
     /// The first-run guide has been done.
     pub onboarded: bool,
+    /// Raphael has offered the guided tour of the main window once (it never offers it again on its own).
+    pub tour_offered: bool,
     /// The apps Raphael may operate without asking first, each once.
     pub computer_apps: Vec<ComputerApp>,
 }
@@ -176,6 +178,7 @@ impl Default for DeviceSettings {
             auto_learn: false,
             update_receipt: String::new(),
             onboarded: false,
+            tour_offered: false,
             computer_apps: Vec::new(),
         }
     }
@@ -241,6 +244,7 @@ impl DeviceSettings {
                 "auto_update" => next.auto_update = parse_value(name, value)?,
                 "auto_learn" => next.auto_learn = parse_value(name, value)?,
                 "onboarded" => next.onboarded = parse_value(name, value)?,
+                "tour_offered" => next.tour_offered = parse_value(name, value)?,
                 "computer_apps" => next.computer_apps = parse_value(name, value)?,
                 other => return Err(format!("unknown setting \"{other}\"")),
             }
@@ -753,6 +757,7 @@ mod tests {
         assert_eq!(s.ui_language, "zh-TW");
         assert!(s.autostart);
         assert!(!s.onboarded);
+        assert!(!s.tour_offered);
     }
 
     #[test]
@@ -840,6 +845,7 @@ mod tests {
                 "auto_learn": false,
                 "update_receipt": "",
                 "onboarded": false,
+                "tour_offered": false,
                 "computer_apps": [],
             })
         );
@@ -1206,6 +1212,7 @@ mod tests {
             ("auto_learn", json!("yes")),
             ("update_receipt", json!(7)),
             ("onboarded", json!(1)),
+            ("tour_offered", json!("yes")),
             ("microphone", json!(7)),
             ("dictation_keys", json!("AltRight")),
             ("paste_last_keys", json!([1, 2])),
@@ -1230,6 +1237,7 @@ mod tests {
                 "auto_learn": true,
                 "update_receipt": "2.0.0",
                 "onboarded": true,
+                "tour_offered": true,
                 "computer_apps": [{"exe": "calc.exe", "name": "Calculator"}],
                 "a_setting_of_a_newer_version": {"anything": true},
             });
@@ -1305,6 +1313,7 @@ mod tests {
         for bad in [
             json!({"autostart": "yes"}),
             json!({"onboarded": 1}),
+            json!({"tour_offered": "yes"}),
             json!({"emblem_size": "150"}),
             json!({"emblem_size": 150.5}),
             json!({"microphone": 3}),
