@@ -683,6 +683,8 @@ export const usageAllowances = (): Promise<CliAllowances> => core("usage.allowan
 /** Settings › 用量 › 分析: a period's spending, replies, tool calls and messages by local day (read-only; the export stays closed). */
 export const usageAnalytics = (range: UsageRange): Promise<UsageAnalytics> => core("usage.analytics", { range });
 export const pickOutputFolder = (): Promise<string | null> => invoke("pick_output_folder");
+/** The file or folder chosen in one open panel (macOS only: elsewhere the system's panel takes files or folders, never both). */
+export const pickImportSource = (): Promise<string | null> => invoke("pick_import_source");
 export const memberTemplateFile = (action: "open" | "save", text = ""): Promise<string | null> => invoke("member_template_file", { action, text });
 /** The text of the template file the app was opened with (double-clicked in the file manager), once; null when there is none. */
 export const memberTemplatePending = (): Promise<string | null> => invoke("member_template_pending");

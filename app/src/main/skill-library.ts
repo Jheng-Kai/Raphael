@@ -14,7 +14,8 @@
 // detail, R-SKILL-21); a skill of a package is renamed from its page (R-SKILL-25) and skills of one name prefix arrive as
 // one plugin (R-SKILL-20), with no question to the owner (#355).
 
-import { core, membersList, pickOutputFolder } from "./api";
+import { core, membersList, pickImportSource, pickOutputFolder } from "./api";
+import { IS_MAC } from "../shared/platform";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { isTopLayer } from "./dismissals";
@@ -66,8 +67,12 @@ const CAUSES = {
 } as const satisfies Record<string, MessageKey>;
 /** The largest file the window reads and sends: the core's own upload limit (MAX_UPLOAD_BYTES). A folder has none. */
 const MAX_FILE = 128 * 1024 * 1024;
+/** What stops a file the window would send: its name, its size and the limit. */
+const tooLarge = (name: string, size: number): string => t("skillLib.sizeUpload", { p0: name, p1: bytesText(size), p2: bytesText(MAX_FILE) });
 /** What a folder dropped on the card leaves behind: no part of a skill, and often the largest part of a folder. */
 const SKIPPED_FOLDERS = new Set(["node_modules", ".git", "__pycache__", "__MACOSX"]);
+/** And the files a Mac leaves beside every file (`.DS_Store`, `._name`): the core leaves them out too, so they are not even sent. */
+const leftover = (name: string): boolean => name === ".DS_Store" || name.startsWith("._");
 /** How often a conversion under way is asked how it stands. */
 const POLL_MS = 1500;
 
@@ -212,7 +217,7 @@ function importBodyHTML(v: SkillLibraryView): string {
   return `<div class="skl-import" data-skl-drop>` +
     `<textarea id="skl-input" class="mb-fin mb-ta skl-text" rows="2" spellcheck="false" placeholder="${esc(t("skillLib.importHint"))}" aria-label="${esc(t("skillLib.importHint"))}"${busy}>${esc(v.draft)}</textarea>` +
     `<div class="skl-import-row">` +
-    btn(ico("file") + esc(t("skillLib.choose")), "sm", ` data-skl="pick" aria-haspopup="menu" aria-expanded="false"${busy}`) +
+    btn(ico("file") + esc(t("skillLib.choose")), "sm", ` data-skl="pick"${IS_MAC ? "" : ' aria-haspopup="menu" aria-expanded="false"'}${busy}`) +
     `</div>` +
     (progress ? `<p class="d skl-progress" role="status">${esc(progress)}</p>` : "") +
     (!working && v.converted ? `<p class="d skl-progress" role="status">${esc(v.converted)}</p>` : "") +
@@ -283,6 +288,13 @@ function reasonText(kind: string, d: Detail): string | null {
     case "archive.path": case "archive.entry": return t("skillLib.badEntry", { p0: file });
     case "archive.unreadable": return t("skillLib.badArchive");
     case "source.host": return t("skillLib.sourceHost", { p0: d.host ?? "" });
+    // A Git address is fetched by the system's own Git, which signs in as it does for the owner (core: members/skill_git.py).
+    case "source.git_missing": return t("skillLib.gitMissing");
+    case "source.git_sign_in": return t("skillLib.gitSignIn", { p0: d.host ?? "" });
+    case "source.git_host_key": return t("skillLib.gitHostKey", { p0: d.host ?? "" });
+    case "source.git_credentials": return t("skillLib.gitCredentials");
+    case "download.git_network": return t("skillLib.gitNetwork", { p0: d.host ?? "" });
+    case "download.git_failed": return t("skillLib.gitFailed", { p0: d.why ?? "" });
     case "source.linked": return t("skillLib.linkRefused", { p0: file });
     case "source.path": case "source.unreadable": case "io.disk": return t("skillLib.unreadable", { p0: file });
     case "convert.no_model": return t("skillLib.noModel", { p0: t("providers.title") });
@@ -340,6 +352,7 @@ async function droppedFiles(data: DataTransfer): Promise<Picked[]> {
   if (!entries.length || entries.some(entry => !entry)) return [...(data.files ?? [])].map(file => ({ path: file.name, file }));
   const found: Picked[] = [];
   const read = async (entry: FileSystemEntry, base: string): Promise<void> => {
+    if (entry.isFile && leftover(entry.name)) return;
     if (entry.isFile) {
       const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, reject));
       found.push({ path: base + entry.name, file });
@@ -537,7 +550,7 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
     else rememberLayerBack(backToList, () => { if (hasPage(byKey(key))) open(key); });
   };
   const bringFile = async (file: File): Promise<void> => {
-    if (file.size > MAX_FILE) { state.error = t("skillLib.tooLarge"); redraw(); return; }
+    if (file.size > MAX_FILE) { state.error = tooLarge(file.name, file.size); redraw(); return; }
     await bring({ file: { name: file.name, data: base64(await file.arrayBuffer()) } });
   };
   /**
@@ -652,8 +665,14 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
       }
     }
   });
-  /** 選擇檔案: files from the system's dialog, or a folder from its own (a folder is read where it is, whatever its size). */
+  /** A file or a folder the system's panel gave: it is read where it is, whatever its size. */
+  const bringPath = (pick: Promise<string | null>): void => {
+    void pick.then(path => { if (path) void bring({ source: `local:${path}` }); }).catch(error => { state.error = failureText(error); redraw(); });
+  };
+  /** 選擇檔案: on a Mac one panel takes a file or a folder (a ZIP is a file, and a folder's panel will not take it); on Windows
+   *  the system's dialog takes files or a folder, never both, so a small menu asks for each, a ZIP plainly under the files. */
   const choose = (anchor: HTMLElement): void => {
+    if (IS_MAC) { bringPath(pickImportSource()); return; }
     const menu = openPopover(anchor,
       `<button type="button" role="menuitem" tabindex="-1" data-pick="files"><span class="mlead" aria-hidden="true">${ico("file")}</span><span class="mt">${esc(t("skillLib.chooseFiles"))}</span></button>` +
       `<button type="button" role="menuitem" tabindex="-1" data-pick="folder"><span class="mlead" aria-hidden="true">${ico("folder")}</span><span class="mt">${esc(t("skillLib.folder"))}</span></button>`,
@@ -663,13 +682,14 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
       if (!pick) return;
       closeMenu();
       if (pick === "files") dlg?.el.querySelector<HTMLInputElement>("#skl-file")?.click();
-      else void pickOutputFolder().then(path => { if (path) void bring({ source: `local:${path}` }); }).catch(error => { state.error = failureText(error); redraw(); });
+      else bringPath(pickOutputFolder());
     });
   };
   /** What was dropped or chosen goes to the core whole: one file as the file it is, several files or a folder as a tree. */
   const bringPicked = async (picked: Picked[]): Promise<void> => {
     if (!picked.length) return;
-    if (picked.reduce((sum, item) => sum + item.file.size, 0) > MAX_FILE) { state.error = t("skillLib.tooLarge"); redraw(); return; }
+    const total = picked.reduce((sum, item) => sum + item.file.size, 0);
+    if (total > MAX_FILE) { state.error = tooLarge(picked.length > 1 ? `${picked[0]!.path} …` : picked[0]!.path, total); redraw(); return; }
     if (picked.length === 1 && !picked[0]!.path.includes("/")) { await bringFile(picked[0]!.file); return; }
     state.busy = true; state.error = ""; redraw();
     try {

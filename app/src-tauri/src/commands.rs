@@ -982,6 +982,30 @@ pub async fn pick_output_folder(
     .map_err(|err| format!("a background task failed: {err}"))?
 }
 
+/// The file or folder the owner chose in one panel (macOS: the system's open panel takes both at once); cancelling changes
+/// nothing. Elsewhere the dialog plugin's panels take files or folders, never both, so the window asks for each.
+#[tauri::command]
+pub async fn pick_import_source(app: AppHandle, webview: Webview) -> Result<Option<String>, String> {
+    require_main(&webview)?;
+    #[cfg(target_os = "macos")]
+    {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        app.run_on_main_thread(move || {
+            let _ = sender.send(crate::macos::open_panel::pick_file_or_folder());
+        })
+        .map_err(|err| format!("the panel could not open: {err}"))?;
+        tauri::async_runtime::spawn_blocking(move || receiver.recv())
+            .await
+            .map_err(|err| format!("a background task failed: {err}"))?
+            .map_err(|_| "the panel closed without an answer".to_owned())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Err("one panel for files and folders is a macOS panel".to_owned())
+    }
+}
+
 /// Member recipes cross only an owner-selected file, never a caller-supplied path.
 #[tauri::command]
 pub async fn member_template_file(
@@ -2878,6 +2902,7 @@ mod tests {
                 "open_team_file",
                 "owner_clipboard_sequence",
                 "owner_clipboard_text",
+                "pick_import_source",
                 "pick_output_folder",
                 "report_save",
                 "schedule_keep_awake_get",

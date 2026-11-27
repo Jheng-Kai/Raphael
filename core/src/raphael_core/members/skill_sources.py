@@ -2,8 +2,10 @@
 
 import base64
 import binascii
+import bz2
 import gzip
 import io
+import lzma
 import os
 import re
 import stat
@@ -232,7 +234,7 @@ def snapshot_entries(entries, read_entry, *, regular, member=None):
 def zip_entry(archive, snapshot, name, info):
     directory = info.is_dir()
     kind = stat.S_IFMT(info.external_attr >> 16)
-    if info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+    if info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED, zipfile.ZIP_BZIP2, zipfile.ZIP_LZMA):
         raise refused_entry(snapshot.prefix + name, "compressed in a way this import does not read")
     if info.flag_bits & 1:
         raise refused_entry(snapshot.prefix + name, "encrypted")
@@ -321,59 +323,63 @@ def checked_zip(data):
     return zipfile.ZipFile(stream)
 
 
-def read_archive(name, data):
-    if len(data) > MAX_PACKAGE_BYTES:
-        raise oversized_package(name, len(data), MAX_PACKAGE_BYTES)
-    name = name.lower()
-    if name.endswith(".md"):
-        if len(data) > MAX_SKILL_BYTES:
-            raise oversized_file(name, len(data), MAX_SKILL_BYTES)
-        return [{"SKILL.md": data}]
-    try:
-        if name.endswith(".zip"):
-            with checked_zip(data) as archive:
-                entries = [(info.orig_filename, info) for info in archive.infolist()]
-                return snapshot_entries(entries, lambda snapshot, key, info: zip_entry(archive, snapshot, key, info),
-                                        regular=lambda info: not info.is_dir() and
-                                        stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG),
-                                        member=zip_member(archive))
-        if name.endswith((".tgz", ".tar.gz")):
-            # Bound decompression even for content outside the selected folders.
-            limit = MAX_PACKAGE_BYTES + MAX_ARCHIVE_ENTRIES * 1536 + tarfile.RECORDSIZE
-            with gzip.GzipFile(fileobj=io.BytesIO(data)) as compressed:
-                raw = compressed.read(limit + 1)
-            if len(raw) > limit:
-                raise oversized_package(name, len(raw), limit)
-            with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
-                entries = []
-                for info in archive:
-                    if len(entries) >= MAX_ARCHIVE_ENTRIES:
-                        raise too_many_files(len(entries) + 1, MAX_ARCHIVE_ENTRIES)
-                    entries.append((info.name, info))
-                return snapshot_entries(entries, lambda snapshot, key, info: tar_entry(archive, snapshot, key, info),
-                                        regular=tarfile.TarInfo.isfile, member=tar_member(archive))
-    except (zipfile.BadZipFile, tarfile.TarError, OSError, EOFError, zlib.error, NotImplementedError, UnicodeError):
-        raise unreadable_archive() from None
-    raise MemberError("source", "choose a Markdown, ZIP or tar.gz file", reason="file_type", file=name)
+ZIP_NAMES = (".zip", ".skill")
+TAR_NAMES = (".tgz", ".tar.gz", ".tar", ".tar.bz2", ".tbz2", ".tbz", ".tar.xz", ".txz")
+# What the window and a person call an archive: a `.skill` is a ZIP with another name.
+ARCHIVE_NAMES = (*ZIP_NAMES, *TAR_NAMES)
+
+
+def archive_kind(name, data):
+    """`"zip"`, `"tar"` or None: what a file is by its first bytes, and when they say nothing (a ZIP behind other bytes) by its
+    name. A `.skill`, a download renamed and a tarball with no `.tar` in its name all open."""
+    if data[:2] == b"PK" and data[2:4] in (b"\x03\x04", b"\x05\x06", b"\x07\x08"):
+        return "zip"
+    if data[:2] == b"\x1f\x8b" or data[:3] == b"BZh" or data[:6] == b"\xfd7zXZ\x00" or data[257:262] == b"ustar":
+        return "tar"
+    lower = name.lower()
+    if lower.endswith(ZIP_NAMES):
+        return "zip"
+    return "tar" if lower.endswith(TAR_NAMES) else None
+
+
+def _unpacked(data, limit):
+    """The bytes of a tarball, decompressed up to `limit` (plus one: the sign that it is over)."""
+    if data[:2] == b"\x1f\x8b":
+        opener = gzip.open
+    elif data[:3] == b"BZh":
+        opener = bz2.open
+    elif data[:6] == b"\xfd7zXZ\x00":
+        opener = lzma.open
+    else:
+        return data[:limit + 1]
+    with opener(io.BytesIO(data)) as compressed:
+        return compressed.read(limit + 1)
+
+
+def _zip_name(info):
+    r"""An entry's name as a path: a ZIP made on Windows by a tool that writes a backslash (PowerShell's Compress-Archive, older
+    .NET) says `skill\SKILL.md`, which is `skill/SKILL.md`."""
+    name = info.orig_filename
+    return name.replace("\\", "/") if info.create_system == 0 and "\\" in name else name
 
 
 @contextmanager
 def _open_archive(name, data):
-    """The entries of a ZIP or tar.gz as `(entries, read_entry, regular)`, bounded as `read_archive` bounds them; None when the
-    name is neither."""
+    """`(entries, read_entry, regular, member)` of a ZIP or tarball, bounded as every import is; None when the file is neither."""
     if len(data) > MAX_PACKAGE_BYTES:
         raise oversized_package(name, len(data), MAX_PACKAGE_BYTES)
-    lower = name.lower()
+    kind = archive_kind(name, data)
     try:
-        if lower.endswith(".zip"):
+        if kind == "zip":
             with checked_zip(data) as archive:
-                yield ([(info.orig_filename, info) for info in archive.infolist()],
+                yield ([(_zip_name(info), info) for info in archive.infolist()],
                        lambda snapshot, key, info: zip_entry(archive, snapshot, key, info),
-                       lambda info: not info.is_dir() and stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG))
-        elif lower.endswith((".tgz", ".tar.gz")):
+                       lambda info: not info.is_dir() and stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG),
+                       zip_member(archive))
+        elif kind == "tar":
+            # Bound decompression even for content outside the selected folders.
             limit = MAX_PACKAGE_BYTES + MAX_ARCHIVE_ENTRIES * 1536 + tarfile.RECORDSIZE
-            with gzip.GzipFile(fileobj=io.BytesIO(data)) as compressed:
-                raw = compressed.read(limit + 1)
+            raw = _unpacked(data, limit)
             if len(raw) > limit:
                 raise oversized_package(name, len(raw), limit)
             with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
@@ -382,11 +388,27 @@ def _open_archive(name, data):
                     if len(entries) >= MAX_ARCHIVE_ENTRIES:
                         raise too_many_files(len(entries) + 1, MAX_ARCHIVE_ENTRIES)
                     entries.append((info.name, info))
-                yield entries, lambda snapshot, key, info: tar_entry(archive, snapshot, key, info), tarfile.TarInfo.isfile
+                yield (entries, lambda snapshot, key, info: tar_entry(archive, snapshot, key, info), tarfile.TarInfo.isfile,
+                       tar_member(archive))
         else:
             yield None
-    except (zipfile.BadZipFile, tarfile.TarError, OSError, EOFError, zlib.error, NotImplementedError, UnicodeError):
+    except (zipfile.BadZipFile, tarfile.TarError, OSError, EOFError, zlib.error, NotImplementedError, UnicodeError, RuntimeError,
+            lzma.LZMAError):
         raise unreadable_archive() from None
+
+
+def read_archive(name, data):
+    if len(data) > MAX_PACKAGE_BYTES:
+        raise oversized_package(name, len(data), MAX_PACKAGE_BYTES)
+    if name.lower().endswith(".md"):
+        if len(data) > MAX_SKILL_BYTES:
+            raise oversized_file(name, len(data), MAX_SKILL_BYTES)
+        return [{"SKILL.md": data}]
+    with _open_archive(name, data) as opened:
+        if opened is None:
+            raise MemberError("source", "choose a Markdown, ZIP or tar.gz file", reason="file_type", file=name)
+        entries, read_entry, regular, member = opened
+        return snapshot_entries(entries, read_entry, regular=regular, member=member)
 
 
 def _wrapper(names):
@@ -403,7 +425,7 @@ def archive_plugin(name, data):
     with _open_archive(name, data) as opened:
         if opened is None:
             return None
-        entries, read_entry, regular = opened
+        entries, read_entry, regular, _ = opened
         entries = [(entry, info) for entry, info in entries if not junk(entry.removeprefix("./"))]
         names = [entry.removeprefix("./").replace("\\", "/") for entry, _ in entries]
         wrapper = _wrapper([n for n in names if n not in (".", "")])
@@ -427,7 +449,7 @@ def plugin_of_archive(name, data, label=None):
     from .skill_layouts import PluginTree, normalized
 
     tree = archive_plugin(name, data)
-    label = label or re.sub(r"\.(?:zip|tar\.gz|tgz)$", "", name, flags=re.I)
+    label = label or re.sub(r"\.(?:zip|skill|tar\.gz|tar\.bz2|tar\.xz|tgz|tbz2?|txz|tar)$", "", name, flags=re.I)
     files = normalized(tree, label) if tree is not None else None
     return PluginTree(files, f"upload:{name}", f"upload:{name}", label) if files is not None else None
 
@@ -484,8 +506,10 @@ def uploaded_bytes(file):
     if not isinstance(file, dict) or set(file) != {"name", "data"}:
         raise MemberError("file", "file needs a name and base64 data")
     name, encoded = file["name"], file["data"]
-    if not isinstance(name, str) or not name or any(c in name for c in "/\\:\x00") or not isinstance(encoded, str):
+    if not isinstance(name, str) or not name or "\x00" in name or not isinstance(encoded, str):
         raise MemberError("file", "invalid upload name or data")
+    # The name is a label and a kind of file, never a path: a Mac names a file `v1: final.zip` as readily as any other.
+    name = re.sub(r"[/\\:]", "_", name)
     if len(encoded) > ((MAX_UPLOAD_BYTES + 2) // 3) * 4:
         size = len(encoded) // 4 * 3
         raise MemberError("size", f"{name} is {size_text(size)}, over the {size_text(MAX_UPLOAD_BYTES)} the window sends: "

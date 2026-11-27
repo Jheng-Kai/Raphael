@@ -28,15 +28,19 @@ MAX_DISCOVERY_DEPTH = 64  # folders below the one picked
 # What the automatic list of installed skills and plugins scans (the owner picks nothing there).
 MAX_DISCOVERY_ENTRIES = 20000
 # Never part of a skill: what a tool, a run or an operating system leaves in a folder.
-JUNK_FOLDERS = frozenset({"node_modules", "__pycache__", "__macosx", ".git"})
-JUNK_FILES = frozenset({".ds_store", "thumbs.db", "desktop.ini"})
+# What macOS leaves beside every file it archives or indexes is among it: Finder's `__MACOSX` folder and the `._name` files
+# (AppleDouble, binary) of a ZIP or a tar made on a Mac, `.DS_Store`, and the folders of a volume.
+JUNK_FOLDERS = frozenset({"node_modules", "__pycache__", "__macosx", ".git", ".appledouble", ".spotlight-v100", ".trashes",
+                          ".fseventsd", ".temporaryitems"})
+JUNK_FILES = frozenset({".ds_store", "thumbs.db", "desktop.ini", ".localized"})
 
 
 def junk(path):
     """Whether a path (a name, or a `/` path) is such a leftover and so no part of a skill."""
     parts = path.replace("\\", "/").split("/")
     last = parts[-1].casefold()
-    return any(part.casefold() in JUNK_FOLDERS for part in parts[:-1]) or last in JUNK_FILES or last in JUNK_FOLDERS
+    return (any(part.casefold() in JUNK_FOLDERS for part in parts[:-1]) or last in JUNK_FILES or last in JUNK_FOLDERS
+            or last.startswith("._"))
 
 
 class SkillHomes(BotHomes):
