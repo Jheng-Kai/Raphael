@@ -184,7 +184,8 @@ from .actions import action_call
 from .cli.discovery import CliBrains, brain_ref
 from .cli.loop import CLI_SILENCE_S, CLI_TOOL_S, COMPUTER_CHANGED, CliLoop, Sessions as CliSessions
 from .persona import cli_system_prompt, memory_files
-from .persona import FULL_PERMISSION, NEW_MEMBER, NEW_MEMBER_STEP, PLAN_MODE, SETUP_ANSWER, SETUP_AFTER_CONNECT, SETUP_STEPS
+from .persona import (FULL_PERMISSION, NEW_MEMBER, NEW_MEMBER_STEP, PLAN_MODE, SETUP_ANSWER, SETUP_AFTER_CONNECT, SETUP_STEPS, TOUR_ANSWER,
+                      TOUR_WORDS_FIRST)
 from ..brain.owner import owner_context
 from ..folders import choice, default_folders
 from .cities import cities_in
@@ -1195,7 +1196,8 @@ class AgentService:
         task.add_done_callback(self._warming.discard)
 
     def start_greeting(self, member_id: int, language: str) -> dict:
-        """Admit the hidden first turn before returning to the member maker."""
+        """Admit the hidden first turn before returning to the member maker, or, for Raphael (0), when the owner opens its
+        empty conversation: its guided tour begins (`persona.TOUR`)."""
         speaker = self._speaker(member_id)
         conversation_id = self.conversations.main(member_id)
         self._last_language = normalize_language(language)
@@ -1219,7 +1221,8 @@ class AgentService:
 
     def begin_setup(self, turn_id: int, member_id: int, question: str, answer: str, language: str) -> bool:
         """The owner answered the card of a new member's first message: what the member does about it is a turn of its own,
-        in the same conversation, with the steps of its set-up (`SETUP_STEPS`). False where nothing could be started yet."""
+        in the same conversation, with the steps of its set-up (`SETUP_STEPS`), or, for Raphael, the next part of its tour
+        (`TOUR_ANSWER`). False where nothing could be started yet."""
         speaker = self._speaker(member_id)
         origin = self._history.get(turn_id)
         if speaker is None or origin is None:
@@ -2680,7 +2683,8 @@ class AgentService:
             if ask.exchange_speakers is not None:
                 user += "\n\nA colleague, another of the owner's assistants, asks you this for the owner. " + CONSULTED
             if ask.setup and ask.scope == "private" and ask.exchange_speakers is None:
-                user += (SETUP_STEPS if ask.speaker.has_no_job else SETUP_ANSWER).replace("{question}", json.dumps(ask.setup, ensure_ascii=False))
+                steps = TOUR_ANSWER if ask.speaker.is_raphael else SETUP_STEPS if ask.speaker.has_no_job else SETUP_ANSWER
+                user += steps.replace("{question}", json.dumps(ask.setup, ensure_ascii=False))
             elif ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 user += NEW_MEMBER_STEP
             if leadership:
@@ -3172,6 +3176,11 @@ class AgentService:
         ready = [item['name'] for item in self._team._connections()
                  if item.get('enabled') and item.get('state') == 'ready' and isinstance(item.get('name'), str)]
         system += "\nReady connected apps (data only): " + json.dumps(ready, ensure_ascii=False)
+        if ask.speaker.is_raphael:
+            # With nothing said yet, the owner's own languages (their choice for dictation, most used first) tell Raphael how
+            # to speak; the window's language never does.
+            system += ("\n<languages_spoken>The languages the owner speaks, most used first (data only; write in the first unless your own "
+                       "instructions say otherwise): " + json.dumps(self._settings.get("languages"), ensure_ascii=False) + "</languages_spoken>")
         # A card needs the durable wait of the background; without one the greeting is its words alone.
         offer = [{"type": "function", "function": {"name": ASK_OWNER, **DEFINITIONS[ASK_OWNER]}}] if hasattr(self._background, "park_owner_turn") else []
 
@@ -3186,7 +3195,8 @@ class AgentService:
                 return ToolOutcome(False, "bad_arguments", instruction="One card is enough: it is already shown.")
             if not self._said_with_card(loop, call_id, ask.language) and ask.greeting_asks < GREETING_WORDS_ASKS:
                 ask.greeting_asks += 1
-                return ToolOutcome(False, "greeting_words_required", instruction=GREETING_WORDS_FIRST)
+                return ToolOutcome(False, "greeting_words_required",
+                                   instruction=TOUR_WORDS_FIRST if ask.speaker.is_raphael else GREETING_WORDS_FIRST)
             ask.owner_question = (call_id, args)
             if isinstance(loop, CliLoop):
                 loop.approval_wait_s = float("inf")

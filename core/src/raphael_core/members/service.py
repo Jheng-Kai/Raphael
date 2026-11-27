@@ -19,7 +19,7 @@ The RPC methods (the main window only, through the shell's allow-list):
 - `members.greet {id}` -> `{turn_id}`: start another hidden greeting before any owner message,
   replacing failed greetings. Only the member's own interactive brain answers it, and the one tool
   it may call is the question card that asks what to take on first (`agent.service.begin_setup`
-  carries on from the owner's answer).
+  carries on from the owner's answer). `id` 0 is Raphael: its empty conversation begins its guided tour.
 - `members.update {id, name?, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, position?}`
   -> `{member}`. `avatar` here is "" or a slime, "slime:<character>" or "slime:color:<color>". Raphael (0) is not changed here: its picture is the app's to change.
 - `members.delete {id}` -> `{deleted}`: the member, its conversation (and the exchanges of other
@@ -1396,7 +1396,8 @@ class MembersService:
         return {"member": self.view_of(member), "routine_offer": offer}
 
     async def _greet(self, params: dict) -> dict:
-        member_id = self._member_id(params)
+        # Raphael (0) greets too: its empty conversation begins its guided tour (`AgentService.start_greeting`).
+        member_id = 0 if _whole(params, "id") == 0 else self._member_id(params)
         owner = self._conn.execute(
             "SELECT 1 FROM agent_turns WHERE member_id=? AND scope='private' AND trim(question)<>'' "
             "AND source NOT IN ('greeting','member','routine','resumed') LIMIT 1", (member_id,),
