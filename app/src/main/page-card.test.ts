@@ -550,7 +550,6 @@ test("a page changed while it stands in the whole area loads beside it, takes it
   await flush();
   loaded(frame);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
-  const area = stage.querySelector<HTMLElement>(".pgv-page")!;
   fromFrame(frame, { raphaelPage: 1, type: "scroll", y: 420 });
   vi.mocked(api.pagesOpen).mockResolvedValueOnce({ ...opened, url: "http://127.0.0.1:9/p/changed?theme=light", rev: 1 });
   thread.querySelector<HTMLElement>(".pg-card")!.dataset.pageRev = "1";

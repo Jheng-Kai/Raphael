@@ -39,7 +39,7 @@ it("refuses a page that is not read where the check says, or whose last line is 
   expect(under.problems[0]).toMatch(/last line stands under the composer/);
 });
 
-it("a band of the window's own colour above, below or beside the page is the failure; the page's own colour everywhere is the pass", () => {
+it("a band of the window's own colour above, below or beside the page is the failure, and the page's own colour everywhere is the pass", () => {
   const plan = bandPlan({ where: "top", ...shown, measure });
   expect(bandProblems(plan, measure, [page, page], page)).toEqual([]);
   // A few levels of difference is no band; the black strip above a light page is.
