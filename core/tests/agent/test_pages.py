@@ -1008,7 +1008,7 @@ def test_the_helper_moves_a_fixed_or_sticky_part_clear_of_the_composer_and_the_h
     assert "style.position !== 'fixed' && style.position !== 'sticky'" in lifting
     assert "tall = box.height >= innerHeight * 0.6" in lifting
     assert "element.style.boxSizing = 'border-box'" in lifting and "side = edge === 'bottom' ? 'paddingBottom' : 'paddingTop'" in lifting
-    assert "take('bottom', foot, foot > 0 && box.bottom > innerHeight - foot && box.top < innerHeight);" in lifting
+    assert "box.bottom + beyond > innerHeight - foot && box.top < innerHeight);" in lifting
     assert "take('top', head, head > 0 && box.top < head && box.bottom > 0);" in lifting
     assert "else if (style[edge] !== 'auto')" in lifting
     # What was moved is put back before anything is read again.
