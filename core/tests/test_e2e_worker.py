@@ -166,8 +166,9 @@ def test_a_task_is_handed_over_carried_out_by_the_worker_and_reported(spawn):
 
     # The conversation shows the report where the handoff was, with the worker's steps: the search
     # that found the plugin's tool (decision 2), then the tool by its own name; nothing was spent.
-    quick = next(c["id"] for c in result(core, "conversations.list")["conversations"] if c["kind"] == "quick")
-    [turn] = result(core, "agent.history.list", {"conversation_id": quick})["turns"]
+    # The quick ask was a turn of Raphael's one conversation, so the report is there.
+    [conversation] = result(core, "conversations.list")["conversations"]
+    [turn] = result(core, "agent.history.list", {"conversation_id": conversation["id"]})["turns"]
     assert (turn["route"], turn["prefix"], turn["text"]) == ("delegate", "Notice", report["text"])
     assert [(s["kind"], s["tool"], s["server"], s["outcome"]) for s in turn["steps"]] == [
         ("model", None, None, "ok"),

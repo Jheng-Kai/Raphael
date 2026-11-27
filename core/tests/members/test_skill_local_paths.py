@@ -7,7 +7,9 @@ from .test_skill_import_limits import skill_folder
 from .test_skill_packages import document
 
 WINDOWS_CACHE = r"C:\Users\someone\.claude\plugins\cache\cursor-plugins\pstack\0.15.32"
-WINDOWS_SLASHES = "C:/Users"
+# A drive path written with forward slashes, to a folder no machine has: "C:/Users" itself imported whatever the
+# machine's own users folder held (a CI runner's is readable throughout), and refused only where a folder was locked.
+WINDOWS_SLASHES = "C:/Users/nobody-here/skills"
 
 
 @pytest.mark.parametrize("path", [WINDOWS_CACHE, WINDOWS_SLASHES, r"\\server\share\skills", "~/skills-that-do-not-exist"])
