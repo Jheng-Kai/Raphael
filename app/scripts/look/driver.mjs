@@ -542,7 +542,7 @@ export async function perform(page, step, evidenceDirectory) {
     case "frame-check": return (await waitForPageFrame(page)).evaluate(checkFrame, step.name);
     // What the screen shows around a page's content (R-PAGE-10, R-PAGE-11): no band of the window's own colour above it (`where: "top"`) or below it
     // (`"end"`, the page read to its end), the page's last line clear of the composer, and the page's colour down to the window's foot.
-    case "page-band": return pageBand(page, await waitForPageFrame(page), step.where, checkFrame);
+    case "page-band": return pageBand(page, await waitForPageFrame(page), step.where, checkFrame, step.side);
     // Nothing the page offers to press stands under the composer or the header's buttons (R-PAGE-16), read in the frame against their places.
     case "page-covered": return pageCovered(page, await waitForPageFrame(page), step.where, checkFrame);
     case "frame-expect": {

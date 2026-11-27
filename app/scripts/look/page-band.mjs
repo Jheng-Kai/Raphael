@@ -27,9 +27,10 @@ export function rgb(text) {
  * `caption` a place in a corner of the window's first button's cell, away from its glyph. `where` is "top" (the page read from its top) or "end"
  * (read to its end).
  */
-export function bandPlan({ where, frame, measure, composerTop, windowHeight, headGap, caption }) {
+export function bandPlan({ where, frame, measure, composerTop, windowHeight, headGap, caption, side }) {
   const problems = [], points = [];
-  const x = Math.min(frame.right - 24, Math.max(frame.left + 2, frame.left + measure.bodyLeft + 8));
+  // At the body's left edge, or (`side` "right") at the window's right, for a page whose left is a column of its own colour (a rail).
+  const x = side === "right" ? frame.right - 24 : Math.min(frame.right - 24, Math.max(frame.left + 2, frame.left + measure.bodyLeft + 8));
   if (where === "top") {
     if (measure.scrollY !== 0) problems.push(`the page is read from its top, not ${measure.scrollY} px down`);
     // The room between the header's buttons and the page's first line is the page's own (its body's padding below the head room it was told).
@@ -107,7 +108,7 @@ export async function pageCovered(page, frame, where, checkFrame) {
 }
 
 /** Reads a real capture of the window at the plan's places. `page` is the app's page, `frame` the page's own frame. */
-export async function pageBand(page, frame, where, checkFrame) {
+export async function pageBand(page, frame, where, checkFrame, side) {
   const measure = await frame.evaluate(checkFrame, "page-band-measure");
   const place = await page.evaluate(() => {
     const box = document.querySelector(".pgv-frame-box iframe")?.getBoundingClientRect(), composer = document.querySelector(".ra-stage.is-page > .ra-dock .composer")?.getBoundingClientRect();
@@ -119,7 +120,7 @@ export async function pageBand(page, frame, where, checkFrame) {
     return box && composer && { frame: { left: box.left, top: box.top, right: box.right, bottom: box.bottom }, composerTop: Math.min(composer.top, line?.top ?? Infinity), windowHeight: innerHeight, ratio: devicePixelRatio, headGap, caption, tone: document.documentElement.dataset.pageTone ?? "", ink: ink ? getComputedStyle(ink).color : null, ground: getComputedStyle(document.querySelector(".pgv-page")).backgroundColor };
   });
   if (!place) throw new Error("page-band: no page stands open in the conversation's place");
-  const plan = bandPlan({ where, frame: place.frame, measure, composerTop: place.composerTop, windowHeight: place.windowHeight, headGap: place.headGap, caption: place.caption });
+  const plan = bandPlan({ where, frame: place.frame, measure, composerTop: place.composerTop, windowHeight: place.windowHeight, headGap: place.headGap, caption: place.caption, side });
   const shot = await page.screenshot({ encoding: "base64", type: "png" });
   const read = await page.evaluate(async (data, points, ratio) => {
     const image = new Image(); image.src = `data:image/png;base64,${data}`; await image.decode();

@@ -221,7 +221,9 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
   // composer, and nothing but the page's own background shows in either. A fixed or sticky part of the page that reaches into either room
   // (a rail one window tall with its buttons at its foot, a bar at the top or the bottom) is moved clear of it too, or it would stand under the
   // composer for good: a part as tall as the window takes the room as its own padding, so its background still runs to the edge, and a smaller
-  // one moves by it.
+  // one moves by it. A sticky part as tall as the window also reaches the window's foot when the page is read to its end (R-PAGE-17): its
+  // container ends where the page's own content does, so the part would stop short of the foot by the room left under that container
+  // (the body's own padding and the foot above); a negative bottom margin of that much lets it run on to the foot.
   let foot = 0, head = 0, moved = [], settle = 0, tone = '';
   const fades = {};
   // The page's own ground (R-PAGE-17): the colour its root paints, else its body's, else (it paints nothing) the app's own colour behind the
@@ -289,7 +291,13 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
           element.style[edge] = (parseFloat(style[edge]) || 0) + room + 'px';
         }
       };
-      take('bottom', foot, foot > 0 && box.bottom > innerHeight - foot && box.top < innerHeight);
+      let beyond = 0;
+      if (tall && style.position === 'sticky' && element.parentElement) {
+        const parent = element.parentElement, around = getComputedStyle(parent);
+        beyond = Math.max(0, Math.round(document.documentElement.scrollHeight - (parent.getBoundingClientRect().bottom + scrollY - (parseFloat(around.paddingBottom) || 0) - (parseFloat(around.borderBottomWidth) || 0))));
+        if (beyond > 0) { was.marginBottom = element.style.marginBottom; element.style.marginBottom = ((parseFloat(style.marginBottom) || 0) - beyond) + 'px'; }
+      }
+      take('bottom', foot, foot > 0 && box.bottom + beyond > innerHeight - foot && box.top < innerHeight);
       take('top', head, head > 0 && box.top < head && box.bottom > 0);
       if (Object.keys(was).length) moved.push([element, was]);
     }

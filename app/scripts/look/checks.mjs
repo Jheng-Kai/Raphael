@@ -13483,6 +13483,22 @@ export function checkFrame(name, args) {
     require(hidden.length === 0, `something to press is covered: ${hidden.join("; ")}`);
     return { check: name, where, zones: zones.map(zone => zone.name) };
   }
+  // R-PAGE-17: a column fixed or sticky to the window and as tall as it (a rail) runs to the window's foot at every scroll position, the page read
+  // to its end included: its dividing line and its colour do not stop short of the foot, with a blank strip under it. Only a column that has stuck
+  // at the window's top is judged (one still in the flow, above where it sticks, stands where the page put it), and there must be one.
+  if (name === "page-tall-reach") {
+    const columns = [...document.body.querySelectorAll("*")].filter(element => {
+      const style = getComputedStyle(element), box = element.getBoundingClientRect();
+      return /^(sticky|fixed)$/.test(style.position) && box.width > 0 && box.height >= innerHeight * 0.6;
+    });
+    const stuck = columns.filter(element => element.getBoundingClientRect().top <= 1);
+    require(stuck.length > 0, `a column as tall as the window has stuck at its top: ${columns.length} such columns, none stuck (scrolled ${Math.round(scrollY)} px)`);
+    for (const element of stuck) {
+      const box = element.getBoundingClientRect();
+      require(box.bottom >= innerHeight - 1, `a column as tall as the window runs to its foot: it ends at ${Math.round(box.bottom)} of ${innerHeight}, ${Math.round(innerHeight - box.bottom)} px short (${element.tagName.toLowerCase()}.${element.className})`);
+    }
+    return { check: name, columns: stuck.length, scrolled: Math.round(scrollY), window: innerHeight };
+  }
   // R-PAGE-10: the frame is the page's own window, as in a browser: a rail one window tall and sticky stays while the article scrolls, and its
   // buttons at its foot are in the window, which runs to the window's foot (the app's own check, `page-rail`, measures that end).
   if (name === "page-rail") {

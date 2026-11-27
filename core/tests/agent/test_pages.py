@@ -1043,6 +1043,23 @@ def test_the_helper_says_the_pages_own_tone_and_fades_what_scrolls_under_the_win
     assert "\\" not in _HELPER
 
 
+def test_a_sticky_part_as_tall_as_the_window_runs_on_to_the_foot_when_the_page_is_read_to_its_end():
+    # R-PAGE-17: a rail one window tall is sticky in a container that ends where the page's content does, so read to its end it stopped short of the
+    # window's foot by the body's own padding and the room the composer keeps (its dividing line ended well above the foot). A negative bottom
+    # margin of that much, taken from the container's content box and the page's scroll height, lets it run on to the foot; it is put back first
+    # at every pass like everything else the helper moves.
+    from raphael_core.agent.pages import _HELPER
+    lifting = _HELPER[_HELPER.index("const lift = () => {"):_HELPER.index("const settleSoon")]
+    assert "tall && style.position === 'sticky' && element.parentElement" in lifting
+    assert "document.documentElement.scrollHeight - (parent.getBoundingClientRect().bottom + scrollY" in lifting
+    assert "was.marginBottom = element.style.marginBottom; element.style.marginBottom = ((parseFloat(style.marginBottom) || 0) - beyond) + 'px';" in lifting
+    assert lifting.index("for (const [element, was] of moved)") < lifting.index("tall && style.position === 'sticky'")
+    # What the margin lets run on to the foot reaches the room the composer keeps, so the padding that lifts what stands at its foot counts it.
+    assert "take('bottom', foot, foot > 0 && box.bottom + beyond > innerHeight - foot && box.top < innerHeight);" in lifting
+    assert lifting.index("let beyond = 0;") < lifting.index("take('bottom'")
+    assert "\\" not in _HELPER
+
+
 async def test_the_page_a_window_gets_carries_the_helper_before_its_own_markup(conn):
     from raphael_core.agent.pages import _HELPER
     page = stored(conn, title="Daily lesson", html=LESSON)
