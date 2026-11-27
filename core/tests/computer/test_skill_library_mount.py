@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from raphael_core.computer.vm import GUEST, SKILLS, LocalVm, Result, VmError, compatible, mounts_match, run_args
+from raphael_core.computer.vm import GUEST, SKILLS, LocalVm, Result, VmError, compatible, mounts_match, run_args, trust_args
 from raphael_core.computer.vm_tools import VmTools
 from raphael_core.members.skill_library import SkillHomes
 from raphael_core.services.attachment_store import AttachmentStore
@@ -88,7 +88,10 @@ async def test_no_file_is_copied_into_the_computer_to_give_it_the_library(per_bo
     runtime.raw = container(vm, target, runtime)
     runtime.calls.clear()
     assert (await vm.start(target))["ready"]
-    assert not [args for args, _ in runtime.calls if args[0] in ("cp", "exec") and (SKILLS in " ".join(args[1:]) or str(vm.library) in " ".join(args[1:]))]
+    # The one command that names the folder only tells git to trust it (trust_args); it writes nothing into the library.
+    assert not [args for args, _ in runtime.calls if args[0] in ("cp", "exec") and args != trust_args(target)
+                and (SKILLS in " ".join(args[1:]) or str(vm.library) in " ".join(args[1:]))]
+    assert any(args == trust_args(target) and SKILLS in args for args, _ in runtime.calls)
 
 
 async def test_a_member_on_docker_is_told_where_the_library_is_in_its_computer(per_bot_desktop, tmp_path):
