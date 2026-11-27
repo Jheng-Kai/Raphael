@@ -71,4 +71,4 @@
 
 /* A mention: its mark stands where the @ is (the @ keeps its width, unseen), then the name. */
 .cmp-input .mention-slot { position: relative; display: inline-block; width: 0; height: 1lh; vertical-align: top; }
-.cmp-input .mention-slot .mention-ico { inset-block: 0; }
+.cmp-input .mention-at { -webkit-text-fill-color: transparent; }

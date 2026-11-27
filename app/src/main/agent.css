@@ -570,7 +570,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .page-agent .btn.cmp-attach:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .btn.cmp-attach .i { width: 20px; height: 20px; }
 /* The field grows with its text by itself, up to six lines: measured from script, every keystroke laid out the whole thread. */
-.cmp-input { flex: 1; min-width: 0; min-height: var(--pa-cmp-btn); max-height: min(calc(160px + 40 * var(--pa-u)), calc(6lh + 2px)); field-sizing: content; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: var(--pa-cmp-fs)/var(--pa-cmp-lh) var(--voice); padding: var(--pa-cmp-py) 4px; overflow-y: auto; }
+.cmp-input { flex: 1; min-width: 0; min-height: var(--pa-cmp-btn); max-height: min(calc(280px + 60 * var(--pa-u)), 45vh); field-sizing: content; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: var(--pa-cmp-fs)/var(--pa-cmp-lh) var(--voice); padding: var(--pa-cmp-py) 4px; overflow-y: auto; }
 .cmp-input::placeholder { color: var(--text-3); }
 .cmp-input:focus-visible { outline: 0; }
 /* A plain textarea field keeps its words in it. While they address someone, its text is not painted and the same words are drawn over it

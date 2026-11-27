@@ -28,6 +28,7 @@ import slime from "./slime.mjs";
 import pages from "./pages.mjs";
 import quota from "./quota.mjs";
 import richContent from "./rich-content.mjs";
+import richComposer from "./rich-composer.mjs";
 import answerForms from "./answer-forms.mjs";
 import unreadDivider from "./unread-divider.mjs";
 import threadWindow from "./thread-window.mjs";
@@ -56,7 +57,7 @@ import conversationAndStableControls from "./conversation-and-stable-controls.mj
 import longMessages from "./long-messages.mjs";
 import { withStandingChecks, noNaming } from "./standing-checks.mjs";
 
-export const scenes = withStandingChecks([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...foot, ...shortcuts, ...slime, ...pages, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...voiceAndDetails, ...cancelAndDesktopConfirm, ...longMessages, ...conversationAndStableControls, noNaming]);
+export const scenes = withStandingChecks([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...richComposer, ...sidebar, ...foot, ...shortcuts, ...slime, ...pages, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...voiceAndDetails, ...cancelAndDesktopConfirm, ...longMessages, ...conversationAndStableControls, noNaming]);
 scenes.push(...colleagues);
 scenes.push(...memberStore);
 scenes.push(...mediaData);

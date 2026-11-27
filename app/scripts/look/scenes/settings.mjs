@@ -149,7 +149,7 @@ export default [
   ], { noOwnGoogle: true }),
   scene("store-google-in-chat", "加入 on the owner's own Google leaves for the conversation with the owner's words, where the member shows the card that walks the steps", [
     ...store, type('#conn-search', 'Google'), wait('[data-conn="open-store"][data-id="google"]'),
-    click('[data-conn="join"][data-id="google"]'), wait('.page-agent:not([hidden]) .composer textarea'), check("store-google-in-chat"),
+    click('[data-conn="join"][data-id="google"]'), wait('.page-agent:not([hidden]) .composer .cmp-input'), check("store-google-in-chat"),
   ], { noOwnGoogle: true }),
   scene("plugins-store", "Search-first catalog of the apps not added yet, in bounded pages", [
     ...store, check("plugins-store"), check("plugins-store-rows"), check("plugins-store-groups"),

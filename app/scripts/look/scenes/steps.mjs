@@ -11,6 +11,8 @@ export const drag = (selector, dx, options = {}) => ({ action: "drag", selector,
 // A step for the full list only: the rail of faces on a narrow window has no folder headings (driver.mjs `perform`).
 export const wide = step => ({ ...step, wide: true });
 export const type = (selector, text) => ({ action: "type", selector, text });
+// Typed through the real keyboard: strings letter by letter, `{Shift+Enter}`, `{Tab}`, `{Backspace}` as the key pressed (driver.mjs `typing`).
+export const typing = (selector, ...parts) => ({ action: "typing", selector, parts });
 // `timeout` (ms) for what the app itself waits for before it shows it (the screen's 6 s to confirm a take-over).
 export const wait = (selector, timeout) => ({ action: "wait", selector, ...(timeout ? { timeout } : {}) });
 export const waitGone = selector => ({ action: "wait-gone", selector });

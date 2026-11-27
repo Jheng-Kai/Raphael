@@ -2317,6 +2317,43 @@ npm run look -- team-file-reply reply-local-links rich-chief rich-member rich-ro
 Links: a link in the composer and in a sent message shows its whole address in the link colour (`--link`, blue), never a shortened name; the field's words are the address itself, so copy, cut and send give the same text. `composer-url-chip` requires the whole address, the link colour, a matching field and copy and no sideways overflow; `composer-link-sent` requires the whole address to go out with the words after it, and `room-link-sent` also requires the group's sent message to show the whole address in the link colour (the member conversation's mock does not echo the sent bubble; message-content.test.ts covers its HTML). A bubble that wears a member's colour keeps its own words colour for a link so that it reads (R-UI-81); a neutral bubble shows the link colour. The look driver's `clipboard-paste` does the browser's default insertion of pasted words when no page code took the paste.
 
 
+## The composer writes Markdown, drawn as it will read (R-COMPOSER-01 to 05)
+
+Every composer (a member's conversation, a group, a side thread; `createChatComposer`, `composerHTML`) is a rich field, a
+ProseMirror editor mounted on `.cmp-input` (`composer-rich-field.ts`; schema, Markdown, paste and node views are
+`composer-rich-schema.ts`, `composer-rich-markdown.ts`, `composer-rich-paste.ts`, `composer-rich-views.ts`, equations
+`math-html.ts`). It answers as the textarea it replaced (`value` is the Markdown, offsets are the Markdown's, `input` is said once
+after the words changed), so drafts, history, dictation, the @ and / menus, the attachments and the send are unchanged. The owner's
+bubble, in a conversation, a group and a side thread, draws the owner's Markdown as a reply does (`ownerMessageHTML`); a reply
+gains toggles and equations; the sidebar's draft line stays plain words (`plainWords`).
+
+How to get to it: open a conversation and type `# `, `- `, `1. `, `[] `, `> `, `>> ` (a toggle), three backticks and a space, `$$ ` or
+`---` at the start of a line; Shift+Enter in a numbered list starts the next number; paste a reply copied from the app, a web page,
+Notion, Word or Google Docs. The look driver's `typing` step presses real keys (`{Shift+Enter}`, `{Tab}`, `{Backspace}`), since a
+shortcut never fires on a value written into the field; `paste(selector, { html, text })` carries HTML beside the words.
+
+- `composer-rich-example` / `composer-rich-example-room`: the owner's own example, a heading and five numbered items copied out of a
+  reply, keeps its heading (larger, heavier), its numbers and its indent, and the Markdown is `# …`, `1. … 5. …`.
+- `composer-rich-example-sent`: that paste is sent as Markdown and the owner's bubble draws the heading and the list.
+- `composer-rich-list`, `composer-rich-list-leave`: Shift+Enter numbers on (1, 2, 3) and an empty item leaves the list.
+- `composer-rich-lists`, `composer-rich-quote-toggle`, `composer-rich-toggle-closed`, `composer-rich-code-math`,
+  `composer-rich-marks`: every block and mark once, typed with its shortcut; the toggle's arrow closes what is under it.
+- `composer-rich-sent`: headings, a list, a quote, bold words and an equation go out as Markdown and every part is drawn in the bubble.
+- `composer-rich-room`, `composer-rich-docs`: a group's composer takes the same shortcuts; a Google Docs copy keeps its nested list.
+
+Consumers of the field, each checked again on the new field: the mention chips (`mention-chip-*`, `mention-ime-*`, real input-method
+events), the history walk (`composer-history-*`), a link in the words (`composer-long-link`, `composer-link-edit`), the slash menu
+(`slash-*`, `completion-*`), drafts (`sidebar-draft`, `daily-draft-*`, `message-edit-draft`), the queue and send (`composer-queued`,
+`card-send-failed`), and the line and the controls under it (`composer-opened-calm`, `composer-engaged`, `composer-plus-menu`).
+
+```powershell
+npm run look -- composer-rich-example composer-rich-example-sent composer-rich-example-room composer-rich-list composer-rich-list-leave composer-rich-lists composer-rich-quote-toggle composer-rich-toggle-closed composer-rich-code-math composer-rich-marks composer-rich-sent composer-rich-room composer-rich-docs --theme both --width 1120,720,1920x1080
+npm run look -- mention-chip-composer mention-chip-sent mention-ime-compose mention-ime-commit composer-history-recall composer-long-link composer-link-edit composer-opened-calm composer-engaged chat --theme both --width 1120,720,1920x1080
+```
+
+Not covered by the browser fixture: a real operating-system paste from Word or Notion (the HTML shapes are fixtures, in
+`composer-rich-paste.test.ts`), and macOS and Linux webviews' input methods.
+
 ## Answer forms
 
 Closed forecast, board and chart fences carry strict JSON. The shared rich reply

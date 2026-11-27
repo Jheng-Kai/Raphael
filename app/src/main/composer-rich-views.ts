@@ -30,7 +30,13 @@ class ToggleView implements NodeView {
   dom = document.createElement("div");
   contentDOM = this.dom;
   constructor(private node: PMNode) { this.dom.className = "cmp-toggle"; this.draw(); }
-  private draw(): void { this.dom.dataset.open = String(this.node.attrs.open); }
+  private draw(): void {
+    const open = this.node.attrs.open !== false;
+    this.dom.dataset.open = String(open);
+    const arrow = this.dom.querySelector<HTMLElement>(":scope > .cmp-toggle-head > .cmp-toggle-arrow");
+    arrow?.setAttribute("aria-expanded", String(open));
+    arrow?.setAttribute("aria-label", t(open ? "composer.toggleClose" : "composer.toggleOpen"));
+  }
   update(node: PMNode): boolean {
     if (node.type !== this.node.type) return false;
     this.node = node; this.draw();

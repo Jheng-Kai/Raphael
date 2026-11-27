@@ -172,7 +172,8 @@ function markRule(pattern: RegExp, open: number, mark: MarkType): InputRule {
   });
 }
 
-const EDGE = String.raw`(^|[\s(\[{"'])`;
+// A star, a strike or a backtick opens after any letter, a Chinese one too (他說**重點**); an underscore never does inside a word.
+const AFTER = String.raw`(^|[^\w*\\])`, AFTER_WORD = String.raw`(^|[^\p{L}\p{N}_\\])`;
 function typingRules(): InputRule[] {
   const task = new InputRule(/^\s*(?:[-+*]\s)?\[([ xX]?)\]\s$/, (state, match, start, end) => {
     const checked = match[1]!.toLowerCase() === "x";
@@ -220,11 +221,11 @@ function typingRules(): InputRule[] {
     textblockTypeInputRule(/^```([\w#+.-]*)\s$/, N.code_block, match => ({ language: match[1]!.toLowerCase() })),
     textblockTypeInputRule(/^\$\$\s$/, N.math_block),
     rule,
-    markRule(new RegExp(`${EDGE}\\*\\*([^\\s*](?:[^*\\n]*[^\\s*])?)\\*\\*$`), 2, M.strong),
-    markRule(new RegExp(`${EDGE}__([^\\s_](?:[^_\\n]*[^\\s_])?)__$`), 2, M.strong),
-    markRule(new RegExp(`${EDGE}\\*([^\\s*](?:[^*\\n]*[^\\s*])?)\\*$`), 1, M.em),
-    markRule(new RegExp(`${EDGE}_([^\\s_](?:[^_\\n]*[^\\s_])?)_$`), 1, M.em),
-    markRule(new RegExp(`${EDGE}~~([^\\s~](?:[^~\\n]*[^\\s~])?)~~$`), 2, M.strike),
+    markRule(new RegExp(`${AFTER}\\*\\*([^\\s*](?:[^*\\n]*[^\\s*])?)\\*\\*$`), 2, M.strong),
+    markRule(new RegExp(`${AFTER_WORD}__([^\\s_](?:[^_\\n]*[^\\s_])?)__$`, "u"), 2, M.strong),
+    markRule(new RegExp(`${AFTER}\\*([^\\s*](?:[^*\\n]*[^\\s*])?)\\*$`), 1, M.em),
+    markRule(new RegExp(`${AFTER_WORD}_([^\\s_](?:[^_\\n]*[^\\s_])?)_$`, "u"), 1, M.em),
+    markRule(new RegExp(`${AFTER}~~([^\\s~](?:[^~\\n]*[^\\s~])?)~~$`), 2, M.strike),
     markRule(/(^|[^`\\])`([^`\n]+)`$/, 1, M.code),
     math, link,
   ];
@@ -255,7 +256,6 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
   };
   /** What the editor has read of the page so far: a change the browser made a moment ago, a composition just ended. */
   const settle = (): void => {
-    if (view.composing) return;
     try { (view as unknown as { domObserver?: { flush(): void } }).domObserver?.flush(); } catch { /* A view being replaced has nothing to read. */ }
   };
   const text = (): string => { settle(); return written().text; };
@@ -272,8 +272,9 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
         const from = positionOf(map, chip.start), to = positionOf(map, chip.end);
         if (to <= from) continue;
         if (chip.kind === "mention") {
-          found.push(Decoration.inline(from, to, { class: "mention-chip", "data-mention": chip.mention ?? "" }, { inclusiveStart: false, inclusiveEnd: false }));
+          // The @ (unseen: the mark stands over it, and the words keep their metrics) and the name after it.
           found.push(Decoration.inline(from, Math.min(to, from + 1), { class: "mention-at" }, { inclusiveStart: false, inclusiveEnd: false }));
+          if (to > from + 1) found.push(Decoration.inline(from + 1, to, { class: "mention-chip", "data-mention": chip.mention ?? "" }, { inclusiveStart: false, inclusiveEnd: false }));
           if (chip.icon) {
             const icon = chip.icon;
             found.push(Decoration.widget(from, () => {

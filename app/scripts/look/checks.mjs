@@ -2774,7 +2774,7 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   if (name.startsWith('completion-')) {
-    const input = [...document.querySelectorAll('.composer textarea')].find(visible);
+    const input = [...document.querySelectorAll('.composer .cmp-input')].find(visible);
     require(input, 'the real composer is visible');
     if (name === 'completion-before') {
       window.__look.completionComposerBottom = input.closest('.composer').getBoundingClientRect().bottom;
@@ -3104,7 +3104,7 @@ export function checkRendered(name, context = {}) {
     require(Math.round(t.width) === 36 && Math.round(t.height) === 36, `a 36 px thumbnail (${Math.round(t.width)}x${Math.round(t.height)})`);
     require(t.right <= a.left && t.right <= w.left && a.bottom <= w.top + 1, 'the thumbnail at the start, the author over the word');
     require(Math.abs((t.top + t.bottom) / 2 - (a.top + w.bottom) / 2) <= 2, 'the thumbnail is centred on the two lines');
-    require(document.activeElement?.matches('.composer textarea'), 'the composer takes the focus, as after replying to words');
+    require(document.activeElement?.matches('.composer .cmp-input'), 'the composer takes the focus, as after replying to words');
     return { check: name };
   }
   if (name === 'dataset-chart') {
@@ -6206,22 +6206,123 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, line };
   }
+  // The composer's rich field (composer-rich-field.ts): the words are drawn as they will read, and what is sent is Markdown.
+  if (name.startsWith("composer-rich-")) {
+    const room = name.endsWith("-room");
+    const field = [...document.querySelectorAll(room ? '#room-message' : '.composer .cmp-input')].find(visible);
+    require(field, "the composer field is on screen");
+    const style = node => getComputedStyle(node), size = node => parseFloat(style(node).fontSize), kept = () => { require(field.scrollHeight <= field.clientHeight + 1, `everything shows with no scrolling: ${field.scrollHeight} of ${field.clientHeight}`); };
+    const ink = node => { const probe = document.createElement('i'); probe.style.color = `var(${node})`; document.body.append(probe); const value = style(probe).color; probe.remove(); return value; };
+    if (name === "composer-rich-example" || name === "composer-rich-example-room") {
+      const h1 = field.querySelector('h1'), ol = field.querySelector('ol'), items = [...field.querySelectorAll('ol > li')];
+      require(h1?.textContent === "拉斐爾分開了" && items.length === 5, `a heading and five items: ${h1?.textContent}, ${items.length}`);
+      require(size(h1) >= size(field) * 1.3 && Number(style(h1).fontWeight) >= 500, `the heading is larger and heavier than the words (${size(h1)}px against ${size(field)}px)`);
+      require(style(ol).listStyleType === 'decimal' && parseFloat(style(ol).paddingInlineStart) >= 16 && items.every(li => style(li).display === 'list-item'), "the numbers and their indent are drawn");
+      require(items[0].getBoundingClientRect().left > h1.getBoundingClientRect().left + 12, "the items stand in from the heading");
+      require(items.every(li => style(li).display === "list-item"), "the items are numbered");
+      require(field.value === `# ${h1.textContent}\n\n` + items.map((li, i) => `${i + 1}. ${li.textContent}`).join("\n"), `the words are the Markdown: ${JSON.stringify(field.value)}`);
+      kept();
+      return { check: name, value: field.value, height: field.clientHeight };
+    }
+    if (name === "composer-rich-example-sent") {
+      const sent = window.__look.calls.filter(call => call.command === "agent_ask_text").at(-1);
+      require(sent?.text.startsWith("# 拉斐爾分開了\n\n1. ") && sent.text.split("\n").length === 7 && sent.text.includes("\n5. "), `Markdown goes out: ${JSON.stringify(sent?.text)}`);
+      const bubble = [...document.querySelectorAll('.tn.is-pending .owner-message .bubble')].find(visible), words = bubble.querySelector('.message-text');
+      require(bubble.querySelector('h1')?.textContent === "拉斐爾分開了" && bubble.querySelectorAll('ol > li').length === 5, "the owner's bubble draws the heading and the five items");
+      require(style(bubble.querySelector('h1')).color === style(words).color, "the heading wears the bubble's own colour");
+      const ol = bubble.querySelector('ol');
+      require(style(ol).listStyleType === 'decimal' && parseFloat(style(ol).paddingInlineStart) >= 16, "its numbers and indent are drawn");
+      require(size(bubble.querySelector('h1')) > size(words), "the heading is larger than the words");
+      require(!field.value && !field.querySelector('h1'), "sending empties the field");
+      return { check: name, sent: sent.text };
+    }
+    if (name === "composer-rich-list") {
+      const items = [...field.querySelectorAll('ol > li')];
+      require(items.length === 3 && items.every(li => style(li).display === "list-item") && style(field.querySelector("ol")).listStyleType === "decimal", "three numbered items");
+      require(field.value === "1. 買牛奶\n2. 買雞蛋\n3. 買麵包", `the Markdown counts on: ${JSON.stringify(field.value)}`);
+      require(document.activeElement === field && field.selectionStart === field.value.length, "the caret is after the last item");
+      kept();
+      return { check: name, value: field.value };
+    }
+    if (name === "composer-rich-list-leave") {
+      require(field.value === "- 甲\n- 乙\n\n丙", `the empty item left the list: ${JSON.stringify(field.value)}`);
+      require(field.querySelectorAll('ul > li').length === 2 && field.querySelector('ul + p')?.textContent === "丙", "two items, then a paragraph");
+      return { check: name, value: field.value };
+    }
+    if (name === "composer-rich-lists") {
+      require(field.value === "# 本週計畫\n\n- 整理資料\n- 寫成摘要\n\n1. 先看報告\n2. 再問問題\n3. 最後下結論\n\n- [ ] 寄出摘要\n- [ ] 更新行事曆", `headings and lists: ${JSON.stringify(field.value)}`);
+      const boxes = [...field.querySelectorAll('li.cmp-task > .cmp-task-box')];
+      require(field.querySelector('h1') && field.querySelectorAll('ul > li:not(.cmp-task)').length === 2 && field.querySelectorAll('ol > li').length === 3 && boxes.length === 2, "a heading, two bullets, three numbers and two tasks");
+      require(boxes.every(box => visible(box) && Math.abs(box.getBoundingClientRect().width - size(field)) < 4) && boxes.every(box => box.getAttribute('role') === 'checkbox'), "each task has its box");
+      require(style(field.querySelector('ul li')).listStyleType === 'disc', "bullets are discs");
+      return { check: name, height: field.clientHeight, scrolls: field.scrollHeight > field.clientHeight + 1 };
+    }
+    if (name === "composer-rich-quote-toggle" || name === "composer-rich-toggle-closed") {
+      const closed = name === "composer-rich-toggle-closed", quote = field.querySelector('blockquote'), toggle = field.querySelector('.cmp-toggle'), arrow = toggle.querySelector('.cmp-toggle-arrow'), title = toggle.querySelector('.cmp-toggle-title');
+      require(quote?.textContent === "一句引用的話" && title?.textContent === "點開看細節", "a quote and a toggle");
+      require(field.value === "> 一句引用的話\n\n<details" + (closed ? "" : " open") + ">\n<summary>點開看細節</summary>\n\n收起來的內容\n\n</details>\n\n接著寫一般的字", `the Markdown: ${JSON.stringify(field.value)}`);
+      require(style(quote).borderInlineStartWidth === '3px' && style(quote).borderInlineStartColor === ink('--edge') && style(quote).paddingInlineStart !== '0px', "the quote has its bar and a step in");
+      require(visible(arrow) && arrow.getAttribute('role') === 'button' && arrow.getAttribute('aria-label') && arrow.getAttribute('aria-expanded') === String(!closed), "the arrow is a labelled button that says whether it is open");
+      const body = [...toggle.children].filter(child => !child.classList.contains('cmp-toggle-head'));
+      require(body.length >= 1 && body.every(node => closed ? !visible(node) : visible(node) && node.getBoundingClientRect().left > title.getBoundingClientRect().left - 20), closed ? "what is under a closed toggle is hidden" : "what is under it stands in below the title");
+      require(toggle.dataset.open === String(!closed), "the toggle knows its state");
+      return { check: name, value: field.value };
+    }
+    if (name === "composer-rich-code-math") {
+      require(field.value === "```js\nconst a = 1;\n```\n\n$$\nE = mc^2\n$$\n\n---\n\n結尾", `the Markdown: ${JSON.stringify(field.value)}`);
+      const pre = field.querySelector('pre'), math = field.querySelector('.cmp-math-block'), shown = math.querySelector('.cmp-math-shown'), hr = field.querySelector('hr');
+      require(style(pre).fontFamily === style(document.documentElement).getPropertyValue('--mono') || /mono|consolas|cascadia/i.test(style(pre).fontFamily), `code is monospace: ${style(pre).fontFamily}`);
+      require(style(pre).backgroundColor === ink('--surface-2') && pre.getAttribute('data-language') === 'js', "code is on the recessed fill and names its language");
+      require(visible(shown.querySelector('.katex')) && shown.getBoundingClientRect().top > math.querySelector('.cmp-math-source').getBoundingClientRect().top, "the equation is drawn under its LaTeX");
+      require(visible(hr) && style(hr).borderTopWidth === '1px', "the divider is a line");
+      return { check: name, value: field.value };
+    }
+    if (name === "composer-rich-marks") {
+      const text = "這是**粗體**、*斜體*、`程式碼`、~~刪除線~~，公式 $x^2$ 和連結 https://example.com/docs";
+      require(field.value === text, `the Markdown is what was typed: ${JSON.stringify(field.value)}`);
+      const strong = field.querySelector('strong'), em = field.querySelector('em'), code = field.querySelector('code'), del = field.querySelector('del'), link = field.querySelector('.cmp-link');
+      require(strong?.textContent === "粗體" && Number(style(strong).fontWeight) > Number(style(field).fontWeight) && em?.textContent === "斜體" && style(em).fontStyle === 'italic', "bold and italic");
+      require(code?.textContent === "程式碼" && /mono|consolas|cascadia/i.test(style(code).fontFamily) && style(code).backgroundColor === ink('--surface-2'), "code on the recessed fill");
+      require(del?.textContent === "刪除線" && style(del).textDecorationLine.includes('line-through'), "strike is struck");
+      require(visible(field.querySelector('.cmp-math .katex')) && link?.textContent === "https://example.com/docs" && style(link).color === ink('--link'), "the equation is drawn and the address is in the link colour");
+      return { check: name };
+    }
+    if (name === "composer-rich-sent") {
+      const sent = window.__look.calls.filter(call => call.command === "agent_ask_text").at(-1);
+      require(sent?.text === "# 標題\n\n- 一\n- 二\n\n> 引用\n\n公式 $a^2+b^2=c^2$ 與 **粗體**", `Markdown goes out: ${JSON.stringify(sent?.text)}`);
+      const bubble = [...document.querySelectorAll('.tn.is-pending .owner-message .bubble')].find(visible), words = bubble.querySelector('.message-text');
+      const own = style(words).color;
+      require(bubble.querySelector('h1')?.textContent === "標題" && bubble.querySelectorAll('ul > li').length === 2 && bubble.querySelector('blockquote')?.textContent === "引用" && bubble.querySelector('strong')?.textContent === "粗體" && visible(bubble.querySelector('.math-inline .katex')), "the bubble draws a heading, a list, a quote, bold words and an equation");
+      require(style(bubble.querySelector('blockquote')).color === own && style(bubble.querySelector('h1')).color === own, "the quote and the heading wear the bubble's colour, readable on it");
+      require(style(bubble.querySelector('.katex')).color === own, "the equation wears it too");
+      return { check: name, sent: sent.text };
+    }
+    if (name === "composer-rich-room") {
+      require(field.value === "## 會議\n\n1. 開場\n2. 討論\n\n> 結論先寫下來", `the room's Markdown: ${JSON.stringify(field.value)}`);
+      require(field.querySelector('h2') && field.querySelectorAll('ol > li').length === 2 && field.querySelector('blockquote'), "heading, numbers and quote");
+      return { check: name };
+    }
+    if (name === "composer-rich-docs") {
+      require(field.value === "- 水果\n  - 蘋果\n  - 香蕉\n- 蔬菜 **新鮮**", `the nested list kept: ${JSON.stringify(field.value)}`);
+      require(field.querySelectorAll('ul ul > li').length === 2 && style(field.querySelector('ul ul')).listStyleType === 'circle' && field.querySelector('strong')?.textContent === "新鮮", "two levels of bullets, the inner ones hollow, and the bold word");
+      return { check: name };
+    }
+    throw new Error(`${name}: unknown composer check`);
+  }
   if (name === "composer-url-chip") {
-    const field = [...document.querySelectorAll(".composer .cmp-field")].find(visible), input = field.querySelector(".cmp-input"), mirror = field.querySelector(".cmp-mirror"), chip = mirror.querySelector(".url-chip");
+    const field = [...document.querySelectorAll(".composer .cmp-field")].find(visible), input = field.querySelector(".cmp-input"), chip = input.querySelector(".cmp-link");
     // The link shows its whole address in the link colour, never a shortened name.
     require(chip && visible(chip) && chip.textContent.startsWith("https://x.com/someone/status/") && chip.textContent.endsWith("sample-project-status-notes") && !chip.textContent.includes("…"), `the link stands as its whole address: ${chip?.textContent}`);
     require(input.value.includes(chip.textContent) && input.value.includes("這是用來測試的範例"), "the field holds the whole address and the words");
     const probe = document.createElement("i"); probe.style.color = "var(--link)"; document.documentElement.append(probe);
     const link = getComputedStyle(probe).color; probe.remove();
-    require(getComputedStyle(chip).color === link && link !== getComputedStyle(mirror).color, `the address is in the link colour: ${getComputedStyle(chip).color} / ${link}`);
-    require(getComputedStyle(input).color !== getComputedStyle(mirror).color, "only the copy is painted");
-    require(Math.abs(input.scrollHeight - mirror.scrollHeight) <= 1, `the field and its copy wrap alike: ${input.scrollHeight} / ${mirror.scrollHeight}`);
-    require(mirror.scrollWidth <= mirror.clientWidth + 1, `the address wraps inside the field: ${mirror.scrollWidth} / ${mirror.clientWidth}`);
+    require(getComputedStyle(chip).color === link && link !== getComputedStyle(input).color, `the address is in the link colour: ${getComputedStyle(chip).color} / ${link}`);
+    require(input.scrollWidth <= input.clientWidth + 1, `the address wraps inside the field: ${input.scrollWidth} / ${input.clientWidth}`);
     return { check: name, name: chip.textContent, height: input.scrollHeight };
   }
   if (name === "composer-link-edit") {
     // R-UI-168: "…status-notes" lost its last letter, then the "o" two letters in; the rest stands, still drawn as a link.
-    const field = [...document.querySelectorAll(".composer .cmp-field")].find(visible), input = field.querySelector(".cmp-input"), chip = field.querySelector(".cmp-mirror .url-chip");
+    const field = [...document.querySelectorAll(".composer .cmp-field")].find(visible), input = field.querySelector(".cmp-input"), chip = field.querySelector(".cmp-input .cmp-link");
     require(input.value.startsWith("https://x.com/someone/status/") && input.value.endsWith("sample-project-status-nte"), `one letter went each time: ${input.value}`);
     require(chip && visible(chip) && chip.textContent === input.value, `the corrected address is still a link: ${chip?.textContent}`);
     require(input.selectionStart === input.value.length - 2 && input.selectionEnd === input.selectionStart, `the caret stays inside the link: ${input.selectionStart} of ${input.value.length}`);
@@ -6230,7 +6331,7 @@ export function checkRendered(name, context = {}) {
   if (name === "composer-link-sent") {
     const sent = window.__look.calls.filter(call => call.command === "agent_ask_text").at(-1);
     require(sent?.text?.includes("ref_src=twsrc") && sent.text.startsWith("https://x.com/someone/status/"), `the whole address goes out: ${sent?.text}`);
-    require(document.querySelector(".composer .cmp-mirror .url-chip") === null, "the field is empty again");
+    require(document.querySelector(".composer .cmp-input .cmp-link") === null, "the field is empty again");
     require(sent.text.startsWith("https://x.com/someone/status/") && sent.text.endsWith("這是用來測試的範例") && sent.text.includes("sample-project-status-notes"), `the link goes out whole, with the words after it: ${sent?.text}`);
     return { check: name };
   }
@@ -6282,7 +6383,7 @@ export function checkRendered(name, context = {}) {
     require(turns.at(-1)?.querySelector('[data-pairing-card="pair-late"]'), "the later pairing card is the last thing in the conversation");
     require(visible(turns.at(-1).querySelector('[data-pairing-card="pair-late"] [data-act="pairing-allow"]')), "it can be allowed there");
     require(!turns.at(-1).querySelector('.me'), "no empty owner bubble above it");
-    const field = document.querySelector('.page-agent .composer textarea, .page-agent .composer [contenteditable]');
+    const field = document.querySelector('.page-agent .composer .cmp-input');
     require(field?.getAttribute('placeholder') === "關於 Slack 的設定，直接問我", `the field asks about the Slack setup that waits: ${field?.getAttribute('placeholder')}`);
     return { check: name };
   }
@@ -7514,7 +7615,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "slash-after-words-picked" || name === "slash-inside-word") {
     // R-MENU-05: the / menu opens where a / begins a word, picking puts the name where the / was, and a / inside a word or an address opens nothing.
-    const input = [...document.querySelectorAll('.composer textarea')].find(visible);
+    const input = [...document.querySelectorAll('.composer .cmp-input')].find(visible);
     require(visible(input), "the composer is visible");
     if (name === "slash-inside-word") {
       require(!document.querySelector('#app-popover'), "a slash inside a word or an address opens no menu");
@@ -7541,7 +7642,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, height: Math.round(box.height), rows: rows.length };
   }
   if (name === "team-mentions" || name === "slash-commands" || name === "slash-after-words") {
-    const input = [...document.querySelectorAll('.composer textarea')].find(visible);
+    const input = [...document.querySelectorAll('.composer .cmp-input')].find(visible);
     const menu = document.querySelector('#app-popover');
     require(visible(input) && visible(menu), "the completion menu and its field are visible");
     // The menu stands beside the @ or / that begins the word under the caret, wherever in the words it is.
@@ -7576,13 +7677,13 @@ export function checkRendered(name, context = {}) {
   if (name === "slash-usage-opened") {
     // Choosing it ran it: Settings › 用量 is open, the draft holds no /usage and nothing was sent.
     require(visible(document.querySelector('[data-usage-tab="overview"]')), "Settings › 用量 is open");
-    require(![...document.querySelectorAll('.composer textarea')].some(input => input.value.includes("/usage")), "the draft holds no /usage");
+    require(![...document.querySelectorAll('.composer .cmp-input')].some(input => input.value.includes("/usage")), "the draft holds no /usage");
     require(!window.__look.calls.some(call => /^agent\.ask/.test(call.method ?? call.command ?? "")), "nothing was sent to a member");
     return { check: name };
   }
   if (name === "mention-menu-signin-pick") {
     // Pressing an app that is not signed in is a way to its sign-in, not an address: the typed @ goes, the connect dialog opens.
-    const composer = [...document.querySelectorAll('.composer textarea')].find(visible);
+    const composer = [...document.querySelectorAll('.composer .cmp-input')].find(visible);
     require(composer && composer.value === "請用 ", `no address is left in the words: ${JSON.stringify(composer?.value)}`);
     require(!document.querySelector('#app-popover[data-team-mentions]'), "the menu is closed");
     require(visible(document.querySelector('.modal-scrim[data-standalone="connections"] .modal-body .cs')), "the dialog of the apps is open");
@@ -7591,7 +7692,7 @@ export function checkRendered(name, context = {}) {
   if (name.startsWith("mention-menu-")) {
     // The @ menu: 360 px, rows of the menu's height, a 16 px face or logo, the name, what is wrong with it,
     // and at the right edge what it is; no heading, no group, no everyone, and the conversation's own member is not in it.
-    const data = window.__look.data, composer = [...document.querySelectorAll('.composer textarea, #room-message')].find(visible);
+    const data = window.__look.data, composer = [...document.querySelectorAll('.composer .cmp-input, #room-message')].find(visible);
     const menu = document.querySelector('#app-popover[data-team-mentions]');
     require(composer && visible(menu), "the field and the @ menu are on screen");
     const box = menu.getBoundingClientRect(), rows = [...menu.querySelectorAll('[data-value]')], values = rows.map(row => row.dataset.value);
@@ -7651,30 +7752,39 @@ export function checkRendered(name, context = {}) {
     // A mention is a chip: its mark where the @ is, then its name, in a quiet pill apart from the words around it, and the words
     // themselves (what the core receives, copies and quotes) are the plain `@Name` they always were. The input method, when one
     // typed them, typed each character once and never lost the focus to the menu while it composed.
-    const input = [...document.querySelectorAll('.composer textarea')].find(visible), log = window.__imeLog ?? [];
+    const input = [...document.querySelectorAll('.composer .cmp-input')].find(visible), log = window.__imeLog ?? [];
     require(input, "the composer field is on screen");
-    const field = input.closest('.cmp-field'), mirror = field?.querySelector('.cmp-mirror');
-    const chipsIn = root => [...root.querySelectorAll('.mention-chip')];
-    const chipText = chip => chip.textContent;
+    const field = input.closest('.cmp-field');
+    // The editor draws a mention in its field as three parts side by side (composer-rich-field.ts): the mark where the @ stands, the @
+    // itself (unseen, so the words keep their metrics) and the name. In a sent bubble the same mention is one element.
+    const fieldChips = root => [...root.querySelectorAll('.mention-slot')].map(slot => {
+      const at = slot.nextElementSibling, name = at?.nextElementSibling;
+      require(at?.classList.contains('mention-at') && name?.classList.contains('mention-chip'), "a mention in the field is its mark, its @ and its name");
+      const a = at.getBoundingClientRect(), b = name.getBoundingClientRect();
+      return { text: at.textContent + name.textContent, kind: name.dataset.mention, at, mark: slot.querySelector('.mention-ico > *'), nameNode: name.firstChild, style: getComputedStyle(name),
+        box: { left: a.left, top: Math.min(a.top, b.top), width: b.right - a.left, height: Math.max(a.bottom, b.bottom) - Math.min(a.top, b.top) }, control: !!name.closest('a, button') };
+    });
+    const bubbleChip = chip => ({ text: chip.textContent, kind: chip.dataset.mention, at: chip.querySelector('.mention-at'), mark: chip.querySelector('.mention-ico > *'), nameNode: chip.lastChild, style: getComputedStyle(chip),
+      box: chip.getBoundingClientRect(), control: !!chip.closest('a, button') });
     const chipLooks = chip => {
-      const box = chip.getBoundingClientRect(), style = getComputedStyle(chip), at = chip.querySelector('.mention-at'), mark = chip.querySelector('.mention-ico > *');
+      const { box, style, at, mark } = chip.nameNode ? chip : bubbleChip(chip);
+      chip = chip.nameNode ? chip : bubbleChip(chip);
+      const chipText = item => item.text;
       require(box.width > 0 && box.height >= 14, `${chipText(chip)} is drawn`);
       require(mark && visible(mark), `${chipText(chip)} shows its mark`);
       const markBox = mark.getBoundingClientRect(), nameRange = document.createRange();
-      nameRange.selectNodeContents(chip.lastChild);
+      nameRange.selectNodeContents(chip.nameNode);
       // The mark leans 3 px left of the @ it covers (agent.css `.mention-ico`), so it keeps air before the name.
       require(markBox.left >= box.left - 3.5 && markBox.right <= nameRange.getBoundingClientRect().left + 1, `${chipText(chip)}: the mark stands before its name inside the chip (mark ${markBox.left}..${markBox.right}, chip from ${box.left}, name from ${nameRange.getBoundingClientRect().left})`);
       require(markBox.width >= 10 && markBox.width <= 18 && Math.abs(markBox.height - markBox.width) <= 2, `${chipText(chip)}: the mark is a small square (${markBox.width} x ${markBox.height})`);
       require(style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.boxShadow === 'none' && parseFloat(style.borderTopWidth) === 0, `${chipText(chip)}: the logo and the name alone, with no frame or fill`);
-      require(!chip.closest('a, button') && getComputedStyle(at).webkitTextFillColor === 'rgba(0, 0, 0, 0)', `${chipText(chip)} is not a control and does not show its @`);
-      return { text: chipText(chip), kind: chip.dataset.mention, width: box.width, height: box.height, mark: markBox.width };
+      require(!chip.control && getComputedStyle(at).webkitTextFillColor === 'rgba(0, 0, 0, 0)', `${chipText(chip)} is not a control and does not show its @`);
+      return { text: chipText(chip), kind: chip.kind, width: box.width, height: box.height, mark: markBox.width };
     };
     const overField = () => {
-      const a = input.getBoundingClientRect(), b = mirror.getBoundingClientRect();
-      require(field.classList.contains('has-mentions') && visible(mirror), "the field draws its chips");
-      require(Math.abs(a.left - b.left) < .5 && Math.abs(a.top - b.top) < .5 && Math.abs(a.width - b.width) < .5 && Math.abs(a.height - b.height) < .5, "the drawn words sit exactly over the field");
-      require(getComputedStyle(input).color === 'rgba(0, 0, 0, 0)' && getComputedStyle(mirror).pointerEvents === 'none' && mirror.getAttribute('aria-hidden') === 'true', "the field paints no text of its own, and the drawn copy takes no click and says nothing to a screen reader");
-      const plain = mirror.textContent.replace(/\u200b/g, ''), expected = input.value;
+      require(fieldChips(input).length && fieldChips(input).every(chip => visible(chip.at.parentElement)), "the field draws its chips");
+      require(getComputedStyle(input).color !== 'rgba(0, 0, 0, 0)' && !field.querySelector('.cmp-mirror'), "the field's own words are painted; nothing is laid over them");
+      const plain = input.textContent.replace(/\u200b/g, '').replace(/\n/g, ''), expected = input.value.replace(/\n/g, '');
       require(plain === expected, `the drawn words are the field's words: ${JSON.stringify(plain)} versus ${JSON.stringify(expected)}`);
     };
     // Where the field's own text starts: the first chip's @ stands exactly there, whatever the font draws.
@@ -7682,7 +7792,7 @@ export function checkRendered(name, context = {}) {
       const style = getComputedStyle(input), context = document.createElement('canvas').getContext('2d');
       context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
       const before = input.value.slice(0, input.value.indexOf('@')), expected = input.getBoundingClientRect().left + parseFloat(style.paddingLeft) + context.measureText(before).width;
-      const at = chip.querySelector('.mention-at').getBoundingClientRect().left;
+      const at = chip.at.getBoundingClientRect().left;
       require(Math.abs(at - expected) <= 1.5, `the first chip starts where its text does: ${at} versus ${expected}`);
     };
     if (name === "mention-ime-open") {
@@ -7706,19 +7816,19 @@ export function checkRendered(name, context = {}) {
       const composing = name === "mention-ime-compose", expected = composing ? "@Notion ㄅ" : "@Notion 吧";
       require(input.value === expected, `the field holds ${JSON.stringify(input.value)}, not ${JSON.stringify(expected)}`);
       overField();
-      const chips = chipsIn(mirror).map(chipLooks), underlined = mirror.querySelector('.cmp-composing');
+      const chips = fieldChips(input).map(chipLooks);
       require(chips.length === 1 && chips[0].text === "@Notion", "the chip stays beside the words");
-      require(composing ? underlined?.textContent === "ㄅ" && getComputedStyle(underlined).textDecorationLine === 'underline' : !underlined, composing ? "the syllable being composed is underlined" : "a committed word is plain");
+      require(composing ? log.some(event => event.type === "compositionupdate") && !log.some(event => event.type === "compositionend") : log.some(event => event.type === "compositionend"), composing ? "the syllable is still being composed" : "the composition ended with the word");
       require(!log.some(event => event.type === "blur") && document.activeElement === input, "the field kept the focus");
-      startsWhereTheTextDoes(chipsIn(mirror)[0]);
+      startsWhereTheTextDoes(fieldChips(input)[0]);
       return { check: name, chips, events: log.map(event => event.type).join(' ') };
     }
     if (name === "mention-chip-composer") {
       require(input.value === "請用 @Notion 整理這份報告，再問 @小森 ", `the words are the plain text, not ${JSON.stringify(input.value)}`);
       overField();
-      const chips = chipsIn(mirror).map(chipLooks);
+      const chips = fieldChips(input).map(chipLooks);
       require(JSON.stringify(chips.map(chip => [chip.text, chip.kind])) === JSON.stringify([["@Notion", "app"], ["@小森", "member"]]), "each address is a chip of its kind");
-      startsWhereTheTextDoes(chipsIn(mirror)[0]);
+      startsWhereTheTextDoes(fieldChips(input)[0]);
       require(!document.querySelector('#app-popover'), "the menu closed once the name was chosen");
       return { check: name, chips };
     }
@@ -7727,15 +7837,15 @@ export function checkRendered(name, context = {}) {
       require(sent.length === 1 && sent[0].text === "請用 @Notion 整理這份報告，再問 @小森", `the core receives the words unchanged: ${JSON.stringify(sent.map(call => call.text))}`);
       const bubble = [...document.querySelectorAll('.tn.is-pending .owner-message .bubble')].find(visible);
       require(bubble, "the sent words are in a bubble");
-      const chips = chipsIn(bubble).map(chipLooks);
+      const chips = [...bubble.querySelectorAll('.mention-chip')].map(chipLooks);
       require(JSON.stringify(chips.map(chip => [chip.text, chip.kind])) === JSON.stringify([["@Notion", "app"], ["@小森", "member"]]), `the bubble draws the same chips: ${JSON.stringify(chips.map(chip => [chip.text, chip.kind]))}`);
       require(bubble.querySelector('.message-text').textContent === "請用 @Notion 整理這份報告，再問 @小森", "the bubble's words are the plain text, so copying and quoting read as typed");
-      require(input.value === "" && !field.classList.contains('has-mentions') && mirror.textContent === "", "sending empties the field and its chips");
+      require(input.value === "" && !fieldChips(input).length, "sending empties the field and its chips");
       return { check: name, chips, sent: sent[0].text };
     }
     if (name === "mention-chip-delete") {
       require(input.value === "請問 " && input.selectionStart === 3 && input.selectionEnd === 3, `one Backspace removed the whole chip: ${JSON.stringify(input.value)}`);
-      require(!field.classList.contains('has-mentions') && mirror.textContent === "", "no chip is left");
+      require(!fieldChips(input).length, "no chip is left");
       return { check: name, value: input.value };
     }
     if (name === "mention-chip-arrow-before") {
@@ -7751,7 +7861,7 @@ export function checkRendered(name, context = {}) {
       const room = [...document.querySelectorAll('#room-message')].find(visible);
       require(room && room === input, "the room's composer is the field");
       overField();
-      const chips = chipsIn(mirror).map(chipLooks);
+      const chips = fieldChips(input).map(chipLooks);
       require(JSON.stringify(chips.map(chip => [chip.text, chip.kind])) === JSON.stringify([["@Notion", "app"], ["@小晴", "member"]]), `a room draws its members and the apps, not a group it does not offer: ${JSON.stringify(chips.map(chip => chip.text))}`);
       return { check: name, chips };
     }
@@ -7789,7 +7899,7 @@ export function checkRendered(name, context = {}) {
     // The up arrow brings back what was typed (read once, from the core, when the walk begins), the down arrow walks forward to the
     // draft, and nothing is sent by either; a recalled address is a chip.
     const typedHistory = ["請 @小森 看一下這份報告", "整理這週的研究重點", "明天早上要帶傘嗎？"], draft = "還沒寫完的草稿";
-    const input = [...document.querySelectorAll('.composer textarea')].find(visible);
+    const input = [...document.querySelectorAll('.composer .cmp-input')].find(visible);
     require(input, "the composer field is on screen");
     const reads = window.__look.calls.filter(call => call.method === "agent.history.sent").length;
     const sent = window.__look.calls.filter(call => call.command === "agent_ask_text");
@@ -7800,8 +7910,8 @@ export function checkRendered(name, context = {}) {
       holds(typedHistory[0], "the up arrow brought back the last thing typed");
       require(atEnd() && document.activeElement === input, "the caret is at the end of the recalled words and the field keeps the focus");
       require(reads === 1 && !sent.length, `the history was read once and nothing was sent: ${reads} reads, ${sent.length} sent`);
-      const chips = [...field.querySelectorAll('.cmp-mirror .mention-chip')].map(chip => chip.textContent);
-      require(field.classList.contains('has-mentions') && chips.length === 1 && chips[0] === "@小森", `a recalled address is a chip, not raw text: ${JSON.stringify(chips)}`);
+      const chips = [...field.querySelectorAll('.cmp-input .mention-slot')].map(slot => slot.nextElementSibling.textContent + slot.nextElementSibling.nextElementSibling.textContent);
+      require(chips.length === 1 && chips[0] === "@小森", `a recalled address is a chip, not raw text: ${JSON.stringify(chips)}`);
       require(!document.querySelector('#app-popover'), "a recalled message opens no menu");
       return { check: name, value: input.value, reads };
     }
@@ -7809,7 +7919,7 @@ export function checkRendered(name, context = {}) {
     if (name === "composer-history-oldest") { holds(typedHistory[2], "the oldest line stays where the walk ends"); require(reads === 1, "walking on reads nothing more"); return { check: name, value: input.value, reads }; }
     if (name === "composer-history-draft") {
       holds(draft, "the down arrow ended on the draft that was there before");
-      require(atEnd() && !field.classList.contains('has-mentions') && !sent.length, "the draft is whole, its caret at the end, and nothing was sent");
+      require(atEnd() && !field.querySelector('.mention-slot') && !sent.length, "the draft is whole, its caret at the end, and nothing was sent");
       return { check: name, value: input.value };
     }
     if (name === "composer-history-sent") {
@@ -7832,7 +7942,7 @@ export function checkRendered(name, context = {}) {
       const room = [...document.querySelectorAll('#room-message')].find(visible);
       require(room && room === input, "the room's composer is the field");
       holds(typedHistory[0], "the room's composer walks the same history");
-      require(reads === 1 && field.classList.contains('has-mentions'), "read once, and the recalled address is a chip there too");
+      require(reads === 1 && field.querySelector('.mention-slot'), "read once, and the recalled address is a chip there too");
       return { check: name, value: input.value };
     }
     throw new Error(`${name}: unknown history check`);
@@ -11120,7 +11230,7 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "store-google-in-chat") {
-    const text = document.querySelector('.page-agent:not([hidden]) .composer textarea')?.value ?? "";
+    const text = document.querySelector('.page-agent:not([hidden]) .composer .cmp-input')?.value ?? "";
     require(text === "幫我連接我自己的 Google 帳號", `the owner's words are in the composer (${text})`);
     require(!window.__look.calls.some(call => /^connectors\.(connect|google\.)/.test(call.method) || call.method === "integrations.card_connect"), "nothing was connected from the store");
     return { check: name };
@@ -11885,7 +11995,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "routine-asked") {
     // The calendar fills in nothing itself: the dropped member's conversation opens with the owner's words.
-    const box = document.querySelector(".page-agent:not([hidden]) .composer textarea");
+    const box = document.querySelector(".page-agent:not([hidden]) .composer .cmp-input");
     require(visible(box) && /09:00/.test(box.value) && box.value.length > 6, `the member's composer holds the words for a routine at that time (${box?.value})`);
     require(!document.querySelector(".mb-dialog"), "no editor opened");
     require(!window.__look.calls.some(call => call.method === "routines.create"), "nothing was created before the member is asked");
@@ -12177,7 +12287,7 @@ export function checkRendered(name, context = {}) {
     const sent = calls.filter(call => call.method === "integrations.card_connect");
     require(sent.length === 1 && sent[0].params.id === card.dataset.connector && sent[0].params.fields.generic_api_key === key, "the key crossed one call, integrations.card_connect");
     require(!JSON.stringify(calls.filter(call => call.method !== "integrations.card_connect")).includes(key), "no other call carries the key");
-    require(!(document.querySelector('.composer textarea')?.value ?? "").includes(key), "nothing was typed into the chat");
+    require(!(document.querySelector('.composer .cmp-input')?.value ?? "").includes(key), "nothing was typed into the chat");
     if (name === "card-setup-sent") require(card.dataset.cardState === "connected", "the card follows the core to connected");
     else {
       require(card.dataset.cardState === "failed" && state === "這把金鑰沒有被接受，請再填一次", `the card says the key was not accepted (${state})`);
@@ -12261,7 +12371,7 @@ export function checkRendered(name, context = {}) {
     require(sent.length === 1 && sent[0].params.id === "card-n8n" && sent[0].params.fields.url === "https://flows.example.test/mcp-server/http" && sent[0].params.fields.token === token,
       "the address and the token cross one call, integrations.card_connect");
     require(!JSON.stringify(window.__look.calls.filter(call => call.method !== "integrations.card_connect")).includes(token), "no other call carries the token");
-    require(!document.body.textContent.includes(token) && !(document.querySelector('.composer textarea')?.value ?? "").includes(token), "the token is on no page text and was not typed into the chat");
+    require(!document.body.textContent.includes(token) && !(document.querySelector('.composer .cmp-input')?.value ?? "").includes(token), "the token is on no page text and was not typed into the chat");
     return { check: name };
   }
   if (name.startsWith("connector-")) {
