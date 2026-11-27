@@ -99,8 +99,8 @@ describe("a conversation's header is the window's top row", () => {
     expect(members).toMatch(/\.page-head\.mb-head \{[^}]*z-index: 3;[^}]*height: var\(--pa-top\);[^}]*margin-bottom: calc\(-1 \* var\(--pa-top\)\);/);
     expect(conversations).toMatch(/\.mb-chat \.ra-scroll \{[^}]*mask-image: linear-gradient\(to bottom, transparent calc\(var\(--row-lead\) - 36px\), var\(--text\) var\(--row-lead\)\);[^}]*padding-top: var\(--row-lead\);/);
     expect(report).toMatch(/\.rp-scroll \{[^}]*padding: var\(--pa-top\) var\(--pa-dock-x\) 0;[^}]*mask-image: linear-gradient\(to bottom, transparent calc\(var\(--pa-top\) - 36px\), var\(--text\) var\(--pa-top\)\)/);
-    // An open HTML page's area does not scroll and nothing scrolls under the row, so it has no fade: its frame starts under the row and ends above the composer's row (R-PAGE-10).
-    expect(pages).toMatch(/\.pgv-page \{[^}]*overflow: hidden;[^}]*padding: var\(--row-lead\) 0 var\(--pgv-under, 0px\);/);
+    // An open HTML page's area does not scroll and nothing scrolls under the row, so it has no fade: its frame starts under the row and runs to the window's foot (R-PAGE-10, R-PAGE-11).
+    expect(pages).toMatch(/\.pgv-page \{[^}]*overflow: hidden;[^}]*padding: var\(--row-lead\) 0 0;/);
     expect(pages.match(/\.pgv-page \{[^}]*\}/)![0]).not.toMatch(/mask-image|overflow-y: auto/);
   });
 

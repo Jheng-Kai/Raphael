@@ -17,9 +17,8 @@ import type { AgentTurn, PageCard, PageOpened } from "./types";
 import { btn, esc, ico, toaster } from "./ui";
 
 const MIN_HEIGHT = 80, MAX_HEIGHT = 2400;
-/** The colour a page says its own background is (core agent/pages.py's helper): a plain rgb or rgba colour and nothing else, so
- *  nothing a page sends can reach the app's style as anything but a colour. */
-const PAGE_COLOR = /^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(?:,\s*(?:0|1|0?\.\d{1,4}|1\.0{1,4})\s*)?\)$/;
+/** The most of its foot a page is told the composer covers (core agent/pages.py's helper takes no more). */
+const FOOT_LIMIT = 2000;
 const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
 /** How long a page asked for by its id waits for its card to be in the thread and ready. */
 const CARD_WAIT_MS = 10000;
@@ -106,8 +105,11 @@ interface Live {
    *  box in it that holds the frame. */
   area: HTMLElement | null;
   box: HTMLElement | null;
-  /** The colour it says its own background is (the helper's `background`), painted behind the composer's row while it is open. */
-  background: string | null;
+  /** How much of its foot the composer and the answer line over it cover while it is open (R-PAGE-11): the page is told it, so its
+   *  last line scrolls clear of them while its frame runs to the window's foot. 0 when it was told nothing or it is back in its card. */
+  foot: number;
+  /** Watches the measure of that room (`.pgv-foot`) while the page is open. */
+  footWatch: ResizeObserver | null;
   opened: PageOpened | null;
   /** It has drawn: its frame loaded, or the page said something (its helper speaks once it is parsed). Only then is its
    *  preview shown and pressable; a redraw of its line while it is still on its way keeps it loading. */
@@ -121,10 +123,9 @@ interface Live {
   /** Where the owner was reading it there (how far the page has scrolled in its frame, from its own scroll messages), kept for the
    *  next time it opens. */
   reading: number;
-  /** A changed page loading beside the one on screen, which it replaces once it is ready, and the height and the background it says. */
+  /** A changed page loading beside the one on screen, which it replaces once it is ready, and the height it says. */
   next: HTMLIFrameElement | null;
   nextHeight: number | null;
-  nextBackground: string | null;
   /** A declined external link asks no more without a sure press. */
   refused: boolean;
 }
@@ -203,10 +204,15 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
   }
   const heard = (live: Live, height: unknown): void => { live.height = clampHeight(height); };
 
-  /** Behind the composer's row the area shows the page's own background, so the page still reads as running to the window's foot. */
-  function paintBackground(live: Live): void {
-    if (live.background) live.area?.style.setProperty("--pgv-bg", live.background);
-    else live.area?.style.removeProperty("--pgv-bg");
+  /** The page is told how much of its foot the composer covers (R-PAGE-11), so it scrolls its last line clear of it. */
+  const tellFoot = (live: Live, frame: HTMLIFrameElement = live.frame): void => { post(live, { raphaelPage: 1, type: "foot", y: live.foot }, frame); };
+  /** Reads the room under the page (`.pgv-foot`, which page-view.css sizes to `--pgv-under`) and tells the page when it changed. */
+  function measureFoot(live: Live): void {
+    if (!live.expanded || !live.area) return;
+    const foot = Math.min(FOOT_LIMIT, Math.max(0, Math.round(live.area.querySelector<HTMLElement>(":scope > .pgv-foot")?.offsetHeight ?? 0)));
+    if (foot === live.foot) return;
+    live.foot = foot;
+    tellFoot(live);
   }
   /** Puts the page where the owner was reading it (R-PAGE-10): the helper scrolls to it in its own window. */
   const placeAt = (live: Live, y: number, frame: HTMLIFrameElement = live.frame): void => { post(live, { raphaelPage: 1, type: "scroll-to", y }, frame); };
@@ -249,12 +255,16 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     frame.setAttribute("referrerpolicy", "no-referrer");
     frame.className = "pg-frame";
     frame.setAttribute("inert", "");
-    frame.addEventListener("load", () => drawn(live));
+    frame.addEventListener("load", () => {
+      drawn(live);
+      // A page that loads again in the whole area (a theme, a new revision, a Mac's move) is told its foot again.
+      if (live.expanded && live.foot > 0 && (frame === live.frame || frame === live.next)) tellFoot(live, frame);
+    });
     return frame;
   }
 
   function make(id: string, rev: number): Live {
-    const live = { id, rev, height: null, area: null, box: null, background: null, opened: null, ready: false, failed: null, drawTimer: undefined, expanded: false, reading: 0, next: null, nextHeight: null, nextBackground: null, refused: false } as unknown as Live;
+    const live = { id, rev, height: null, area: null, box: null, foot: 0, footWatch: null, opened: null, ready: false, failed: null, drawTimer: undefined, expanded: false, reading: 0, next: null, nextHeight: null, refused: false } as unknown as Live;
     live.frame = newFrame(live);
     frames.set(id, live);
     return live;
@@ -275,7 +285,6 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     live.next?.remove();
     live.opened = opened;
     live.nextHeight = null;
-    live.nextBackground = null;
     const next = newFrame(live);
     live.next = next;
     next.removeAttribute("inert");
@@ -288,10 +297,8 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       live.next = null;
       const old = live.frame;
       live.frame = next;
-      // The changed page says how tall it is (for its card) and what its background is.
+      // The changed page says how tall it is (for its card).
       if (live.nextHeight !== null) { live.height = live.nextHeight; live.nextHeight = null; applyHeight(live); }
-      live.background = live.nextBackground;
-      paintBackground(live);
       next.style.visibility = "";
       old.remove();
     };
@@ -436,17 +443,13 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     }
   }
 
-  /** What a page says its background is, if it is a plain colour; anything else is none, and the area keeps its own. */
-  const backgroundOf = (color: unknown): string | null => (typeof color === "string" && PAGE_COLOR.test(color) ? color : null);
-
   window.addEventListener("message", event => {
     const live = event.source ? [...frames.values()].find(item => item.frame.contentWindow === event.source || item.next?.contentWindow === event.source) : undefined;
-    const data = event.data as { raphaelPage?: number; jsonrpc?: string; type?: string; text?: unknown; url?: unknown; height?: unknown; y?: unknown; color?: unknown; state?: unknown } | null;
+    const data = event.data as { raphaelPage?: number; jsonrpc?: string; type?: string; text?: unknown; url?: unknown; height?: unknown; y?: unknown; state?: unknown } | null;
     if (!live || !data || typeof data !== "object") return;
     const loading = live.next !== null && live.next.contentWindow === event.source;
     // A changed page still loading says how tall it is before it takes its place.
     if (loading && data.raphaelPage === 1 && data.type === "height") live.nextHeight = clampHeight(data.height);
-    if (loading && data.raphaelPage === 1 && data.type === "background") live.nextBackground = backgroundOf(data.color);
     // A page that speaks has been read and laid out, though its load may wait on a font or a picture from elsewhere that
     // never comes: its preview stands now, not when that load ends.
     if (!loading && (data.raphaelPage === 1 || data.jsonrpc === "2.0")) drawn(live);
@@ -458,8 +461,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     if (loading) return;
     // The page scrolls in its own window (R-PAGE-10): where the owner reads is what it says its scroll is, while it is open.
     if (data.type === "scroll") { if (live.expanded && Number.isFinite(data.y)) live.reading = Math.max(0, Math.round(Number(data.y))); return; }
-    if (data.type === "background") { live.background = backgroundOf(data.color); paintBackground(live); }
-    else if (data.type === "height") { heard(live, data.height); applyHeight(live); }
+    if (data.type === "height") { heard(live, data.height); applyHeight(live); }
     else if (data.type === "send" && placeText(live, data.text)) post(live, { raphaelPage: 1, type: "result", status: "placed" });
     else if (data.type === "open") openLink(live, data.url);
     // What the owner did on the page goes to the core, which serves it back when the page opens again (R-PAGE-14). The page
@@ -489,17 +491,17 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
 
   /** The page opens in the whole area right of the sidebar, the same frame moved there, so nothing the
    *  owner did in it is lost. The frame is the page's window, as a browser gives one: it fills the area from under the header's
-   *  band down to just above the composer's row and the page scrolls in it (R-PAGE-10), so `100vh`, sticky and fixed parts work.
+   *  band down to the window's foot and the page scrolls in it (R-PAGE-10), so `100vh`, sticky and fixed parts work; the composer
+   *  floats over its foot and the page is told how much (R-PAGE-11).
    *  It is the card's frame again, back at its top, when the owner goes back (`leave`). */
   function expand(live: Live, card: HTMLElement): void {
     const host = view();
     const title = card.querySelector(".card-title")?.textContent ?? live.opened?.title ?? "";
-    host.body.innerHTML = `<div class="pgv-page" tabindex="-1"><div class="pgv-frame-box"></div></div>`;
+    host.body.innerHTML = `<div class="pgv-page" tabindex="-1"><div class="pgv-frame-box"></div><div class="pgv-foot" aria-hidden="true"></div></div>`;
     const area = host.body.querySelector<HTMLElement>(".pgv-page")!, box = area.querySelector<HTMLElement>(".pgv-frame-box")!;
     live.expanded = true;
     live.area = area;
     live.box = box;
-    paintBackground(live);
     host.open({
       id: live.id, title, kind: "page", opener: card.querySelector<HTMLElement>(".pg-body"),
       reopen: () => { void show(live.id, title, () => {}); },
@@ -509,10 +511,13 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
         live.expanded = false;
         live.area = null;
         live.box = null;
+        live.footWatch?.disconnect();
+        live.footWatch = null;
+        // The page is told its foot is its own again, before its frame goes back to the card.
+        if (live.foot > 0) { live.foot = 0; tellFoot(live); }
         live.next?.remove();
         live.next = null;
         live.nextHeight = null;
-        live.nextBackground = null;
         // The card shows the top of the page again; where the owner was reading is kept for the next time.
         const home = cardOf(live)?.querySelector<HTMLElement>(".pg-body");
         if (home) moveFrame(live.frame, home);
@@ -522,6 +527,12 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       },
     });
     moveFrame(live.frame, box);
+    // The room the composer takes at the foot is measured now and as it changes (the composer grows, the answer line comes).
+    if (typeof ResizeObserver === "function") {
+      live.footWatch = new ResizeObserver(() => measureFoot(live));
+      live.footWatch.observe(area.querySelector<HTMLElement>(":scope > .pgv-foot")!);
+    }
+    measureFoot(live);
     // Back where the owner was reading (a frame that had to load again says it once it has).
     if (live.reading > 0) {
       const frame = live.frame, at = live.reading;
