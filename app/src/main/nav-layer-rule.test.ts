@@ -19,6 +19,8 @@ const keyOwners: Record<string, RegExp> = {
   // The address field's Escape puts the page's own address back, as a browser's does: a field edit, not a layer.
   "host-browser-toolbar.ts:mountHostBrowserToolbar": /address\.value = shownUrl\(\)/,
   "ui.ts:listenForMenuEvents": /registerDismissal\(el, dismiss/,
+  // The formatting bar over a selection is no layer of the page's: Escape in it goes back to the words, and in the words closes the bar before it is the page's.
+  "composer-rich-toolbar.ts:composerToolbar": /backToWords\(\)/,
 };
 
 function uncovered(file: string, source: string): string[] {

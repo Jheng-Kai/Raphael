@@ -6328,7 +6328,7 @@ export function checkRendered(name, context = {}) {
     if (name === "composer-rich-marks") {
       const text = "這是**粗體**、*斜體*、`程式碼`、~~刪除線~~，公式 $x^2$ 和連結 https://example.com/docs";
       require(field.value === text, `the Markdown is what was typed: ${JSON.stringify(field.value)}`);
-      const strong = field.querySelector('strong'), em = field.querySelector('em'), code = field.querySelector('code'), del = field.querySelector('del'), link = field.querySelector('.cmp-link');
+      const strong = field.querySelector('strong'), em = field.querySelector('em'), code = field.querySelector('code'), del = field.querySelector('s, del'), link = field.querySelector('.cmp-link');
       require(strong?.textContent === "粗體" && Number(style(strong).fontWeight) > Number(style(field).fontWeight) && em?.textContent === "斜體" && style(em).fontStyle === 'italic', "bold and italic");
       require(code?.textContent === "程式碼" && /mono|consolas|cascadia/i.test(style(code).fontFamily) && style(code).backgroundColor === ink('--surface-2'), "code on the recessed fill");
       require(del?.textContent === "刪除線" && style(del).textDecorationLine.includes('line-through'), "strike is struck");
@@ -6413,6 +6413,120 @@ export function checkRendered(name, context = {}) {
         require(quote.querySelector('.message-text > blockquote:first-child') && code.querySelector('.message-text > .owner-code:only-child'), "a bubble that starts with a quote, and one of only code");
       }
       return { check: name, measures };
+    }
+    // The formats' keys, and the bar over a selection (composer-rich-toolbar.ts).
+    if (name === "composer-rich-keys" || name === "composer-rich-sent-marks") {
+      const words = "重點 **粗體** *斜體* <u>底線</u> ~~刪除線~~ `程式碼` ==螢光== 結束";
+      let root = field, sentBubble = null;
+      if (name === "composer-rich-sent-marks") {
+        const sent = window.__look.calls.filter(call => call.command === "agent_ask_text").at(-1);
+        require(sent?.text === words, `Markdown goes out: ${JSON.stringify(sent?.text)}`);
+        sentBubble = [...document.querySelectorAll('.tn.is-pending .owner-message .bubble')].find(visible);
+        root = sentBubble.querySelector('.message-text');
+        require(!field.value, "sending empties the field");
+      } else require(field.value === words, `every format is its Markdown: ${JSON.stringify(field.value)}`);
+      const tag = selector => root.querySelector(selector);
+      const strong = tag('strong'), em = tag('em'), under = tag('u'), strike = tag('s, del'), code = tag('code'), mark = tag('mark');
+      require(strong?.textContent === "粗體" && Number(style(strong).fontWeight) > Number(style(root).fontWeight), "bold is heavier");
+      require(em?.textContent === "斜體" && style(em).fontStyle === 'italic', "italic is slanted");
+      require(under?.textContent === "底線" && style(under).textDecorationLine.includes('underline'), "underline is underlined");
+      require(strike?.textContent === "刪除線" && style(strike).textDecorationLine.includes('line-through'), "strike is struck");
+      require(code?.textContent === "程式碼" && /mono|consolas|cascadia/i.test(style(code).fontFamily), "code is monospace");
+      require(mark?.textContent === "螢光" && style(mark).backgroundColor !== 'rgba(0, 0, 0, 0)' && style(mark).backgroundColor !== style(root).backgroundColor, `highlight has its own fill: ${style(mark).backgroundColor}`);
+      if (sentBubble) {
+        require(style(mark).color === style(root).color, "the highlighted words wear the bubble's own colour");
+        require(style(mark).backgroundColor !== style(sentBubble).backgroundColor, "and the fill is told from the bubble's");
+      } else {
+        require(localStorage.getItem('raphael.sidebar.collapsed') !== 'true', "Ctrl+B was the bold, and did not fold the sidebar");
+        require(style(mark).backgroundColor === ink('--selection') && style(mark).color === ink('--on-selection'), "the highlight is the selection's fill");
+        kept();
+      }
+      return { check: name, value: field.value };
+    }
+    if (name.startsWith("composer-rich-bar") || name.startsWith("composer-rich-link")) {
+      const toolbar = [...document.querySelectorAll('.cmp-fmt')].find(visible), pick = id => toolbar?.querySelector(`[data-bar="${id}"]`);
+      require(toolbar && toolbar.getAttribute('role') === 'toolbar' && toolbar.getAttribute('aria-label'), "the formatting bar is on screen and is a named toolbar");
+      const box = toolbar.getBoundingClientRect(), range = getSelection().rangeCount ? getSelection().getRangeAt(0).getBoundingClientRect() : null;
+      require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, `the bar is whole on the screen: ${JSON.stringify(box)}`);
+      if (range && range.width > 0) require(box.bottom <= range.top + 1 || box.top >= range.bottom - 1, `the bar never covers the selection: bar ${Math.round(box.top)}-${Math.round(box.bottom)}, words ${Math.round(range.top)}-${Math.round(range.bottom)}`);
+      require(style(toolbar).backgroundColor === ink('--float') && style(toolbar).borderTopColor === ink('--float-edge') && style(toolbar).position === 'fixed', "it is the menu's surface");
+      const row = [...toolbar.querySelectorAll('[data-row]')].find(visible);
+      require(row, "one of its rows is shown");
+      const controls = [...row.querySelectorAll('button')].filter(visible);
+      if (row.dataset.row === 'format') {
+        const icons = controls.filter(button => button.classList.contains('icon'));
+        require(icons.length >= 8 && icons.every(button => Math.abs(button.getBoundingClientRect().width - 26) < 1 && Math.abs(button.getBoundingClientRect().height - 26) < 1), `the icon buttons are 26 px: ${icons.map(button => Math.round(button.getBoundingClientRect().width)).join(',')}`);
+        require(controls.every(button => !button.querySelector('svg') || [...button.querySelectorAll('svg.i')].every(svg => Math.abs(svg.getBoundingClientRect().width - 16) < 0.5)), "its icons are 16 px");
+        require(icons.every(button => button.getAttribute('aria-label') && button.getAttribute('title') === button.getAttribute('aria-label')), "every icon button is named, and its tooltip is its name");
+        require(pick('bold').getAttribute('title').endsWith(/Mac/.test(navigator.userAgent) ? "⌘B" : "Ctrl+B"), `a tooltip says the keys: ${pick('bold').getAttribute('title')}`);
+        require(toolbar.querySelector('.cmp-fmt-kind').textContent.length > 0, "the block's kind is named");
+      }
+      if (name === "composer-rich-bar") {
+        require(document.activeElement === field && getSelection().toString() === "把這一句話的重點選起來", "the selection and the caret stay in the words");
+        require(pick('bold').getAttribute('aria-pressed') === 'false' && !pick('bold').disabled && !pick('link').disabled, "no format is on, and every control works");
+        return { check: name, bar: [Math.round(box.left), Math.round(box.top), Math.round(box.width), Math.round(box.height)] };
+      }
+      if (name === "composer-rich-bar-pressed") {
+        require(field.value === "**==把這一句話的重點選起來==**", `bold and highlight: ${JSON.stringify(field.value)}`);
+        require(pick('bold').getAttribute('aria-pressed') === 'true' && pick('highlight').getAttribute('aria-pressed') === 'true' && pick('italic').getAttribute('aria-pressed') === 'false', "the bar says which are on");
+        require(style(pick('bold')).color === ink('--text') && style(pick('bold')).boxShadow !== 'none' && style(pick('italic')).boxShadow === 'none' && style(pick('bold')).backgroundColor === 'rgba(0, 0, 0, 0)', "a format that is on is told by its full ink and the line under it, never a surface");
+        require(document.activeElement === field && getSelection().toString() === "把這一句話的重點選起來", "pressing kept the focus and the selection");
+        return { check: name, value: field.value };
+      }
+      if (name === "composer-rich-bar-block") {
+        const menu = [...document.querySelectorAll('#app-popover')].find(visible), rows = [...menu.querySelectorAll('.menu-choice')];
+        require(menu?.getAttribute('role') === 'menu' && rows.length === 13, `the block menu has its thirteen choices: ${rows.length}`);
+        require(rows.every(rowNode => rowNode.querySelector('.mlead svg') && visible(rowNode)), "each choice has its icon");
+        require(menu.querySelectorAll('.menu-head').length === 2, "the choices of turning into and of inserting have their headings");
+        const trails = rows.map(rowNode => rowNode.querySelector('.mtrail')?.textContent ?? "");
+        require(trails.includes("Ctrl+Alt+1") && trails.includes("Ctrl+Shift+8") && trails.includes("Ctrl+Alt+C"), `the keys are named: ${trails.join(' | ')}`);
+        const menuBox = menu.getBoundingClientRect();
+        require(menuBox.left >= 0 && menuBox.right <= innerWidth && menuBox.top >= 0 && menuBox.bottom <= innerHeight, "the menu is whole on the screen");
+        require(rows.some(rowNode => rowNode.getAttribute('aria-checked') === 'true' && rowNode.dataset.value === 'paragraph'), "the line's kind is the one checked");
+        return { check: name, rows: rows.length };
+      }
+      if (name === "composer-rich-bar-heading") {
+        require(field.value === "## 把這一句話的重點選起來" && field.querySelector('h2'), `a second heading: ${JSON.stringify(field.value)}`);
+        require(size(field.querySelector('h2')) > size(field), "the heading is larger than the words");
+        require(toolbar.querySelector('.cmp-fmt-kind').textContent === "標題 2", `the bar names it: ${toolbar.querySelector('.cmp-fmt-kind').textContent}`);
+        require(!document.querySelector('#app-popover'), "the menu is gone");
+        return { check: name };
+      }
+      if (name === "composer-rich-link-edit") {
+        const form = toolbar.querySelector('.cmp-fmt-link'), address = form.querySelector('input');
+        require(visible(form) && !visible(toolbar.querySelector('[data-row="format"]')), "the link editor stands in the marks' place");
+        require(document.activeElement === address && address.placeholder === "https://" && address.getAttribute('aria-label'), "its address field has the focus and a name");
+        require(visible(form.querySelector('[data-bar="apply"]')) && visible(form.querySelector('[data-bar="close"]')) && !visible(form.querySelector('[data-bar="unlink"]')), "apply and close, and no unlink for words that are no link");
+        require(box.width < 480, `it stays compact: ${box.width}`);
+        return { check: name };
+      }
+      if (name === "composer-rich-link-set") {
+        require(field.value === "[把這一句話的重點選起來](https://example.com/docs)", `the words are the link: ${JSON.stringify(field.value)}`);
+        const link = field.querySelector('a.composer-link');
+        require(link && style(link).color === ink('--link') && link.getAttribute('href') === "https://example.com/docs", "the link is in the link colour");
+        require(visible(toolbar.querySelector('[data-row="format"]')) && !visible(toolbar.querySelector('.cmp-fmt-link')) && document.activeElement === field, "the bar is the marks again and the focus is in the words");
+        require(pick('link').getAttribute('aria-pressed') === 'true', "the bar says the words are a link");
+        return { check: name };
+      }
+      if (name === "composer-rich-bar-code") {
+        const language = toolbar.querySelector('input[data-bar="language"]');
+        require(visible(language) && language.value === "js", `the language is named: ${language?.value}`);
+        require(['bold', 'italic', 'underline', 'strike', 'code', 'highlight', 'link', 'math'].every(id => pick(id).disabled), "marks are off in code");
+        require(!pick('block').disabled && !toolbar.querySelector('.cmp-fmt-kind').textContent.startsWith("文字"), `the block menu is on and names code: ${toolbar.querySelector('.cmp-fmt-kind').textContent}`);
+        return { check: name };
+      }
+      if (name === "composer-rich-bar-table") {
+        const menu = [...document.querySelectorAll('#app-popover')].find(visible), rows = [...menu.querySelectorAll('.menu-choice')];
+        require(rows.length === 7 && visible(pick('table')) && pick('table').getAttribute('aria-expanded') === 'true', `the table menu has its seven: ${rows.length}`);
+        require(rows.every(rowNode => rowNode.dataset.value && visible(rowNode)), "each is on screen");
+        return { check: name };
+      }
+      if (name === "composer-rich-bar-keyboard") {
+        const bold = pick('bold');
+        require(document.activeElement === bold && bold.tabIndex === 0 && pick('block').tabIndex === -1, "the arrows moved the one tab stop along the bar");
+        require(document.documentElement.hasAttribute('data-keys') && style(bold).outlineStyle === 'solid' && style(bold).outlineWidth === '2px' && style(bold).outlineColor === ink('--focus'), `the focus ring is drawn: ${style(bold).outline}`);
+        return { check: name };
+      }
     }
     throw new Error(`${name}: unknown composer check`);
   }

@@ -33,7 +33,10 @@
 .cmp-input pre code { padding: 0; background: transparent; font: inherit; }
 .cmp-input pre[data-language]::before { content: attr(data-language); position: absolute; top: 2px; inset-inline-end: var(--sp-2); color: var(--text-3); font: var(--fs-2xs)/1.6 var(--mono); pointer-events: none; }
 .cmp-input a.composer-link, .cmp-input .cmp-link, .cmp-input .cmp-skill { color: var(--link); text-decoration: none; }
-.cmp-input del { text-decoration-thickness: 1px; }
+.cmp-input :is(s, del), .cmp-input u { text-decoration-thickness: 1px; }
+.cmp-input u { text-underline-offset: 0.15em; }
+/* A highlight: the same fill a reply's `==words==` has (message-rich.css). */
+.cmp-input mark { padding: 0 0.12em; border-radius: var(--r-sm); background: var(--selection); color: var(--on-selection); }
 
 /* A task: its box stands where a bullet would. */
 .cmp-input li.cmp-task { list-style: none; position: relative; padding-inline-start: 0; }
@@ -64,11 +67,34 @@
 
 /* A table: the first row is the header. */
 .cmp-input table { display: block; max-width: 100%; margin: var(--sp-1) 0; overflow-x: auto; border-collapse: collapse; }
-.cmp-input td { min-width: 3em; padding: 0.1em 0.7em; border: 1px solid var(--edge); vertical-align: top; }
-.cmp-input tr:first-child > td { background: var(--surface-2); font-weight: var(--weight-semibold); }
-.cmp-input td[align="center"] { text-align: center; }
-.cmp-input td[align="right"] { text-align: end; }
+.cmp-input :is(td, th) { min-width: 3em; padding: 0.1em 0.7em; border: 1px solid var(--edge); vertical-align: top; }
+.cmp-input th { text-align: start; }
+.cmp-input tr:first-child > :is(td, th) { background: var(--surface-2); font-weight: var(--weight-semibold); }
+.cmp-input :is(td, th)[align="center"] { text-align: center; }
+.cmp-input :is(td, th)[align="right"] { text-align: end; }
 
 /* A mention: its mark stands where the @ is (the @ keeps its width, unseen), then the name. */
 .cmp-input .mention-slot { position: relative; display: inline-block; width: 0; height: 1lh; vertical-align: top; }
 .cmp-input .mention-at { -webkit-text-fill-color: transparent; }
+
+/* The bar over a selection (composer-rich-toolbar.ts): the menu's surface, the app's icon buttons at 26 px, one row. It stands above
+   the words with the menu's gap and never over them. */
+.cmp-fmt { position: fixed; z-index: 130; top: 0; left: 0; display: flex; box-sizing: border-box; max-width: calc(100vw - 16px); padding: var(--sp-1); border-radius: var(--r-md); border: 1px solid var(--float-edge); background: var(--float); box-shadow: var(--pop); }
+.cmp-fmt[hidden], .cmp-fmt [hidden] { display: none; }
+.cmp-fmt-row { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.cmp-fmt-sep { flex: none; align-self: stretch; width: 1px; margin: 2px var(--sp-1); background: var(--line); }
+/* A format that is on: the full ink and a line under it (an icon action has no surface of its own, R-UI-16). */
+.cmp-fmt .btn.icon[aria-pressed="true"]:not(:disabled), .cmp-fmt .btn.icon[aria-pressed="true"]:hover:not(:disabled) { color: var(--text); box-shadow: inset 0 -2px 0 var(--text); border-radius: var(--r-sm) var(--r-sm) 0 0; }
+.cmp-fmt .btn.icon:disabled { opacity: 0.4; }
+.cmp-fmt-block { gap: var(--sp-1); padding-inline: var(--sp-2) var(--sp-1); border-color: transparent; background: transparent; color: var(--text); font-size: var(--fs-xs); }
+.cmp-fmt-block:hover:not(:disabled) { background: var(--float-hover); }
+.cmp-fmt-block .i { width: 16px; height: 16px; color: var(--text-3); }
+.cmp-fmt-block[aria-expanded="true"] { background: var(--float-pressed); }
+.cmp-fmt-kind { min-width: 3.5em; text-align: start; }
+.cmp-fmt-address, input.cmp-fmt-language { box-sizing: border-box; height: var(--h-ctl); padding: 0 var(--sp-2); border: 1px solid var(--float-edge); border-radius: var(--r-sm); background: transparent; color: var(--text); font: var(--fs-xs) var(--mono); outline: 0; }
+.cmp-fmt-address { width: min(22em, calc(100vw - 8em)); font-family: inherit; }
+input.cmp-fmt-language { width: 7em; }
+.cmp-fmt-address[aria-invalid="true"] { border-color: var(--err); }
+.cmp-fmt-address::placeholder, input.cmp-fmt-language::placeholder { color: var(--text-3); }
+/* The words the link editor is for stay drawn as selected while its field has the focus (composer-rich-toolbar.ts). */
+::highlight(cmp-held) { background-color: var(--selection); color: var(--on-selection); }

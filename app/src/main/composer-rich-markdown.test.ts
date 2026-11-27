@@ -1,8 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { looksLikeMarkdown, offsetOf, parseMarkdown, plainWords, positionOf, serializeMarkdown } from "./composer-rich-markdown";
-import { composerMarks as M, composerNodes as N, composerSchema as S } from "./composer-rich-schema";
+import { standaloneSchema } from "./composer-rich-extensions";
 
-const paragraphOf = (...inline: ReturnType<typeof S.text>[]): ReturnType<typeof N.doc.create> => N.doc.create(null, N.paragraph.create(null, inline));
+const S = standaloneSchema(), M = S.marks;
+const paragraphOf = (...inline: ReturnType<typeof S.text>[]): ReturnType<typeof S.node> => S.node("doc", null, S.node("paragraph", null, inline));
 
 const write = (text: string): string => serializeMarkdown(parseMarkdown(text)).text;
 const shape = (text: string): string => {
@@ -23,7 +24,7 @@ describe("plain words come back exactly as typed", () => {
 describe("blocks", () => {
   test("a heading, then a numbered list of five (the owner's pasted reply)", () => {
     const text = "# 拉斐爾分開了\n\n1. 第一\n2. 第二\n3. 第三\n4. 第四\n5. 第五";
-    expect(shape(text)).toBe("heading,ordered_list");
+    expect(shape(text)).toBe("heading,orderedList");
     const list = parseMarkdown(text).child(1);
     expect(list.childCount).toBe(5);
     expect(write(text)).toBe(text);
@@ -34,8 +35,8 @@ describe("blocks", () => {
     expect(write("a\n# H\nb")).toBe("a\n\n# H\n\nb");
   });
   test.each([
-    ["## Second", "heading"], ["### Third", "heading"], ["- one\n- two", "bullet_list"], ["3. three\n4. four", "ordered_list"],
-    ["- [ ] todo\n- [x] done", "bullet_list"], ["> quoted\n> more", "blockquote"], ["```js\nlet a = 1;\n```", "code_block"], ["$$\nx^2 + y^2\n$$", "math_block"], ["---", "horizontal_rule"],
+    ["## Second", "heading"], ["### Third", "heading"], ["- one\n- two", "bulletList"], ["3. three\n4. four", "orderedList"],
+    ["- [ ] todo\n- [x] done", "bulletList"], ["> quoted\n> more", "blockquote"], ["```js\nlet a = 1;\n```", "codeBlock"], ["$$\nx^2 + y^2\n$$", "mathBlock"], ["---", "horizontalRule"],
     ["<details open>\n<summary>Title</summary>\n\nbody\n\n</details>", "details"], ["| a | b |\n| --- | --- |\n| 1 | 2 |", "table"],
   ])("%j is a %s", (text, type) => {
     expect(shape(text)).toBe(type);
@@ -49,15 +50,15 @@ describe("blocks", () => {
     expect(doc.child(0).child(0).childCount).toBe(2);
   });
   test("an ordered list starts where it was written", () => {
-    expect(parseMarkdown("5. x\n6. y").child(0).attrs.order).toBe(5);
+    expect(parseMarkdown("5. x\n6. y").child(0).attrs.start).toBe(5);
     expect(write("5. x\n6. y")).toBe("5. x\n6. y");
   });
   test("a code block holds Markdown as words, and a longer fence holds a shorter one", () => {
     const text = "````\n```\n# not a heading\n```\n````";
-    expect(shape(text)).toBe("code_block");
+    expect(shape(text)).toBe("codeBlock");
     expect(write(text)).toBe(text);
   });
-  test("an unfinished fence takes the rest", () => { expect(shape("```py\nprint(1)")).toBe("code_block"); });
+  test("an unfinished fence takes the rest", () => { expect(shape("```py\nprint(1)")).toBe("codeBlock"); });
   test("a toggle with no body, and one that is closed", () => {
     expect(write("<details>\n<summary>Only a title</summary>\n</details>")).toBe("<details>\n<summary>Only a title</summary>\n</details>");
     expect(parseMarkdown("<details>\n<summary>t</summary>\n</details>").child(0).attrs.open).toBe(false);
@@ -78,7 +79,7 @@ describe("inline marks", () => {
     "https://example.com/plain_address_with_underscores",
   ])("%j", text => { expect(write(text)).toBe(text); });
   test("emphasis hugs its words: the spaces move outside", () => {
-    expect(serializeMarkdown(paragraphOf(S.text(" a ", [M.strong.create()]))).text).toBe(" **a** ");
+    expect(serializeMarkdown(paragraphOf(S.text(" a ", [M.bold!.create()]))).text).toBe(" **a** ");
   });
   test("a stray star or underscore stays plain and is written plain", () => {
     expect(write("2*3 and 4*5")).toBe("2*3 and 4*5");

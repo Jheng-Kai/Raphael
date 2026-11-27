@@ -177,6 +177,11 @@
 .owner-message .message-text .owner-details { margin: 0.4em 0; }
 .owner-message .message-text .owner-details > summary { font-weight: var(--weight-medium); cursor: pointer; }
 .owner-message .message-text .owner-details > .details-body { padding-inline-start: 1.2em; }
+
+/* A highlight (`==words==`, the composer's highlight): the selection's fill, so it reads in both themes and is not a search hit (that is `mark[data-find-match]`). */
+.message-mark { padding: 0 0.12em; border-radius: var(--r-sm); background: var(--selection); color: var(--on-selection); }
+/* On the owner's bubble (the member's colour, light or dark words) a darker patch keeps the words readable on either. */
+.owner-message .message-text .message-mark { background: color-mix(in srgb, black 22%, transparent); color: inherit; }
 /* The words' first and last blocks stand on the bubble's (or the reply's) own padding: a list, a quote, code or a table adds no space there. */
 .message-text > :first-child, .owner-message .message-text > :first-child { margin-top: 0; }
 .message-text > :last-child, .owner-message .message-text > :last-child { margin-bottom: 0; }

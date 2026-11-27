@@ -19,7 +19,11 @@ const MAP = {
   fileDown: "file-down", fileArchive: "file-archive", fileText: "file-text", gauge: "gauge", gridPlus: "grid-2x2-plus",
   alert: "circle-alert", success: "circle-check", volume: "volume-2", volumeOff: "volume-x",
   app: "blocks", slash: "square-slash",
-  hand: "hand", scroll: "scroll-text", zap: "zap", warning: "triangle-alert",
+  hand: "hand", scroll: "scroll-text", zap: "zap", warning: "triangle-alert", unplug: "unplug",
+  // The composer's formats (composer-rich-toolbar.ts).
+  bold: "bold", italic: "italic", underline: "underline", strike: "strikethrough", codeInline: "code-xml", highlight: "highlighter", unlink: "unlink",
+  heading1: "heading-1", heading2: "heading-2", heading3: "heading-3", bullets: "list", numbers: "list-ordered", tasks: "list-todo", quote: "quote",
+  codeBlock: "square-code", equation: "sigma", paragraph: "pilcrow", table: "table",
 };
 /** Drawings of the app's own, in Lucide's stroke and grid, kept here so a rebuild never drops them. */
 const OWN = {
