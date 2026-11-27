@@ -1072,7 +1072,7 @@ describe("Raphael operating an app", () => {
 
   test("the reasons of a refusal have words in each language", () => {
     const why = (reason: string): string => reasonText(computer("click", { outcome: "error", reason }));
-    expect(["password", "handoff", "refused_app", "interrupted", "denied"].map(why)).toEqual(["密碼欄位", "這一步需要你親自完成登入、付款或系統管理員提示；完成後再回到原對話繼續。", "不允許的 App", "主人中斷", "未允許"]);
+    expect(["password", "handoff", "refused_app", "interrupted", "denied"].map(why)).toEqual(["密碼欄位", "這一步需要你親自完成登入、付款或系統管理員提示；完成後再回到原對話繼續。", "不允許的 App", "由你中斷", "未允許"]);
     setLocale("en");
     expect(["password", "handoff", "refused_app", "interrupted", "denied"].map(why)).toEqual(["Password field", "Complete this sign-in, payment or administrator prompt yourself, then return to the conversation.", "App not allowed", "Interrupted by you", "Not allowed"]);
     setLocale("ja");
