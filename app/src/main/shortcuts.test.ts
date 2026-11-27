@@ -31,7 +31,7 @@ test.each(["input", "textarea", "select", "div[contenteditable]", "div[role=text
   expect(press(field, "ArrowUp", { ctrlKey: false, altKey: true })).toBeNull();
 });
 
-test("the composer's editor keeps Ctrl+B (bold) and Ctrl+K (link), and every other field and the page keep the sidebar and the palette (R-COMPOSER-RICH-06)", () => {
+test("the composer's editor keeps Ctrl+B (bold) and Ctrl+K (link), and every other field and the page keep the sidebar and the palette (R-COMPOSER-RICH-09)", () => {
   const editor = document.createElement("div");
   editor.className = "ProseMirror"; editor.setAttribute("contenteditable", "true");
   document.body.append(editor);

@@ -87,9 +87,10 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   // R-UI-56: what clears, deletes or removes waits in a ⋯ and the right click of its row. Keep the places it may stand explicit:
   // the menu itself; a dialog about that one thing, which confirms or edits it (the red confirmation dialog included, never a
   // question that replaces a row or a button in its own place), and a vault entry's own page, which does the same; what is
-  // being composed (a message's attachments and quote, Raphael's member drafts); and a favourite's star, which destroys nothing.
+  // being composed (a message's attachments and quote, Raphael's member drafts, and the formatting bar over the words, whose strike and
+  // remove-link act on the words being written); and a favourite's star, which destroys nothing.
   const destroyWords = /^(?:確定)?(?:全部)?(?:清除|刪除|移除)|^(?:clear|delete|remove)\b|消去|削除/i;
-  const destroyMayStand = '[role="menu"], .menu, .cs-dialog, .mb-dialog, .vault-page, .skl-page, .modal-scrim:not([data-standalone]) :is(.rules-row, [data-row="project-folder"]), .composer, .draft-panel, .mp-star';
+  const destroyMayStand = '[role="menu"], .menu, .cs-dialog, .mb-dialog, .vault-page, .skl-page, .modal-scrim:not([data-standalone]) :is(.rules-row, [data-row="project-folder"]), .composer, .cmp-fmt, .draft-panel, .mp-star';
   const destroysInTheOpen = button => {
     const name = (button.getAttribute('aria-label') || button.textContent).trim();
     // R-MP-02 names these two counted, confirmed Settings actions explicitly.

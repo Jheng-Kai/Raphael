@@ -14,6 +14,7 @@ import {
 import { literalSlice, normalizePastedHTML } from "./composer-rich-paste";
 import { composerExtensions, isBlankLine } from "./composer-rich-extensions";
 import { composerBehavior } from "./composer-rich-behavior";
+import { composerToolbar } from "./composer-rich-toolbar";
 import { RICH, richFieldOf, type RichChip, type RichField } from "./composer-rich-handle";
 import { messageUrl } from "./markdown-text";
 import "./composer-rich.css";
@@ -63,7 +64,6 @@ function linkOver(text: string, state: EditorState): Transaction | null {
 export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
   let chips: readonly RichChip[] = [], cache: { doc: PMNode; written: Written } | undefined;
   let disabled = false, readOnly = false, inputType = "", placeholder = host.getAttribute("data-placeholder") ?? "";
-  let openLink: () => boolean = () => false;
   let view!: EditorView;
 
   const written = (): Written => {
@@ -115,9 +115,10 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
     dispatchTransaction({ transaction, next }) { keepTail(transaction, this.editor.state.doc); next(transaction); },
   });
 
+  const toolbar = composerToolbar(host);
   const editor: Editor = new Editor({
     element: { mount: host },
-    extensions: [...composerExtensions(), composerBehavior({ link: () => openLink() }), chrome],
+    extensions: [...composerExtensions(), composerBehavior({ link: () => toolbar.openLink() }), chrome, toolbar.extension],
     // Enter is the page's (it sends), and no word the owner typed is rewritten by a paste rule.
     enableCoreExtensions: { keymap: false, tabindex: false },
     enablePasteRules: false, injectCSS: false,
@@ -193,8 +194,7 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
       chips = next;
       view.updateState(view.state);
     },
-    onLink(open) { openLink = open; },
-    destroy() { editor.destroy(); },
+    destroy() { toolbar.destroy(); editor.destroy(); },
   };
 
   const range = (): { start: number; end: number } => {

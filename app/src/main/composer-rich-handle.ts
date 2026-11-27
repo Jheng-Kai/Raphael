@@ -18,8 +18,6 @@ export interface RichField {
   caretRect(offset: number): DOMRect;
   /** The chips to draw over the words; drawn again at every change of the words. */
   setChips(chips: readonly RichChip[]): void;
-  /** Tells the field what Mod+K opens: the link editor of the words selected. */
-  onLink(open: () => boolean): void;
   destroy(): void;
 }
 

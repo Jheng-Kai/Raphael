@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// Every format of the composer, by its de-facto shortcut and by its typing rule, and its Markdown both ways (R-COMPOSER-RICH-06).
-import { beforeEach, describe, expect, test, vi } from "vitest";
+// Every format of the composer, by its de-facto shortcut and by its typing rule, and its Markdown both ways (R-COMPOSER-RICH-07).
+import { beforeEach, describe, expect, test } from "vitest";
 import { mountRichField, richFieldOf } from "./composer-rich-field";
 import { parseMarkdown, serializeMarkdown } from "./composer-rich-markdown";
 import { ownerMessageHTML, replyContentHTML } from "./message-content";
@@ -141,13 +141,10 @@ describe("every block has its shortcut", () => {
 });
 
 describe("Mod+K is the link", () => {
-  test("it asks for the link editor of the words selected, and nothing else handles the key", () => {
-    const open = vi.fn(() => true);
-    richFieldOf(host)!.onLink(open);
+  test("the editor keeps Ctrl+K for the link editor, so nothing else handles the key", () => {
     input.value = "a word b";
     select("word");
     const event = press("k", { ctrlKey: true });
-    expect(open).toHaveBeenCalledTimes(1);
     expect(event.defaultPrevented).toBe(true);
   });
   test("a link set on the selection reads and writes as Markdown, and unsets", () => {
