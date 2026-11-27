@@ -483,6 +483,9 @@ jobs:
               exit 1
             fi
           fi
+          # The release page carries what people install and what the updater fetches, nothing else: the checksums and
+          # BUILD-INFO were checked above, and the notices are inside the installed app (licenses/).
+          rm -f BUILD-INFO.txt SHA256SUMS*.txt THIRD_PARTY_NOTICES*.txt
           gh release create "v$version" ./* --target "$RELEASE_COMMIT" --title "Raphael $version" --generate-notes
 
   # Provenance only for what is published from main or a tag, and only where GitHub offers artifact

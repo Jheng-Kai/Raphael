@@ -51,6 +51,31 @@ describe("release assets", { timeout: 30_000 }, () => {
     expect(run).toContain('[ "$tag_commit" = "$RELEASE_COMMIT" ]');
   });
 
+  it("publishes only the installers and the updater's files, after checking the rest", () => {
+    const { root } = inputs();
+    const assets = join(root, "release-assets");
+    mkdirSync(assets);
+    const kept = ["Raphael-0.1.0-macos-arm64.app.tar.gz", "Raphael-0.1.0-macos-arm64.app.tar.gz.sig", "Raphael-0.1.0-macos-arm64.dmg",
+      "Raphael-0.1.0-windows-x64-setup.exe", "Raphael-0.1.0-windows-x64-setup.exe.sig", "latest.json"];
+    for (const name of [...kept, "BUILD-INFO.txt", "SHA256SUMS.txt", "SHA256SUMS-macos.txt", "SHA256SUMS-updater.txt",
+      "THIRD_PARTY_NOTICES.txt", "THIRD_PARTY_NOTICES-macos.txt"]) writeFileSync(join(assets, name), name);
+    const run = workflowRun("Publish verified release assets");
+    expect(run.indexOf("rm -f BUILD-INFO.txt")).toBeGreaterThan(run.lastIndexOf("sha256sum --check"));
+    const commands = `
+function sha256sum { return 0; }
+function gh { if [ "$1" = "release" ]; then printf 'PUBLISH:%s\n' "$*"; fi; return 0; }
+${run}
+`;
+    const bash = process.platform === "win32" ? join(process.env.ProgramFiles, "Git", "bin", "bash.exe") : "bash";
+    const result = spawnSync(bash, ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", commands], {
+      cwd: root, encoding: "utf8", windowsHide: true,
+      env: { ...process.env, TEST_TAG: "missing", GH_REPO: "owner/repo", RELEASE_VERSION: "0.1.0", RELEASE_COMMIT: "a".repeat(40), UPDATER_MODE: "signed" },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    const published = result.stdout.split("PUBLISH:")[1].split(" ").filter(word => word.startsWith("./")).map(word => word.slice(2)).sort();
+    expect(published).toEqual([...kept].sort());
+  });
+
   it.each(["missing", "matching", "mismatch", "api-error"])("executes publication offline with a %s tag", kind => {
     const { root } = inputs();
     const commands = `
