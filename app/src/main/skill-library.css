@@ -2,14 +2,30 @@
 /* 匯入 sits in the page's header before the close, as wide as its word (the small button's tokens); it opens the importer's dialog. */
 .modal-body .set-head > .skl-head-import { flex: none; margin-left: auto; }
 .modal-body .set-head > .skl-head-import + .btn.close-button { margin-left: 0; }
-/* The importer's dialog: one box that takes anything, files, a folder or a link dropped on it, text pasted in it, and the way
-   to choose files at its foot; 匯入 is the dialog's own action. What it is doing and why it failed are said under the field. */
+/* The importer's dialog (R-SKILL-26) has three states in one place. Idle: a dashed drop zone with the one button 選擇檔案, and
+   one line for an address. Working: a bar and the step, with 取消 as the only way out (the × is gone and Esc does nothing). Not a
+   skill: one sentence and its two buttons. Nothing stands in a footer. */
 .skl-dlg .skl-import { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
-.skl-import-row { display: flex; align-items: center; gap: var(--sp-3); }
-/* A compact field of two or three lines that grows with what is pasted; no grip, the box is what a drop lights. */
-.skl-text { width: 100%; box-sizing: border-box; min-height: calc(2lh + var(--sp-3)); max-height: calc(12lh + var(--sp-3)); resize: none; field-sizing: content; font-size: var(--fs-sm); line-height: 1.5; }
-.skl-import.is-over .skl-text { background: var(--hover); border-color: var(--line-lit); }
+.skl-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-2); min-height: calc(5 * var(--sp-6)); padding: var(--sp-5) var(--sp-4); border: 1px dashed var(--line-lit); border-radius: var(--r-md); text-align: center; }
+.skl-zone.is-over { background: var(--hover); border-color: var(--line-focus); }
+.skl-zone-icon { display: inline-flex; color: var(--text-3); }
+.skl-zone-icon .i { width: 24px; height: 24px; }
+.skl-zone-words { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
+/* The address is one line with its small action at its end, which waits for something to send. */
+.skl-url { display: flex; align-items: center; gap: var(--sp-1); }
+.skl-url > .field { flex: 1 1 auto; min-width: 0; }
 .skl-error { margin: 0; color: var(--err); font-size: var(--fs-sm); }
+.skl-error .skl-link { margin-inline-start: var(--sp-1); }
+/* What an action of the importer that is no button but a word is: plain text in the link's colour. */
+.btn.skl-link { min-height: 0; padding: 0; border: 0; background: transparent; color: var(--link); font-size: inherit; line-height: inherit; vertical-align: baseline; }
+.btn.skl-link:hover:not(:disabled) { background: transparent; text-decoration: underline; }
+.skl-bar { height: 6px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
+.skl-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 200ms ease; }
+.skl-step { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
+.skl-notice { margin: 0; color: var(--text); font-size: var(--fs-sm); line-height: 1.6; }
+.skl-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); margin: 0; padding: 0; }
+/* While it works the dialog has no way out but 取消: the × is not drawn. */
+.skl-dlg.is-working .mb-dlg-head .close-button { display: none; }
 .skl-skipped { margin: 0 0 var(--sp-4); color: var(--text-2); font-size: var(--fs-sm); }
 .skl-skipped p { margin: 0; }
 .skl-skipped ul { margin: var(--sp-1) 0 0; padding-inline-start: 1.25em; }
@@ -71,10 +87,6 @@
   .skl-access { max-width: 140px; }
 }
 
-/* An import under way says so under the card, quietly (a status, no spinner). */
-/* What an import is doing stands beside 選擇檔案, in the row that is always there, so that nothing is added or taken away. */
-.skl-import-row .skl-progress { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.skl-progress { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
 /* The title becomes a field in the same place and type while a skill of a pack is renamed. */
 .modal-body .back-title > .skl-rename { display: block; flex: 1 1 auto; min-width: 0; }
 .skl-rename .field { width: 100%; }

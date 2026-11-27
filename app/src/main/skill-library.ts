@@ -6,19 +6,18 @@
 // list where it was left. Every skill opens on a page of its own that shows its document. A right click on a package's row
 // or page offers 更新 and 刪除 (its ⋯ is not drawn: context-menu.ts presses it at the pointer).
 // The tab starts with its plugins and then its skills; the importer is 匯入 in the page's header, which opens one dialog
-// (member-dialogs.ts): one field that takes anything, whatever is dropped on it (files, a folder, a link) or pasted in it, or
-// chosen with 選擇檔案, and 匯入 (R-SKILL-26). The
+// (member-dialogs.ts) in three states (R-SKILL-26): a drop zone with the one button 選擇檔案 and a field for an address; the
+// import under way, a progress bar and the step it is at, with 取消 as the only way out (it really stops the import); and, when
+// what was given is no skill, a sentence that says what it is with 換一個 and 請拉斐爾做. The
 // core does the work: skills.library.* (members/service.py): what follows the rules (a skill, a pack, a plugin, from a file, an
 // archive, a folder, a GitHub address or a Git address) imports at once with no model and no agent, and the new package is the
-// answer. What is not one (text, a page, a document, a repository or an archive of other material) is no work of the dialog: it
-// closes, and Raphael's own conversation opens with the owner's words handing it over (R-SKILL-28). An import under way says
-// in place what it is doing (fetching from a host, reading a file); a failure says its own cause with the file, size, limit,
+// answer. What is not one (text, a page, a document, a repository or an archive of other material) is handed to Raphael's own
+// conversation only when the owner asks for it there (R-SKILL-28). A failure says its own cause with the file, size, limit,
 // host or packages it names (the core's `[[json]]` detail, R-SKILL-21); a skill of a package is renamed from its page
 // (R-SKILL-25) and skills of one name prefix arrive as one plugin (R-SKILL-20), with no question to the owner (#355).
 
-import { core, membersList, pickImportSource, pickOutputFolder } from "./api";
-import type { WireAttachment } from "./types";
-import { IS_MAC } from "../shared/platform";
+import { core, membersList, pickImportSource } from "./api";
+import type { MainEvent, WireAttachment } from "./types";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { isTopLayer } from "./dismissals";
@@ -41,14 +40,26 @@ export interface LibraryMember { id: number; name: string }
 export interface SkippedSkill { name: string; held_by: string }
 /** A member's face as the roster draws it: its slime or its picture. */
 type Face = Parameters<typeof faceHTML>[0];
+/** What an import is doing (the core's `skills.import_progress`): `fetch` the files, `read` the skills in them, `install`. */
+export interface ImportStep { kind: "fetch" | "read" | "install"; done: number; total: number }
 export interface SkillLibraryView {
   packages: LibraryPackage[]; members: LibraryMember[]; loaded: boolean; failed: boolean;
   /** The package whose page is open in the list's place, or null for the list. */
   page: string | null; busy: boolean; refreshing: Set<string>; error: string;
   /** What is typed or pasted in the importer's box, kept while the card is drawn again. */
   draft: string;
-  /** What the import under way is doing, in plain words (fetching from a host, reading a file); empty when it is not. */
-  progress: string;
+  /** The id the core knows the import under: its steps and its cancel carry it. Empty when none is under way. */
+  importId: string;
+  /** What is being imported in a word or two (a repository, a file, a folder): the dialog's title while it works. */
+  source: string;
+  /** Where the import is: getting the files, reading skill `done` of `total`, installing. */
+  step: ImportStep;
+  /** The cancel was asked and the core has not answered yet. */
+  stopping: boolean;
+  /** What the core said is no skill, with what the window holds of it, until the owner chooses 換一個 or 請拉斐爾做. */
+  notSkill: { found: HandOff; held: Held } | null;
+  /** The request to send again as the text it is, when the core said that pasted text needs the files it names. */
+  alone: Record<string, unknown> | null;
   /** The skill whose page is open (in its package's place), its document once read, or whether reading it failed. */
   skill: number | null; doc: { id: number; text: string } | null; docFailed: boolean;
   /** What the last import left out for the package it made (#313): said under the importer or on that package's page. */
@@ -58,7 +69,7 @@ export interface SkillLibraryView {
 }
 export const emptySkillLibraryView = (): SkillLibraryView => ({
   packages: [], members: [], loaded: false, failed: false, page: null, busy: false, refreshing: new Set(), error: "",
-  draft: "", progress: "",
+  draft: "", importId: "", source: "", step: { kind: "fetch", done: 0, total: 0 }, stopping: false, notSkill: null, alone: null,
   skill: null, doc: null, docFailed: false, skipped: null, renaming: null,
 });
 
@@ -209,25 +220,57 @@ function skillPageHTML(p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryVi
 /** 匯入, in the page's header beside its close: it opens the importer's dialog. Quiet, and as wide as its word. */
 export const importButtonHTML = (): string => btn(esc(t("skillLib.import")), "sm skl-head-import", ' data-skl="import-open"');
 
-/** The importer's dialog: one field for whatever is dropped or pasted in it, or chosen with 選擇檔案. What follows the rules
- *  imports here, with no agent; what does not leaves for Raphael's conversation (core: members/skill_intake.py). What it is
- *  doing stands in the row of 選擇檔案, where no line is added or taken away, and why it failed stands under the field. */
-function importBodyHTML(v: SkillLibraryView): string {
-  const busy = v.busy ? " disabled" : "";
-  return `<div class="skl-import" data-skl-drop>` +
-    `<textarea id="skl-input" class="mb-fin mb-ta skl-text" rows="2" spellcheck="false" placeholder="${esc(t("skillLib.importHint"))}" aria-label="${esc(t("skillLib.importHint"))}"${busy}>${esc(v.draft)}</textarea>` +
-    `<div class="skl-import-row">` +
-    btn(ico("file") + esc(t("skillLib.choose")), "sm", ` data-skl="pick"${IS_MAC ? "" : ' aria-haspopup="menu" aria-expanded="false"'}${busy}`) +
-    `<p class="d skl-progress" role="status">${esc(v.busy ? v.progress || t("skillLib.importing") : "")}</p>` +
-    `</div>` +
-    (v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : "") +
-    `<input type="file" id="skl-file" multiple hidden></div>`;
+/** The words of the step an import is at: 取得檔案, 讀取技能 3 / 7, 安裝. */
+export function stepWords(step: ImportStep): string {
+  if (step.kind === "install") return t("skillLib.stepInstall");
+  if (step.kind === "fetch") return t("skillLib.stepFetch");
+  return step.total ? t("skillLib.stepRead", { p0: String(step.done), p1: String(step.total) }) : t("skillLib.stepReadBare");
 }
 
-const importActions = (v: SkillLibraryView) => ({
-  primary: { label: esc(t("skillLib.import")), attrs: ` data-skl="import-go"${v.busy ? " disabled" : ""}` },
-  cls: "mb-dlg-act",
-});
+/** How far the bar is, in percent: the files are got, the skills are read one by one, the library is written last. */
+export const importPercent = (step: ImportStep): number =>
+  step.kind === "fetch" ? 10 : step.kind === "install" ? 95 : step.total ? Math.round(15 + 75 * Math.min(1, step.done / step.total)) : 50;
+
+/** The dialog's title: what the import is of while it works, else the importer's own. */
+export const importTitle = (v: SkillLibraryView): string =>
+  v.busy ? (v.source ? t("skillLib.importingTitle", { p0: v.source }) : t("skillLib.importingBare")) : t("skillLib.importTitle");
+
+/** Which words say what the core found: a sentence that names it, and what Raphael can do with it. */
+const NOT_SKILL = {
+  text: "skillLib.notSkillText", file: "skillLib.notSkillFile", path: "skillLib.notSkillFile", link: "skillLib.notSkillLink",
+  folder: "skillLib.notSkillFolder",
+} as const satisfies Record<string, MessageKey>;
+
+/** The importer's dialog (R-SKILL-26), in three states. Idle: a drop zone with the one button 選擇檔案 (a file or a folder on a Mac,
+ *  a file on Windows, where a SKILL.md stands for its folder) and one line for an address. Working: a progress bar and the
+ *  step, with 取消 as the only way out. Not a skill: what it is, and the two things to do. What follows the rules imports with
+ *  no agent; what does not goes to Raphael's conversation only when asked there (core: members/skill_intake.py). */
+function importBodyHTML(v: SkillLibraryView): string {
+  if (v.busy) {
+    const percent = importPercent(v.step);
+    return `<div class="skl-import is-busy">` +
+      `<div class="skl-bar" role="progressbar" aria-label="${esc(importTitle(v))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><span style="width:${percent}%"></span></div>` +
+      `<p class="d skl-step" role="status">${esc(stepWords(v.step))}</p>` +
+      actionRow({ primary: { label: esc(t("common.cancel")), attrs: ` data-skl="import-cancel"${v.stopping || v.step.kind === "install" ? " disabled" : ""}` }, cls: "skl-actions" }) +
+      `</div>`;
+  }
+  if (v.notSkill) {
+    return `<div class="skl-import">` +
+      `<p class="skl-notice" role="status">${esc(t(NOT_SKILL[v.notSkill.found.kind]))}</p>` +
+      actionRow({ secondary: btn(esc(t("skillLib.another")), "", ' data-skl="import-another"'),
+        primary: { label: esc(t("skillLib.askRaphael")), attrs: ' data-skl="import-ask"' }, cls: "skl-actions" }) +
+      `</div>`;
+  }
+  const address = t("skillLib.addressHint");
+  return `<div class="skl-import" data-skl-drop>` +
+    `<div class="skl-zone"><span class="skl-zone-icon" aria-hidden="true">${ico("upload")}</span>` +
+    `<p class="skl-zone-words">${esc(t("skillLib.dropWords"))}</p>` +
+    btn(esc(t("skillLib.choose")), "sm", ' data-skl="pick"') + `</div>` +
+    `<div class="skl-url">${fieldHTML(address, v.draft, { id: "skl-input", icon: "link", label: address })}` +
+    iconBtn("arrowRight", t("skillLib.import"), ` data-skl="import-go"${v.draft.trim() ? "" : " disabled"}`) + `</div>` +
+    (v.error ? `<p class="skl-error" role="alert">${esc(v.error)}${v.alone ? ` ${btn(esc(t("skillLib.alone")), "sm skl-link", ' data-skl="import-alone"')}` : ""}</p>` : "") +
+    `</div>`;
+}
 
 export function skillLibraryHTML(v: SkillLibraryView, { listHeader = "", pageClose = "", notice = "" }:
   { listHeader?: string; pageClose?: string; notice?: string } = {}): string {
@@ -254,7 +297,7 @@ const base64 = (bytes: ArrayBuffer): string => {
 /** What the core says of a cause besides its kind (members/service.py `_library_error`): the file, the size, the limit, the line. */
 interface Detail {
   reason?: string; file?: string; size?: number; limit?: number; line?: number; status?: number; repo?: string; name?: string;
-  host?: string; skill?: string; held_by?: string; incoming?: string; why?: string;
+  host?: string; skill?: string; held_by?: string; incoming?: string; why?: string; files?: string[];
 }
 
 const bytesText = (bytes = 0): string => {
@@ -298,6 +341,7 @@ function reasonText(kind: string, d: Detail): string | null {
     case "source.path": case "source.unreadable": case "io.disk": return t("skillLib.unreadable", { p0: file });
     case "source.redirect": case "source.insecure": case "source.invalid": case "source.empty": case "source.not_skill_file":
     case "source.file_type": return t("skillLib.unsupported");
+    case "source.needs_files": return t("skillLib.needsFiles", { p0: (d.files?.length ? d.files : [file]).slice(0, 3).join(", ") });
     default: return null;
   }
 }
@@ -350,19 +394,31 @@ export function gitHost(text: string): string {
   return host && !/^(?:www\.)?(?:github\.com|skills\.sh)$|^raw\.githubusercontent\.com$/.test(host) && !/\s/.test(one) ? host : "";
 }
 
-/** What an import is doing, said while it works: where it fetches from, or what it reads. */
-function progressFor(params: Record<string, unknown>): string {
-  const text = typeof params.text === "string" ? params.text : typeof params.source === "string" ? params.source : "";
-  const host = gitHost(text);
-  if (host) return t("skillLib.fetching", { p0: host });
+/** What an import is of, in a word or two, for the title of the dialog while it works: a file's or a folder's name, a
+ *  repository's, a pasted skill's own name; empty when there is none to say. */
+export function sourceName(params: Record<string, unknown>): string {
   const file = params.file as { name?: string } | undefined;
-  if (file?.name) return t("skillLib.reading", { p0: file.name });
-  if (Array.isArray(params.files)) return t("skillLib.readingFiles");
-  if (typeof params.source === "string" && params.source.startsWith("local:")) {
-    return t("skillLib.reading", { p0: params.source.slice(6).split(/[\\/]/).filter(Boolean).pop() ?? "" });
+  if (file?.name) return file.name;
+  if (Array.isArray(params.files)) {
+    const first = String((params.files[0] as { path?: string } | undefined)?.path ?? "").split("/")[0] ?? "";
+    return params.files.length > 1 && first && params.files.some(item => String((item as { path?: string }).path ?? "").includes("/")) ? first : "";
   }
-  return t("skillLib.importing");
+  const where = typeof params.source === "string" ? params.source : typeof params.text === "string" ? params.text.trim() : "";
+  if (!where) return "";
+  if (/^local:/.test(where)) {
+    const parts = where.slice(6).split(/[\\/]/).filter(Boolean);
+    return (/^SKILL\.md$/i.test(parts[parts.length - 1] ?? "") ? parts[parts.length - 2] : parts[parts.length - 1]) ?? "";
+  }
+  if (/\n/.test(where)) return /^name:[ \t]*["']?([^"'\n]+)/m.exec(where)?.[1]?.trim() ?? "";
+  // A repository by its own name: `owner/repo`, a GitHub or GitLab address, an SSH address, with `.git` and what follows the repository dropped.
+  const git = /^(?:[\w.-]+@[\w.-]+:[ \t]*|ssh:\/\/[^/]+\/|https?:\/\/[^/]+\/)?((?:[\w.~+%-]+\/)*[\w.~+%-]+)/.exec(where.replace(/^(?:https?:\/\/)?(?:www\.)?(?:github\.com|skills\.sh)\//, ""))?.[1] ?? "";
+  const repository = git.split("/").filter(Boolean);
+  const named = gitHost(where) ? repository[repository.length - 1] : repository[Math.min(1, repository.length - 1)];
+  return (named ?? "").replace(/\.git$/, "");
 }
+
+/** A fresh id for one import: the core's progress and its cancel are told by it. */
+const newImportId = (): string => (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`).slice(0, 40);
 
 /** What a drop holds: its files, and for a folder every file below it (without what a folder leaves behind), each with its
  *  path from the folder. A browser that cannot walk a folder gives its files as they come. */
@@ -395,15 +451,23 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
   const state = emptySkillLibraryView();
   /** The importer's dialog while it is open: it is drawn again with the tab, from the same state. */
   let dlg: Dialog | null = null;
-  const field = (): HTMLTextAreaElement | null => dlg?.el.querySelector<HTMLTextAreaElement>("#skl-input") ?? null;
+  const field = (): HTMLInputElement | null => dlg?.el.querySelector<HTMLInputElement>("#skl-input") ?? null;
+  /** The dialog is drawn again from the state: its title names what is imported while it works, and while it works neither the
+   *  × nor Esc leave it (`canClose`): the only way out is 取消, which stops the import. */
   const redraw = (): void => {
     redrawTab();
     const el = dlg?.el;
     if (!el) return;
+    const before = el.querySelector<HTMLElement>(".skl-import")?.className;
     const typing = document.activeElement === field();
     el.querySelector(".mb-dlg-body")!.innerHTML = importBodyHTML(state);
-    el.querySelector(".mb-dlg-act")!.outerHTML = actionRow(importActions(state));
-    if (typing && !field()?.disabled) field()?.focus({ preventScroll: true });
+    el.querySelector(".mb-dlg-head h2")!.textContent = importTitle(state);
+    el.classList.toggle("is-working", state.busy);
+    if (typing && field()) field()!.focus({ preventScroll: true });
+    // A change of state moves the focus into it: the field again, the cancel while it works, the first answer when it asks.
+    else if (before !== el.querySelector<HTMLElement>(".skl-import")?.className && !el.contains(document.activeElement)) {
+      el.querySelector<HTMLElement>(state.busy ? '[data-skl="import-cancel"]' : state.notSkill ? '[data-skl="import-ask"]' : "#skl-input")?.focus({ preventScroll: true });
+    }
   };
   let epoch = 0;
   /** How far the list was scrolled when a package's page took its place, and the package's page when a skill's did. */
@@ -455,7 +519,7 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
     // Skills whose names were taken are not in the library: the owner is told which, and who holds each name (#313).
     state.skipped = skipped?.length ? { key: made.key, items: skipped } : null;
     await load();
-    state.busy = false; state.progress = "";
+    state.busy = false; state.importId = "";
     if (hasPage(byKey(made.key))) open(made.key); else redraw();
   };
   /** The owner's words that hand what is no skill to Raphael: the source as readable words, a file as the message's own
@@ -481,26 +545,70 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
    *  owner's message. A hand-off that is still being answered is not sent twice: the dialog stays and says so. */
   const handOver = async (found: HandOff, held: Held): Promise<void> => {
     const said = handOffWords(found, held);
-    if (!said) { state.error = t("skillLib.failed"); state.busy = false; state.progress = ""; redraw(); return; }
+    if (!said) { state.error = t("skillLib.failed"); state.notSkill = null; redraw(); return; }
     if (found.kind === "file" && held.file) {
       said.attachments.push({ name: found.label, mime: held.file.type || "application/octet-stream", data: base64(await held.file.arrayBuffer()) });
     } else if (found.kind === "text" && (held.text ?? "").length > INLINE_TEXT) {
       said.attachments.push({ name: "pasted-text.md", mime: "text/markdown", data: base64(new TextEncoder().encode(held.text).buffer as ArrayBuffer) });
     }
     if (!handOff(said.words, said.attachments)) {
-      state.error = t("skillLib.handoffBusy"); state.busy = false; state.progress = ""; redraw();
+      state.error = t("skillLib.handoffBusy"); state.notSkill = null; redraw();
       return;
     }
-    state.draft = ""; state.busy = false; state.progress = "";
+    state.draft = ""; state.notSkill = null;
     dlg?.close();
   };
+  /** Back to the field, as it was left: after 換一個, a cancel or a failure. */
+  const idle = (): void => {
+    state.busy = false; state.importId = ""; state.stopping = false; state.notSkill = null;
+    state.step = { kind: "fetch", done: 0, total: 0 };
+  };
+  /** One import: the dialog turns into its progress, the core reports each step by this import's id, and the answer is the new
+   *  package (the dialog closes), what is no skill (the dialog says so and asks), or a failure (the dialog says why). */
   const bring = async (params: Record<string, unknown>, held: Held = {}): Promise<void> => {
-    state.busy = true; state.error = ""; state.skipped = null; state.progress = progressFor(params); redraw();
+    const id = newImportId();
+    state.busy = true; state.error = ""; state.skipped = null; state.alone = null; state.notSkill = null; state.stopping = false;
+    state.importId = id; state.source = sourceName(params); state.step = { kind: "fetch", done: 0, total: 0 };
+    redraw();
     try {
-      const answer = await core<{ package?: LibraryPackage; skipped?: SkippedSkill[]; handoff?: HandOff }>("skills.library.import", params);
-      if (answer.handoff) { await handOver(answer.handoff, held); return; }
+      const answer = await core<{ package?: LibraryPackage; skipped?: SkippedSkill[]; handoff?: HandOff }>("skills.library.import", { ...params, import_id: id });
+      if (state.importId !== id) return;
+      if (answer.handoff) { state.busy = false; state.importId = ""; state.notSkill = { found: answer.handoff, held }; redraw(); return; }
       await arrived(answer.package!, answer.skipped);
-    } catch (error) { state.error = failureText(error); state.busy = false; state.progress = ""; redraw(); }
+    } catch (error) {
+      // A cancelled import is answered by the cancel itself: nothing is said of it here.
+      if (state.importId !== id || /Invalid params: cancelled:/.test(error instanceof Error ? error.message : String(error ?? ""))) return;
+      state.error = failureText(error);
+      // Pasted text that needs the files it names can still be imported as the text it is, when the owner knows better.
+      state.alone = /"reason":"needs_files"/.test(error instanceof Error ? error.message : "") ? params : null;
+      idle(); redraw();
+    }
+  };
+  /** 取消: the core ends the clone or the download and keeps nothing; then the dialog is the field again. When the import is
+   *  already writing the library it cannot be stopped, and it lands as it would have. */
+  const cancelImport = async (): Promise<void> => {
+    const id = state.importId;
+    if (!id || state.stopping) return;
+    state.stopping = true; redraw();
+    const answer = await core<{ cancelled: boolean }>("skills.library.cancel_import", { import_id: id }).catch(() => ({ cancelled: false }));
+    if (state.importId !== id) return;
+    state.stopping = false;
+    if (answer.cancelled) idle();
+    redraw();
+  };
+  /** An event of the core's: the step of the import under way moves the bar and says where it is. */
+  const follow = (event: MainEvent): void => {
+    if (event.type !== "SkillImportProgress" || !state.busy || event.import_id !== state.importId) return;
+    state.step = { kind: event.step, done: event.done ?? 0, total: event.total ?? 0 };
+    const el = dlg?.el;
+    if (!el) return;
+    const percent = importPercent(state.step);
+    const bar = el.querySelector<HTMLElement>(".skl-bar");
+    bar?.setAttribute("aria-valuenow", String(percent));
+    bar?.querySelector<HTMLElement>("span")?.style.setProperty("width", `${percent}%`);
+    const words = el.querySelector(".skl-step");
+    if (words) words.textContent = stepWords(state.step);
+    el.querySelector<HTMLButtonElement>('[data-skl="import-cancel"]')?.toggleAttribute("disabled", state.step.kind === "install");
   };
   /** A package's page takes the list's place, from its top; the list's place is kept for the way back. */
   const open = (key: string): void => {
@@ -685,33 +793,20 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
   const bringPath = (pick: Promise<string | null>): void => {
     void pick.then(path => { if (path) void bring({ source: `local:${path}` }); }).catch(error => { state.error = failureText(error); redraw(); });
   };
-  /** 選擇檔案: on a Mac one panel takes a file or a folder (a ZIP is a file, and a folder's panel will not take it); on Windows
-   *  the system's dialog takes files or a folder, never both, so a small menu asks for each, a ZIP plainly under the files. */
-  const choose = (anchor: HTMLElement): void => {
-    if (IS_MAC) { bringPath(pickImportSource()); return; }
-    const menu = openPopover(anchor,
-      `<button type="button" role="menuitem" tabindex="-1" data-pick="files"><span class="mlead" aria-hidden="true">${ico("file")}</span><span class="mt">${esc(t("skillLib.chooseFiles"))}</span></button>` +
-      `<button type="button" role="menuitem" tabindex="-1" data-pick="folder"><span class="mlead" aria-hidden="true">${ico("folder")}</span><span class="mt">${esc(t("skillLib.folder"))}</span></button>`,
-      { className: "menu skl-pick-menu", role: "menu", label: t("skillLib.choose"), placement: "below" });
-    menu.addEventListener("click", event => {
-      const pick = (event.target as Element).closest<HTMLElement>("[data-pick]")?.dataset.pick;
-      if (!pick) return;
-      closeMenu();
-      if (pick === "files") dlg?.el.querySelector<HTMLInputElement>("#skl-file")?.click();
-      else bringPath(pickOutputFolder());
-    });
-  };
+  /** 選擇檔案 is one button for what can be chosen. A Mac's one open panel takes a file or a folder; elsewhere the system's dialog
+   *  takes a file, and the core imports the folder that holds a chosen SKILL.md (or any file of a skill's folder) and opens a
+   *  ZIP, so the path goes to it as it is. A folder is dragged in. */
+  const choose = (): void => bringPath(pickImportSource());
   /** What was dropped or chosen goes to the core whole: one file as the file it is, several files or a folder as a tree. */
   const bringPicked = async (picked: Picked[]): Promise<void> => {
     if (!picked.length) return;
     const total = picked.reduce((sum, item) => sum + item.file.size, 0);
     if (total > MAX_FILE) { state.error = tooLarge(picked.length > 1 ? `${picked[0]!.path} …` : picked[0]!.path, total); redraw(); return; }
     if (picked.length === 1 && !picked[0]!.path.includes("/")) { await bringFile(picked[0]!.file); return; }
-    state.busy = true; state.error = ""; redraw();
     try {
       const files = await Promise.all(picked.map(async item => ({ path: item.path, data: base64(await item.file.arrayBuffer()) })));
       await bring({ files });
-    } catch (error) { state.error = failureText(error); state.busy = false; redraw(); }
+    } catch (error) { state.error = failureText(error); idle(); redraw(); }
   };
   root.addEventListener("keydown", event => {
     const input = event.target as HTMLElement;
@@ -738,37 +833,48 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
       redraw();
     }
   });
-  /** What the dialog's controls do: 匯入 sends the field as it is, 選擇檔案 opens its small menu, a drop is imported whole. */
+  /** What the dialog's controls do: the address is sent as it is (Enter, or the small arrow), 選擇檔案 opens the system's
+   *  dialog, a drop is imported whole, 取消 stops the import, and what is no skill is given up (換一個) or handed to Raphael. */
   const importEvents = (el: HTMLElement): void => {
-    const zone = (): Element | null => el.querySelector(".skl-import");
+    const zone = (): Element | null => el.querySelector(".skl-zone");
     const lit = (on: boolean): void => { zone()?.classList.toggle("is-over", on); };
     el.addEventListener("click", event => {
       const target = (event.target as Element).closest<HTMLElement>("[data-skl]");
       if (!target || (target as HTMLButtonElement).disabled) return;
-      if (target.dataset.skl === "import-go") {
-        // The text of the box is sent as it is: the core says whether it is a link, a place on this computer or text.
-        const text = field()?.value ?? "";
-        state.draft = text;
-        if (text.trim()) void bring({ text }, { text });
-      } else if (target.dataset.skl === "pick") choose(target);
+      switch (target.dataset.skl) {
+        case "import-go": {
+          // The line is sent as it is: the core says whether it is a link, a place on this computer or text.
+          const text = field()?.value ?? "";
+          state.draft = text;
+          if (text.trim()) void bring({ text }, { text });
+          break;
+        }
+        case "pick": choose(); break;
+        case "import-cancel": void cancelImport(); break;
+        case "import-another": state.notSkill = null; redraw(); break;
+        case "import-ask": if (state.notSkill) void handOver(state.notSkill.found, state.notSkill.held); break;
+        case "import-alone": if (state.alone) void bring({ ...state.alone, alone: true }, { text: String(state.alone.text ?? "") }); break;
+      }
     });
     el.addEventListener("keydown", event => {
-      // A link or a path is one line: Enter sends it. Text of several lines keeps its Enter, and Ctrl+Enter sends it.
-      if ((event.target as HTMLElement).id === "skl-input" && event.key === "Enter" && !event.isComposing && !event.shiftKey
-          && (event.ctrlKey || event.metaKey || !(event.target as HTMLTextAreaElement).value.includes("\n"))) {
+      if ((event.target as HTMLElement).id === "skl-input" && event.key === "Enter" && !event.isComposing && !event.shiftKey) {
         event.preventDefault();
         el.querySelector<HTMLElement>('[data-skl="import-go"]')?.click();
       }
     });
-    el.addEventListener("change", event => {
-      const input = event.target as HTMLInputElement;
-      if (input.id !== "skl-file" || !input.files?.length) return;
-      const picked = [...input.files].map(file => ({ path: file.name, file }));
-      input.value = "";
-      void bringPicked(picked);
-    });
     el.addEventListener("input", event => {
-      if ((event.target as HTMLElement).id === "skl-input") state.draft = (event.target as HTMLTextAreaElement).value;
+      if ((event.target as HTMLElement).id !== "skl-input") return;
+      state.draft = (event.target as HTMLInputElement).value;
+      el.querySelector<HTMLButtonElement>('[data-skl="import-go"]')?.toggleAttribute("disabled", !state.draft.trim());
+    });
+    // Text of several lines (a SKILL.md) pasted into the line is imported as it comes: a line cannot hold it.
+    el.addEventListener("paste", event => {
+      if ((event.target as HTMLElement).id !== "skl-input") return;
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      if (!/\n/.test(text.trim())) return;
+      event.preventDefault();
+      state.draft = text;
+      void bring({ text }, { text });
     });
     // The whole box is lit while something is dragged over it (the row's hover fill), and not a moment after.
     el.addEventListener("dragover", event => {
@@ -780,7 +886,7 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
     });
     el.addEventListener("dragleave", event => {
       const next = (event as DragEvent).relatedTarget as Node | null;
-      if (!next || !zone()?.contains(next)) lit(false);
+      if (!next || !el.querySelector(".skl-import")?.contains(next)) lit(false);
     });
     el.addEventListener("drop", event => {
       lit(false);
@@ -794,20 +900,23 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
       void droppedFiles(data).then(bringPicked);
     });
   };
-  /** 匯入 in the header: the importer's dialog, over the tab. Closing it (Esc, ×) is one step back; what it was doing goes on. */
+  /** 匯入 in the header: the importer's dialog, over the tab. While an import works it cannot be closed: 取消 stops it first. */
   const openImport = (): void => {
     if (dlg) return;
     closeMenu();
     state.error = "";
+    if (!state.busy) { state.notSkill = null; state.alone = null; }
     dlg = openDialog({
-      title: t("skillLib.import"), body: importBodyHTML(state), actions: importActions(state), cls: "skl-dlg",
-      onAct: () => {}, onClose: () => { dlg = null; },
+      title: importTitle(state), body: importBodyHTML(state), actions: {}, cls: `skl-dlg${state.busy ? " is-working" : ""}`,
+      canClose: () => !state.busy, onAct: () => {}, onClose: () => { dlg = null; },
     });
     importEvents(dlg.el);
   };
   return {
     view: (): SkillLibraryView => state,
     load,
+    /** The core's events: the steps of the import under way. */
+    follow,
     /** After each drawing: a package's page is a step of its own, so a step back (a side button, Alt+Left) returns to the list. */
     painted(): void {
       const page = root.querySelector<HTMLElement>(".skl-page");
@@ -815,7 +924,7 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
     },
     reset: (): void => {
       dlg?.close();
-      epoch++; state.skipped = null; state.error = ""; state.draft = "";
+      epoch++; state.skipped = null; state.error = ""; state.draft = ""; state.notSkill = null; state.alone = null;
       state.page = null; state.skill = null; state.doc = null; state.renaming = null;
     },
   };

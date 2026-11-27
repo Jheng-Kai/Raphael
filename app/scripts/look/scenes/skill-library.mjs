@@ -1,5 +1,5 @@
 // Team skills in Settings: packages, who may use each, and the importer.
-import { scene, click, type, wait, waitGone, settings, scroll, focus, key, check, hover, sideButton, dropFile } from "./steps.mjs";
+import { scene, click, type, wait, waitGone, settings, scroll, focus, key, check, hover, sideButton, dropFile, lookCall, paste } from "./steps.mjs";
 import { memberSettingsPage } from "./member-settings.mjs";
 
 /** What the core refuses an import with: its kind, its reason and what the reason names (members/skill_errors.py). */
@@ -24,6 +24,7 @@ const HANDOFFS = [
   { match: "git@gitlab.example.com:group/handbook.git", handoff: { kind: "folder", label: "handbook", address: "git@gitlab.example.com:group/handbook.git",
     path: "C:\\Users\\owner\\Raphael\\skill-sources\\handbook-1a2b3c" } },
 ];
+const LAZY_TEXT = "---\nname: lazy-mode\ndescription: Do the least that works\n---\nRead [how](actions/how.md) before you act.";
 const list = [...settings("skills"), wait(".skl-pack")];
 const opened = [...list, click('[data-skl="open"][data-key="set:1"]'), wait('.skl-page .skl-skills .skl-skill')];
 // 匯入 is in the page's header and opens the importer's dialog.
@@ -53,41 +54,68 @@ export default [
     key("Escape"), waitGone(".skl-page"), check("skill-library-back")], { skillPackages: true }),
   scene("skill-library-access", "Who may use a package: the whole team, or the characters ticked, in one menu that stays open while names are ticked; each row leads with a face (the team's own picture for the whole team) and its check stands at the right", [
     ...list, click('[data-skl="access"][data-key="pack:2"]'), wait(".skl-access-menu [data-member]"), check("skill-library-access")]),
-  scene("skill-library-import", "匯入 in the page's header opens one dialog: a field that takes anything, a way to choose files and 匯入", [
+  // The importer (R-SKILL-26) in its states: idle, a file dragged over it, a file chosen, what is no skill, the import under way at
+  // each step, cancelled back to idle, and the failures below.
+  scene("skill-library-import", "匯入 opens the importer: a dashed drop zone with one button, one line for an address, nothing at the foot", [
     ...importing, check("skill-library-import")]),
-  scene("skill-library-import-link", "A link pasted in the box waits for 匯入, the box holding it as it was pasted", [
+  scene("skill-library-import-link", "An address pasted in the line waits for its small arrow or Enter", [
     ...importing, type("#skl-input", "https://example.com/team-handbook"), check("skill-library-import-link")]),
-  scene("skill-library-import-menu", "選擇檔案 opens one small menu: the system's file dialog or its folder dialog", [
-    ...importing, click('[data-skl="pick"]'), wait(".skl-pick-menu [data-pick]"), check("skill-library-import-menu")]),
+  scene("skill-library-import-over", "A file dragged over the importer lights the drop zone", [
+    ...importing, dropFile(".skl-import", "pstack.zip", { mime: "application/zip", hold: true }), wait(".skl-zone.is-over"), check("skill-library-import-over")]),
+  scene("skill-library-import-chosen", "選擇檔案 takes a SKILL.md: its folder is what is imported, and the dialog says so", [
+    ...importing, click('[data-skl="pick"]'), wait(".skl-import.is-busy"), check("skill-library-import-chosen")],
+    { pickedSource: "C:\\Users\\owner\\skills\\pstack\\SKILL.md", skillImportPending: true }),
   scene("skill-library-imported", "Pasted SKILL.md text becomes a package of one for the whole team, and the importer closes", [
-    ...importing, type("#skl-input", "---\nname: travel\ndescription: 依日期整理行程與訂位\n---\n# 旅行行程"),
-    click('[data-skl="import-go"]'), wait('.skl-pack[data-skl-pack="pack:13"]'), check("skill-library-imported")]),
+    ...importing, paste("#skl-input", { text: "---\nname: travel\ndescription: 依日期整理行程與訂位\n---\n# 旅行行程" }),
+    wait('.skl-pack[data-skl-pack="pack:13"]'), check("skill-library-imported")]),
   scene("skill-library-import-failed", "A source with no SKILL.md says so in the importer and keeps it open", [
     ...importing, type("#skl-input", "nothing/here"), click('[data-skl="import-go"]'), wait(".skl-error"), check("skill-library-import-failed")]),
-  // What is no skill is no work of the dialog: it closes, and Raphael's own conversation opens with the owner's words (the source as
-  // readable words, a file as the message's own attachment) and Raphael's first answer, its choices as a question card.
-  scene("skill-library-handoff", "A web page that is no skill closes the dialog and opens Raphael's conversation with the owner's words and Raphael's choices as a question card", [
-    ...importing, type("#skl-input", "https://example.com/handbook"), click('[data-skl="import-go"]'),
+  // What is no skill: the dialog says what it is and asks; only 請拉斐爾做 closes it and opens Raphael's own conversation with the
+  // owner's words (the source as readable words, a file as the message's own attachment) and Raphael's first answer, a question card.
+  scene("skill-library-notskill", "A web page that is no skill: the dialog says what it is, with 換一個 and 請拉斐爾做", [
+    ...importing, type("#skl-input", "https://example.com/handbook"), click('[data-skl="import-go"]'), wait(".skl-notice"), check("skill-library-notskill")],
+    { skillHandoff: HANDOFFS }),
+  scene("skill-library-notskill-file", "A document dropped on the importer that is no skill is said to be a document, with the same two buttons", [
+    ...importing, dropFile(".skl-import", "team-handbook.pdf", { mime: "application/pdf" }), wait(".skl-notice"), check("skill-library-notskill-file")],
+    { skillHandoff: HANDOFFS }),
+  scene("skill-library-notskill-another", "換一個 gives the importer back, with the address as it was", [
+    ...importing, type("#skl-input", "https://example.com/handbook"), click('[data-skl="import-go"]'), wait(".skl-notice"),
+    click('[data-skl="import-another"]'), wait(".skl-zone"), check("skill-library-import")], { skillHandoff: HANDOFFS }),
+  scene("skill-library-handoff", "請拉斐爾做 closes the dialog and opens Raphael's conversation with the owner's words and Raphael's choices as a question card", [
+    ...importing, type("#skl-input", "https://example.com/handbook"), click('[data-skl="import-go"]'), wait(".skl-notice"), click('[data-skl="import-ask"]'),
     wait('[data-owner-question="skill-choice"]'), check("skill-library-handoff")], { skillHandoff: HANDOFFS }),
-  scene("skill-library-handoff-file", "A file dropped on the box that is no skill goes to Raphael's conversation as the message's own file", [
-    ...importing, dropFile(".skl-import", "team-handbook.pdf", { mime: "application/pdf" }),
+  scene("skill-library-handoff-file", "A file that is no skill goes to Raphael's conversation as the message's own file when asked", [
+    ...importing, dropFile(".skl-import", "team-handbook.pdf", { mime: "application/pdf" }), wait(".skl-notice"), click('[data-skl="import-ask"]'),
     wait('[data-owner-question="skill-choice"]'), check("skill-library-handoff-file")], { skillHandoff: HANDOFFS }),
   scene("skill-library-handoff-repo", "A Git repository of other material is fetched, and Raphael is told where it was put", [
-    ...importing, type("#skl-input", "git@gitlab.example.com:group/handbook.git"), click('[data-skl="import-go"]'),
+    ...importing, type("#skl-input", "git@gitlab.example.com:group/handbook.git"), click('[data-skl="import-go"]'), wait(".skl-notice"), click('[data-skl="import-ask"]'),
     wait('[data-owner-question="skill-choice"]'), check("skill-library-handoff-repo")], { skillHandoff: HANDOFFS }),
   scene("skill-library-handoff-back", "Back in Settings after a hand-off, Team skills shows nothing half-done: no dialog, no draft, no error", [
-    ...importing, type("#skl-input", "https://example.com/handbook"), click('[data-skl="import-go"]'),
+    ...importing, type("#skl-input", "https://example.com/handbook"), click('[data-skl="import-go"]'), wait(".skl-notice"), click('[data-skl="import-ask"]'),
     wait('[data-owner-question="skill-choice"]'), ...settings("skills"), wait(".skl-pack"), click('[data-skl="import-open"]'), wait(".skl-dlg #skl-input"),
     check("skill-library-handoff-back"), key("Escape"), waitGone(".skl-dlg")], { skillHandoff: HANDOFFS }),
-  scene("skill-library-fetching", "A Git address being fetched says where from, in the row of the choose button, and nothing moves", [
+  // The import under way: the title names the source, the bar and one line say the step, 取消 is the only way out and really stops it.
+  scene("skill-library-fetching", "A Git address being fetched: the title names the repository and the first step is getting the files", [
     ...importing, type("#skl-input", "git@gitlab.example.com:group/handbook.git"), click('[data-skl="import-go"]'),
-    wait('.skl-progress[role="status"]:not(:empty)'), check("skill-library-fetching")], { skillImportPending: true }),
-  // Importing: the progress, the plugin it makes, what it leaves out, an empty library and each failure in its own words.
+    wait(".skl-import.is-busy .skl-bar"), check("skill-library-fetching")], { skillImportPending: true }),
+  scene("skill-library-importing", "An import reading skill 3 of 7: the bar, the step, no ×, and Esc does nothing", [
+    ...importing, type("#skl-input", "owner/slow-import"), click('[data-skl="import-go"]'), wait(".skl-import.is-busy .skl-bar"),
+    lookCall("importStep", "read", 3, 7), key("Escape"), check("skill-library-importing")], { skillImportPending: true }),
+  scene("skill-library-importing-install", "The last step writes the library, and 取消 waits: it can no longer stop it without a trace", [
+    ...importing, type("#skl-input", "owner/slow-import"), click('[data-skl="import-go"]'), wait(".skl-import.is-busy .skl-bar"),
+    lookCall("importStep", "read", 7, 7), lookCall("importStep", "install"), check("skill-library-importing-install")], { skillImportPending: true }),
+  scene("skill-library-import-cancelled", "取消 stops the import: the core is told, and the dialog is the importer again with the address kept", [
+    ...importing, type("#skl-input", "owner/slow-import"), click('[data-skl="import-go"]'), wait(".skl-import.is-busy .skl-bar"),
+    lookCall("importStep", "read", 2, 7), click('[data-skl="import-cancel"]'), wait(".skl-zone"), check("skill-library-import-cancelled")], { skillImportPending: true }),
+  // Pasted text that is a skill but sends the model to other files cannot bring them: it is said, and the owner may keep the text alone.
+  scene("skill-library-failed-needs-files", "A pasted skill that names other files says so, and asks for its folder instead", [
+    ...importing, paste("#skl-input", { text: LAZY_TEXT }), wait(".skl-error"), check("skill-library-failed-needs-files")], { needsFiles: true }),
+  scene("skill-library-needs-files-alone", "只匯入這段文字 imports the text as it is, once the owner says it needs nothing else", [
+    ...importing, paste("#skl-input", { text: LAZY_TEXT }), wait(".skl-error"), click('[data-skl="import-alone"]'),
+    wait('.skl-pack[data-skl-pack="pack:13"]'), check("skill-library-needs-files-alone")], { needsFiles: true }),
+  // An empty library, then the plugin it makes, what it leaves out and each failure in its own words.
   scene("skill-library-empty", "A library with nothing in it says so, and 匯入 stays in the header", [
     ...settings("skills"), wait(".skl-empty"), check("skill-library-empty")], { skillLibraryEmpty: true }),
-  scene("skill-library-importing", "An import under way says so under the card, quietly, and holds the importer still", [
-    ...importing, type("#skl-input", "owner/slow-import"), click('[data-skl="import-go"]'), wait('.skl-progress[role="status"]'), check("skill-library-importing")],
-    { skillImportPending: true }),
   scene("skill-library-plugin-imported", "Skills of one name prefix imported from a GitHub link become one plugin that opens on its page at once", [
     ...importing, type("#skl-input", "https://github.com/owner/desk-kit"), click('[data-skl="import-go"]'),
     wait('.skl-page[data-skl-page="pack:desk"] .skl-skill'), check("skill-library-plugin-imported")], {

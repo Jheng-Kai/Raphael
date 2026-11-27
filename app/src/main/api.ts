@@ -84,7 +84,7 @@ const ASKED_AGAIN = new Set(["usage.allowances", "usage.analytics"]);
 let changes = 0;
 const reading = new Map<string, { answer: Promise<unknown>; changes: number }>();
 /** Events that say something may have changed; the microphone's loudness and the like do not. */
-const NOISE = new Set<string>(["Level", "VoiceLevel", "ModelProgress", "Dictation", "Hotkey"]);
+const NOISE = new Set<string>(["Level", "VoiceLevel", "ModelProgress", "SkillImportProgress", "Dictation", "Hotkey"]);
 let heard = 0;
 /** While the window starts up, a read answered a moment ago is the answer to the same read now. */
 const RECENT_MS = 1500;

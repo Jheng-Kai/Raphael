@@ -6,7 +6,7 @@ const api = vi.hoisted(() => ({ core: vi.fn(), membersList: vi.fn(), pickOutputF
 vi.mock("./api", () => api);
 const platform = vi.hoisted(() => ({ mac: false }));
 vi.mock("../shared/platform", () => ({ get IS_MAC() { return platform.mac; } }));
-import { createSkillLibrary, failureText, gitHost, importButtonHTML, skillLibraryHTML, type LibraryPackage } from "./skill-library";
+import { createSkillLibrary, failureText, gitHost, importButtonHTML, skillLibraryHTML, sourceName, type LibraryPackage } from "./skill-library";
 import { closeMenu, headerCloseButton, toaster } from "./ui";
 import { navInputs, pressLayer } from "./test-support/nav-layer-input";
 
@@ -313,19 +313,29 @@ async function setupBox(extra: (method: string, params: Record<string, unknown>)
 }
 /** 匯入 in the page's header: the importer's dialog opens. */
 const openBox = (root: ParentNode) => root.querySelector<HTMLElement>('[data-skl="import-open"]')!.click();
-const textarea = (_root?: ParentNode) => document.querySelector<HTMLTextAreaElement>("#skl-input")!;
-const imported = (params: unknown) => expect(api.core).toHaveBeenCalledWith("skills.library.import", params);
+const line = (_root?: ParentNode) => document.querySelector<HTMLInputElement>("#skl-input")!;
+/** What the owner types in the line: the arrow of the dialog waits for it. */
+const typeLine = (value: string) => { line().value = value; line().dispatchEvent(new Event("input", { bubbles: true })); };
+/** An import is asked of the core under an id of its own, which its steps and its cancel carry. */
+const imported = (params: Record<string, unknown>) => expect(api.core).toHaveBeenCalledWith("skills.library.import", { ...params, import_id: expect.any(String) });
+const importId = (): string => (api.core.mock.calls.filter(call => call[0] === "skills.library.import").pop()![1] as { import_id: string }).import_id;
 const dropOn = (root: ParentNode, data: Record<string, unknown>) => {
   const event = new Event("drop", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [], getData: () => "", ...data } });
   root.querySelector(".skl-import")!.dispatchEvent(event);
   return event;
 };
+const pasteInto = (text: string) => {
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", { value: { getData: () => text } });
+  line().dispatchEvent(event);
+  return event;
+};
 
-test("the page starts with its lists and has 匯入 in its header, and the importer is a dialog: one field, one way to choose files and one 匯入", async () => {
+test("the page starts with its lists and has 匯入 in its header, and the importer is a dialog: a drop zone with ONE button and one line for an address", async () => {
   const { root } = await setup();
   // Nothing of the importer stands in the tab: it begins with the plugins, then the skills, and 匯入 is beside the close.
-  expect(root.querySelector(".skl-import, #skl-input, .skl-import-hint")).toBeNull();
+  expect(root.querySelector(".skl-import, #skl-input, .skl-zone")).toBeNull();
   expect([...root.querySelector(".set-head")!.children].map(el => el.tagName === "H1" ? "title" : (el as HTMLElement).dataset.skl ?? "close")).toEqual(["title", "import-open", "close"]);
   expect(root.querySelector('[data-skl="import-open"]')?.textContent).toBe("匯入");
   expect(root.querySelector(".set-head")!.nextElementSibling?.className).toContain("skl");
@@ -333,92 +343,85 @@ test("the page starts with its lists and has 匯入 in its header, and the impor
   openBox(root);
   const dialog = document.querySelector(".skl-dlg")!;
   expect(dialog.getAttribute("role")).toBe("dialog");
-  const card = dialog.querySelector(".skl-import")!;
-  expect(card.querySelectorAll("textarea, input:not([type=file])")).toHaveLength(1);
+  expect(dialog.querySelector("h2")?.textContent).toBe("匯入技能");
+  const zone = dialog.querySelector(".skl-zone")!;
+  expect(zone.querySelector(".skl-zone-icon svg")).not.toBeNull();
+  expect(zone.querySelector(".skl-zone-words")?.textContent).toBe("拖到這裡，或");
+  // ONE button in the zone, one single-line field under it with its small action: no rule line, no footer, no lone button.
+  expect([...zone.querySelectorAll("button")].map(button => button.textContent)).toEqual(["選擇檔案"]);
+  expect(dialog.querySelectorAll("textarea, input")).toHaveLength(1);
+  expect(line().type).toBe("text");
+  expect(line().placeholder).toBe("或貼上網址");
   expect([...dialog.querySelectorAll<HTMLElement>("[data-skl]")].map(button => button.dataset.skl)).toEqual(["pick", "import-go"]);
-  expect(card.querySelector('[data-skl="pick"]')?.textContent).toBe("選擇檔案");
-  expect(card.querySelector(".skl-import-hint")).toBeNull();
-  expect(textarea(document.body).placeholder).toBe("把檔案、資料夾或連結丟進來，或貼上文字");
-  expect(textarea(document.body).getAttribute("rows")).toBe("2");
-  expect(dialog.textContent).not.toMatch(/任何格式|\.zip|\.md|SKILL\.md|GitHub/);
-  expect(card.querySelector<HTMLInputElement>("#skl-file")?.accept).toBe("");
-  expect(card.querySelector<HTMLInputElement>("#skl-file")?.multiple).toBe(true);
+  expect(dialog.querySelector<HTMLButtonElement>('[data-skl="import-go"]')?.disabled).toBe(true);
+  expect(dialog.querySelector(".mb-dlg-act, .action-row, hr")).toBeNull();
+  expect(dialog.textContent).not.toMatch(/拉斐爾|\.zip|\.md|SKILL\.md|GitHub/);
+  expect(dialog.querySelector("input[type=file]")).toBeNull();
 });
 
-test("Esc and the × close the importer, one step back, and what was typed stays for the next time", async () => {
+test("Esc and the × close the idle importer, one step back, and what was typed stays for the next time", async () => {
   const { root } = await setupBox();
-  textarea(root).value = "owner/half-typed";
-  textarea(root).dispatchEvent(new Event("input", { bubbles: true }));
+  typeLine("owner/half-typed");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
   expect(document.querySelector(".skl-dlg")).toBeNull();
   expect(document.querySelector(".skl")).not.toBeNull();
   openBox(root);
-  expect(textarea(root).value).toBe("owner/half-typed");
+  expect(line().value).toBe("owner/half-typed");
+  expect(document.querySelector<HTMLButtonElement>('[data-skl="import-go"]')?.disabled).toBe(false);
   press(root, '.skl-dlg [data-dlg="close"]');
   expect(document.querySelector(".skl-dlg")).toBeNull();
 });
 
-test("a pasted link or text goes to the core as it is, and the new package opens", async () => {
+test("an address goes to the core as it is, by Enter or by its small arrow, and the new package opens", async () => {
   const { root, info } = await setupBox();
-  textarea(root).value = "owner/slides";
-  textarea(root).dispatchEvent(new Event("input", { bubbles: true }));
+  typeLine("owner/slides");
   press(root, '[data-skl="import-go"]');
   await settle(); await settle();
   imported({ text: "owner/slides" });
-  // A package of several opens on its page, so whom it is for can be chosen at once.
+  // A package of several opens on its page, so whom it is for can be chosen at once; the dialog closes and nothing is toasted.
   expect(root.querySelector('.skl-page[data-skl-page="pack:9"]')).not.toBeNull();
   expect(document.querySelector(".skl-dlg")).toBeNull();
   expect(info).not.toHaveBeenCalled();
   press(root, '[data-skl="back"]');
   openBox(root);
-  expect(textarea(root).value).toBe("");
-  textarea(root).value = "---\nname: travel\n---\n";
-  press(root, '[data-skl="import-go"]');
-  await settle(); await settle();
-  imported({ text: "---\nname: travel\n---\n" });
-});
-
-test("Enter sends one line, and text of several lines keeps its Enter until Ctrl+Enter", async () => {
-  const { root } = await setupBox();
-  const enter = (init: KeyboardEventInit) => textarea(root).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init }));
-  textarea(root).value = "https://example.com/guide";
-  expect(enter({})).toBe(false);
+  expect(line().value).toBe("");
+  const enter = (init: KeyboardEventInit = {}) => line().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init }));
+  typeLine("https://example.com/guide");
+  expect(enter()).toBe(false);
   await settle(); await settle();
   imported({ text: "https://example.com/guide" });
+  // Nothing to send, nothing sent.
   press(root, '[data-skl="back"]');
   openBox(root);
   api.core.mockClear();
-  textarea(root).value = "one\ntwo";
-  expect(enter({})).toBe(true);
+  enter();
   expect(api.core).not.toHaveBeenCalledWith("skills.library.import", expect.anything());
-  expect(enter({ ctrlKey: true })).toBe(false);
-  await settle(); await settle();
-  imported({ text: "one\ntwo" });
 });
 
-test("a file dropped or chosen is sent whole, whatever its kind", async () => {
+test("text of several lines pasted into the line is imported as it comes, since a line cannot hold it", async () => {
+  const { root } = await setupBox();
+  expect(pasteInto("https://example.com/guide").defaultPrevented).toBe(false);
+  expect(api.core).not.toHaveBeenCalledWith("skills.library.import", expect.anything());
+  expect(pasteInto("---\nname: travel\n---\nBody").defaultPrevented).toBe(true);
+  await settle(); await settle();
+  imported({ text: "---\nname: travel\n---\nBody" });
+  expect(root.querySelector('.skl-page[data-skl-page="pack:9"]')).not.toBeNull();
+});
+
+test("a file dropped on the importer is sent whole, whatever its kind", async () => {
   const { root } = await setupBox();
   dropOn(root, { files: [new File(["%PDF-1.4"], "guide.pdf")] });
   await settle(); await settle();
   imported({ file: { name: "guide.pdf", data: btoa("%PDF-1.4") } });
   press(root, '[data-skl="back"]');
   openBox(root);
-  const input = root.querySelector<HTMLInputElement>("#skl-file")!;
-  Object.defineProperty(input, "files", { configurable: true, value: [new File(["# hi"], "skill.md")] });
-  input.dispatchEvent(new Event("change", { bubbles: true }));
-  await settle(); await settle();
-  imported({ file: { name: "skill.md", data: btoa("# hi") } });
-  press(root, '[data-skl="back"]');
-  openBox(root);
   // Several files go as one tree, each under its own name.
-  const again = root.querySelector<HTMLInputElement>("#skl-file")!;
-  Object.defineProperty(again, "files", { configurable: true, value: [new File(["a"], "a.md"), new File(["b"], "b.txt")] });
-  again.dispatchEvent(new Event("change", { bubbles: true }));
+  dropOn(root, { files: [new File(["a"], "a.md"), new File(["b"], "b.txt")] });
   await settle(); await settle();
   imported({ files: [{ path: "a.md", data: btoa("a") }, { path: "b.txt", data: btoa("b") }] });
 });
 
-test("a folder dropped on the box goes as a tree with its paths, leaving node_modules and .git behind", async () => {
+test("a folder dropped on the importer goes as a tree with its paths, leaving node_modules and .git behind", async () => {
   const { root } = await setupBox();
   const file = (name: string, body: string) => ({ isFile: true, isDirectory: false, name, file: (ok: (file: File) => void) => ok(new File([body], name)) });
   const folder = (name: string, children: unknown[]) => ({ isFile: false, isDirectory: true, name,
@@ -429,63 +432,50 @@ test("a folder dropped on the box goes as a tree with its paths, leaving node_mo
   imported({ files: [{ path: "notes/a.md", data: btoa("A") }, { path: "notes/sub/b.md", data: btoa("B") }] });
 });
 
-test("the whole box is lit while files are dragged over it, and only then", async () => {
+test("the drop zone is lit while files are dragged over it, and only then", async () => {
   const { root } = await setupBox();
-  const card = root.querySelector(".skl-import")!;
+  const zone = root.querySelector(".skl-zone")!;
   const over = new Event("dragover", { bubbles: true, cancelable: true });
   Object.defineProperty(over, "dataTransfer", { value: { types: ["Files"] } });
-  card.querySelector("#skl-input")!.dispatchEvent(over);
-  expect(card.classList.contains("is-over")).toBe(true);
+  zone.dispatchEvent(over);
+  expect(zone.classList.contains("is-over")).toBe(true);
   const leave = new Event("dragleave", { bubbles: true });
   Object.defineProperty(leave, "relatedTarget", { value: null });
-  card.dispatchEvent(leave);
-  expect(card.classList.contains("is-over")).toBe(false);
-  card.querySelector("#skl-input")!.dispatchEvent(over);
+  zone.dispatchEvent(leave);
+  expect(zone.classList.contains("is-over")).toBe(false);
+  zone.dispatchEvent(over);
   dropOn(root, {});
-  expect(card.classList.contains("is-over")).toBe(false);
+  expect(root.querySelector(".skl-zone")?.classList.contains("is-over") ?? false).toBe(false);
 });
 
-test("a link dragged onto the box is sent as the text it is", async () => {
+test("a link dragged onto the importer is sent as the text it is", async () => {
   const { root } = await setupBox();
   dropOn(root, { types: ["text/uri-list", "text/plain"], getData: (type: string) => type === "text/uri-list" ? "https://example.com/guide\n" : "" });
   await settle(); await settle();
   imported({ text: "https://example.com/guide" });
 });
 
-test("on Windows choosing opens one small menu: the file dialog with a zip plainly under it, and the folder dialog", async () => {
-  const { root } = await setupBox();
-  const click = vi.spyOn(root.querySelector<HTMLInputElement>("#skl-file")!, "click").mockImplementation(() => {});
-  press(root, '[data-skl="pick"]');
-  const menu = document.querySelector(".skl-pick-menu")!;
-  expect([...menu.querySelectorAll("button")].map(button => button.textContent)).toEqual(["檔案（zip、SKILL.md…）", "資料夾"]);
-  menu.querySelector<HTMLElement>('[data-pick="files"]')!.click();
-  expect(click).toHaveBeenCalled();
-  api.pickOutputFolder.mockResolvedValue("D:\\skills\\travel");
-  press(root, '[data-skl="pick"]');
-  document.querySelector<HTMLElement>('.skl-pick-menu [data-pick="folder"]')!.click();
-  await settle(); await settle();
-  imported({ source: "local:D:\\skills\\travel" });
-});
-
-test("on a Mac choosing opens the system's one panel that takes a file or a folder, with no menu in front of it", async () => {
-  platform.mac = true;
-  api.pickImportSource.mockResolvedValue("/Users/a/Downloads/skills.zip");
-  const { root } = await setupBox();
-  expect(root.querySelector('[data-skl="pick"]')?.getAttribute("aria-haspopup")).toBeNull();
-  press(root, '[data-skl="pick"]');
-  expect(document.querySelector(".skl-pick-menu")).toBeNull();
-  await settle(); await settle();
-  expect(api.pickImportSource).toHaveBeenCalledOnce();
-  expect(api.pickOutputFolder).not.toHaveBeenCalled();
-  imported({ source: "local:/Users/a/Downloads/skills.zip" });
-  api.core.mockClear();
-  press(root, '[data-skl="back"]');
-  openBox(root);
-  api.pickImportSource.mockResolvedValue(null);
-  press(root, '[data-skl="pick"]');
-  await settle(); await settle();
-  expect(api.core).not.toHaveBeenCalledWith("skills.library.import", expect.anything());
-});
+test.each([[false, "D:\\skills\\travel\\SKILL.md"], [true, "/Users/a/Downloads/skills.zip"]])(
+  "選擇檔案 is one button that opens the system's one panel, with no menu in front of it (a Mac: %s), and what it gives goes to the core as it is", async (mac, picked) => {
+    platform.mac = mac;
+    api.pickImportSource.mockResolvedValue(picked);
+    const { root } = await setupBox();
+    expect(root.querySelector('[data-skl="pick"]')?.getAttribute("aria-haspopup")).toBeNull();
+    press(root, '[data-skl="pick"]');
+    expect(document.querySelector(".skl-pick-menu, [role=menu]")).toBeNull();
+    await settle(); await settle();
+    expect(api.pickImportSource).toHaveBeenCalledOnce();
+    expect(api.pickOutputFolder).not.toHaveBeenCalled();
+    // The core says what the path is: a SKILL.md stands for its folder, a ZIP is opened, a folder is read.
+    imported({ source: `local:${picked}` });
+    api.core.mockClear();
+    press(root, '[data-skl="back"]');
+    openBox(root);
+    api.pickImportSource.mockResolvedValue(null);
+    press(root, '[data-skl="pick"]');
+    await settle(); await settle();
+    expect(api.core).not.toHaveBeenCalledWith("skills.library.import", expect.anything());
+  });
 
 const asked = (): [string, { name: string; mime: string; data: string }[]] => {
   const [words, attachments] = handOff.mock.calls[handOff.mock.calls.length - 1]!;
@@ -494,42 +484,58 @@ const asked = (): [string, { name: string; mime: string; data: string }[]] => {
 /** A box whose core says that what was put in is no skill, with the facts of the hand-off. */
 const handedOver = (found: Record<string, unknown>) => setupBox(method => method === "skills.library.import" ? { handoff: found } : undefined);
 
-test("what is no skill is no work of the dialog: it closes and Raphael's conversation gets the owner's words", async () => {
+test("what is no skill is no work of the dialog until asked: it says what it is, with 換一個 and 請拉斐爾做, and only the second goes to Raphael", async () => {
   const { root, state } = await handedOver({ kind: "link", label: "https://example.com/guide", address: "https://example.com/guide" });
-  textarea(root).value = "https://example.com/guide";
-  textarea(root).dispatchEvent(new Event("input", { bubbles: true }));
+  typeLine("https://example.com/guide");
   press(root, '[data-skl="import-go"]');
   await settle(); await settle();
+  // The dialog says it in one plain sentence, and nothing went to Raphael.
+  expect(document.querySelector(".skl-notice")?.textContent).toBe("這是一個網頁，不是技能。拉斐爾可以讀完後幫你做成技能。");
+  expect([...document.querySelectorAll<HTMLElement>(".skl-dlg button:not(.close-button)")].map(button => [button.dataset.skl, button.textContent, button.classList.contains("pri")]))
+    .toEqual([["import-another", "換一個", false], ["import-ask", "請拉斐爾做", true]]);
+  expect(document.querySelector("#skl-input, .skl-zone")).toBeNull();
+  expect(handOff).not.toHaveBeenCalled();
+  // 換一個 gives the importer back, the address as it was.
+  press(root, '[data-skl="import-another"]');
+  expect(document.querySelector(".skl-notice")).toBeNull();
+  expect(line().value).toBe("https://example.com/guide");
+  press(root, '[data-skl="import-go"]');
+  await settle(); await settle();
+  // 請拉斐爾做 closes the dialog and gives Raphael's conversation the owner's words.
+  press(root, '[data-skl="import-ask"]');
+  await settle();
   expect(asked()).toEqual(["請幫我把這個網頁做成團隊技能：https://example.com/guide", []]);
   expect(document.querySelector(".skl-dlg")).toBeNull();
   // Nothing half-done is left behind in Team skills: no draft, no busy box, no error, no new package.
   expect(state.packages).toHaveLength(3);
   openBox(root);
-  expect(textarea(root).value).toBe("");
-  expect(document.querySelector<HTMLButtonElement>('[data-skl="import-go"]')?.disabled).toBe(false);
-  expect(document.querySelector(".skl-error")).toBeNull();
-  expect(document.querySelector(".skl-progress")?.textContent).toBe("");
+  expect(line().value).toBe("");
+  expect(document.querySelector<HTMLButtonElement>('[data-skl="import-go"]')?.disabled).toBe(true);
+  expect(document.querySelector(".skl-error, .skl-bar, .skl-notice")).toBeNull();
 });
 
 test.each([
-  ["text", { kind: "text", label: "pasted text" }, "Steps:\n1. Do it", "請幫我把下面這段內容做成團隊技能：\n\nSteps:\n1. Do it"],
-  ["path", { kind: "path", label: "notes", path: "D:\\work\\notes" }, "D:\\work\\notes", "請幫我把電腦上這個位置的內容做成團隊技能：D:\\work\\notes"],
+  ["text", { kind: "text", label: "pasted text" }, "Steps:\n1. Do it", "請幫我把下面這段內容做成團隊技能：\n\nSteps:\n1. Do it", "這段文字不是技能。拉斐爾可以讀完後幫你做成技能。"],
+  ["path", { kind: "path", label: "notes", path: "D:\\work\\notes" }, "D:\\work\\notes", "請幫我把電腦上這個位置的內容做成團隊技能：D:\\work\\notes", "這是一份文件，不是技能。拉斐爾可以讀完後幫你做成技能。"],
   ["repo", { kind: "folder", label: "handbook", address: "git@gitlab.example.com:group/handbook.git", path: "D:\\w\\skill-sources\\handbook-1a" },
-    "git@gitlab.example.com:group/handbook.git", "請幫我把這個 Git 倉庫做成團隊技能：git@gitlab.example.com:group/handbook.git（已下載到 D:\\w\\skill-sources\\handbook-1a）"],
-  ["folder", { kind: "folder", label: "scan.zip", path: "D:\\w\\skill-sources\\scan-2b" }, "scan.zip", "請幫我把這份資料做成團隊技能：scan.zip（檔案放在 D:\\w\\skill-sources\\scan-2b）"],
-])("a hand-off of %s says its source as readable words", async (_kind, found, typed, words) => {
+    "git@gitlab.example.com:group/handbook.git", "請幫我把這個 Git 倉庫做成團隊技能：git@gitlab.example.com:group/handbook.git（已下載到 D:\\w\\skill-sources\\handbook-1a）", "這裡面沒有技能。拉斐爾可以讀完後幫你做成技能。"],
+  ["folder", { kind: "folder", label: "scan.zip", path: "D:\\w\\skill-sources\\scan-2b" }, "scan.zip", "請幫我把這份資料做成團隊技能：scan.zip（檔案放在 D:\\w\\skill-sources\\scan-2b）", "這裡面沒有技能。拉斐爾可以讀完後幫你做成技能。"],
+])("a hand-off of %s says what it is, and says its source as readable words when asked", async (_kind, found, typed, words, said) => {
   const { root } = await handedOver(found);
-  textarea(root).value = typed;
-  press(root, '[data-skl="import-go"]');
+  if (found.kind === "text") pasteInto(typed); else { typeLine(typed); press(root, '[data-skl="import-go"]'); }
   await settle(); await settle();
+  expect(document.querySelector(".skl-notice")?.textContent).toBe(said);
+  press(root, '[data-skl="import-ask"]');
+  await settle();
   expect(asked()).toEqual([words, []]);
 });
 
 test("a long pasted text goes as a file beside the message, and a dropped file is the message's attachment", async () => {
   const { root } = await handedOver({ kind: "text", label: "pasted text" });
-  textarea(root).value = "line\n".repeat(400);
-  press(root, '[data-skl="import-go"]');
+  pasteInto("line\n".repeat(400));
   await settle(); await settle();
+  press(root, '[data-skl="import-ask"]');
+  await settle();
   const [words, attachments] = asked();
   expect(words).toBe("請幫我把附上的文字做成團隊技能。");
   expect(attachments).toEqual([{ name: "pasted-text.md", mime: "text/markdown", data: btoa("line\n".repeat(400)) }]);
@@ -539,6 +545,9 @@ test("a long pasted text goes as a file beside the message, and a dropped file i
   dropOn(root, { files: [new File(["%PDF-1.4"], "guide.pdf", { type: "application/pdf" })] });
   await settle(); await settle(); await settle();
   imported({ file: { name: "guide.pdf", data: btoa("%PDF-1.4") } });
+  expect(document.querySelector(".skl-notice")?.textContent).toBe("這是一份文件，不是技能。拉斐爾可以讀完後幫你做成技能。");
+  press(root, '[data-skl="import-ask"]');
+  await settle();
   expect(asked()).toEqual(["請幫我把這個檔案做成團隊技能：guide.pdf", [{ name: "guide.pdf", mime: "application/pdf", data: btoa("%PDF-1.4") }]]);
   expect(document.querySelector(".skl-dlg")).toBeNull();
 });
@@ -546,23 +555,132 @@ test("a long pasted text goes as a file beside the message, and a dropped file i
 test("a hand-off still being answered is not sent twice: the dialog stays and says so", async () => {
   handOff.mockReturnValueOnce(false);
   const { root } = await handedOver({ kind: "link", label: "https://example.com/a", address: "https://example.com/a" });
-  textarea(root).value = "https://example.com/a";
+  typeLine("https://example.com/a");
   press(root, '[data-skl="import-go"]');
   await settle(); await settle();
+  press(root, '[data-skl="import-ask"]');
+  await settle();
   expect(document.querySelector(".skl-dlg")).not.toBeNull();
   expect(document.querySelector(".skl-error")?.textContent).toBe("上一份還在處理中，等處理完再試一次。");
-  expect(textarea(root).value).toBe("https://example.com/a");
-  expect(document.querySelector<HTMLButtonElement>('[data-skl="import-go"]')?.disabled).toBe(false);
+  expect(line().value).toBe("https://example.com/a");
 });
 
 test("what follows the rules imports in the dialog with no hand-off, and the new package is the answer", async () => {
   const { root } = await setupBox();
-  textarea(root).value = "owner/slides";
+  typeLine("owner/slides");
   press(root, '[data-skl="import-go"]');
   await settle(); await settle();
   expect(handOff).not.toHaveBeenCalled();
   expect(document.querySelector(".skl-dlg")).toBeNull();
   expect(root.querySelector('[data-skl-page="pack:9"]')).not.toBeNull();
+});
+
+test.each([
+  [{ source: "local:C:\\Users\\a\\skills\\pstack\\SKILL.md" }, "pstack"], [{ source: "local:/Users/a/skills/pstack" }, "pstack"],
+  [{ text: "owner/repo" }, "repo"], [{ text: "https://github.com/owner/desk-kit/tree/main/skills" }, "desk-kit"], [{ text: "https://skills.sh/owner/repo/skill" }, "repo"],
+  [{ text: "git@gitlab.example.com:group/handbook.git" }, "handbook"], [{ text: "https://gitlab.example.com/group/handbook" }, "handbook"],
+  [{ text: "---\nname: travel\ndescription: x\n---\nBody" }, "travel"], [{ text: "---\ndescription: x\n---\nBody" }, ""],
+  [{ file: { name: "pstack.zip", data: "" } }, "pstack.zip"], [{ files: [{ path: "notes/a.md" }, { path: "notes/b.md" }] }, "notes"], [{ files: [{ path: "a.md" }, { path: "b.md" }] }, ""],
+])("the dialog names what is imported by its own name: %j", (params, name) => {
+  expect(sourceName(params)).toBe(name);
+});
+
+test("an import under way turns the dialog into progress: the title names the source, a bar and one step line, and 取消 is the only way out", async () => {
+  let finish: (value: unknown) => void = () => {};
+  const { root, library } = await setupBox(method => method === "skills.library.import" ? new Promise(resolve => { finish = resolve; }) : undefined);
+  typeLine("https://github.com/owner/slow-import");
+  press(root, '[data-skl="import-go"]');
+  const dialog = document.querySelector(".skl-dlg")!;
+  expect(dialog.querySelector("h2")?.textContent).toBe("正在匯入 slow-import");
+  expect(dialog.querySelector(".skl-bar")?.getAttribute("role")).toBe("progressbar");
+  expect(dialog.querySelector(".skl-step")?.textContent).toBe("取得檔案");
+  expect(dialog.querySelector("#skl-input, .skl-zone, .skl-error")).toBeNull();
+  // The core says where it is, by this import's id: the bar moves and the line says the skill it reads.
+  library.follow({ type: "SkillImportProgress", import_id: importId(), step: "read", done: 3, total: 7 });
+  expect(dialog.querySelector(".skl-step")?.textContent).toBe("讀取技能 3 / 7");
+  expect(dialog.querySelector(".skl-bar")?.getAttribute("aria-valuenow")).toBe("47");
+  library.follow({ type: "SkillImportProgress", import_id: "another-import", step: "install", done: null, total: null });
+  expect(dialog.querySelector(".skl-step")?.textContent).toBe("讀取技能 3 / 7");
+  // Nothing leaves the dialog but 取消: the × is gone, and Esc and the backdrop do nothing.
+  expect(dialog.classList.contains("is-working")).toBe(true);
+  expect([...dialog.querySelectorAll<HTMLElement>("button")].map(button => button.dataset.skl ?? button.dataset.dlg)).toEqual(["close", "import-cancel"]);
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  press(root, '.skl-dlg [data-dlg="close"]');
+  expect(document.querySelector(".skl-dlg")).not.toBeNull();
+  // The library's last step cannot be stopped.
+  library.follow({ type: "SkillImportProgress", import_id: importId(), step: "install", done: null, total: null });
+  expect(dialog.querySelector(".skl-step")?.textContent).toBe("安裝");
+  expect(dialog.querySelector<HTMLButtonElement>('[data-skl="import-cancel"]')?.disabled).toBe(true);
+  finish({ package: { ...packages()[2], key: "skill:9", name: "owner" } });
+  await settle(); await settle();
+  // What landed closes the dialog; opened again it is the importer.
+  expect(document.querySelector(".skl-dlg")).toBeNull();
+  openBox(root);
+  expect(document.querySelector(".skl-bar")).toBeNull();
+  expect(document.querySelector(".skl-zone")).not.toBeNull();
+});
+
+test("取消 stops the import: the core is asked by its id, and the dialog is the importer again with the address kept", async () => {
+  let fail: (error: Error) => void = () => {};
+  const { root, info } = await setupBox((method, params) => {
+    if (method === "skills.library.import") return new Promise((_, reject) => { fail = reject; });
+    if (method === "skills.library.cancel_import") { fail(new Error("[-32602] Invalid params: cancelled: the import was stopped")); return { cancelled: true, ...params }; }
+    return undefined;
+  });
+  typeLine("owner/slow-import");
+  press(root, '[data-skl="import-go"]');
+  const id = importId();
+  press(root, '[data-skl="import-cancel"]');
+  await settle(); await settle();
+  expect(api.core).toHaveBeenCalledWith("skills.library.cancel_import", { import_id: id });
+  expect(document.querySelector(".skl-bar")).toBeNull();
+  expect(document.querySelector(".skl-dlg h2")?.textContent).toBe("匯入技能");
+  expect(line().value).toBe("owner/slow-import");
+  // It is not a failure: nothing is said of it, and the × is back.
+  expect(document.querySelector(".skl-error")).toBeNull();
+  expect(info).not.toHaveBeenCalled();
+  press(root, '.skl-dlg [data-dlg="close"]');
+  expect(document.querySelector(".skl-dlg")).toBeNull();
+  expect(root.querySelectorAll(".skl-pack")).toHaveLength(3);
+});
+
+test("a cancel that comes too late for the core leaves the import to land as it would have", async () => {
+  let finish: (value: unknown) => void = () => {};
+  const { root, state } = await setupBox(method => {
+    if (method === "skills.library.import") return new Promise(resolve => { finish = resolve; });
+    if (method === "skills.library.cancel_import") return { cancelled: false };
+    return undefined;
+  });
+  typeLine("owner/slides");
+  press(root, '[data-skl="import-go"]');
+  press(root, '[data-skl="import-cancel"]');
+  await settle(); await settle();
+  expect(document.querySelector(".skl-bar")).not.toBeNull();
+  state.packages = [...state.packages, made];
+  finish({ package: made });
+  await settle(); await settle();
+  expect(document.querySelector(".skl-dlg")).toBeNull();
+  expect(root.querySelector('.skl-page[data-skl-page="pack:9"]')).not.toBeNull();
+});
+
+test("a skill pasted as text that names other files says so, asks for its folder, and may still be imported as the text it is", async () => {
+  const text = "---\nname: lazy-mode\ndescription: x\n---\nRead [how](actions/how.md).";
+  const needs = new Error(`[-32602] Invalid params: source: this text names other files [[${JSON.stringify({ reason: "needs_files", file: "actions/how.md", files: ["actions/how.md"] })}]]`);
+  let again = false;
+  const { root } = await setupBox((method, params) => {
+    if (method !== "skills.library.import") return undefined;
+    if (params.alone) { again = true; return undefined; }
+    throw needs;
+  });
+  pasteInto(text);
+  await settle(); await settle();
+  expect(document.querySelector(".skl-error")?.textContent).toContain("這份技能提到了別的檔案（actions/how.md），只貼文字帶不進來。請改選技能所在的資料夾。");
+  expect(document.querySelector(".skl-zone")).not.toBeNull();
+  press(root, '[data-skl="import-alone"]');
+  await settle(); await settle();
+  expect(again).toBe(true);
+  imported({ text, alone: true });
+  expect(document.querySelector(".skl-dlg")).toBeNull();
 });
 
 test.each([
@@ -572,23 +690,6 @@ test.each([
   ["owner/repo", ""], ["https://github.com/owner/repo", ""], ["https://skills.sh/owner/repo", ""], ["C:\\Users\\a\\skills", ""], ["how to use git@host:a today", ""],
 ])("an address is said by its host while it is fetched: %s", (address, host) => {
   expect(gitHost(address)).toBe(host);
-});
-
-test("a fetch says in place what it is doing, in the row of 選擇檔案 where nothing moves, and a failure says what to do", async () => {
-  let fail: (error: Error) => void = () => {};
-  const { root } = await setupBox(method => method === "skills.library.import" ? new Promise((_, reject) => { fail = reject; }) : undefined);
-  const row = () => root.querySelector(".skl-import-row")!;
-  expect(row().querySelector(".skl-progress")?.textContent).toBe("");
-  textarea(root).value = "git@gitlab.example.com:group/repo.git";
-  press(root, '[data-skl="import-go"]');
-  expect(row().querySelector('.skl-progress[role="status"]')?.textContent).toBe("正在從 gitlab.example.com 取得…");
-  expect(root.querySelector<HTMLButtonElement>('[data-skl="import-go"]')?.disabled).toBe(true);
-  expect(textarea(root).disabled).toBe(true);
-  fail(new Error('[-32602] Invalid params: download: git could not [[{"reason":"git_network","host":"gitlab.example.com"}]]'));
-  await settle(); await settle();
-  expect(root.querySelector(".skl-error")?.textContent).toBe("連不上 gitlab.example.com。如果它是公司的伺服器，請先連上公司 VPN，再試一次。");
-  expect(root.querySelector(".skl-progress")?.textContent).toBe("");
-  expect(textarea(root).value).toBe("git@gitlab.example.com:group/repo.git");
 });
 
 test.each([
@@ -610,7 +711,7 @@ test("a cause the core names leads its message and is said in words", async () =
   expect(failureText(new Error("the core is not running"))).toBe("沒有成功，請再試一次。");
   const { root } = await setup(method => { if (method === "skills.library.import") throw new Error("[-32602] Invalid params: not_found: no SKILL.md found"); return {}; });
   openBox(root);
-  textarea(root).value = "nothing/here";
+  typeLine("nothing/here");
   press(root, '[data-skl="import-go"]');
   await settle(); await settle();
   expect(document.querySelector(".skl-import .skl-error")?.textContent).toBe("裡面找不到 SKILL.md。");
@@ -674,7 +775,7 @@ test("a name that is taken says which package holds it, and an import that left 
   const { root } = await setup(method => method === "skills.library.import"
     ? { package: made, skipped: [{ name: "tdd", held_by: "pstack" }, { name: "plan", held_by: "" }] } : {});
   openBox(root);
-  textarea(root).value = "owner/new";
+  typeLine("owner/new");
   press(root, '[data-skl="import-go"]');
   await settle(); await settle();
   const note = root.querySelector(".skl-skipped")!;
@@ -718,28 +819,6 @@ test("a clash names the skill and the package on both sides", () => {
     .toBe("「tools.zip」裡已有同名的「tdd」（可能已停用）。請先在團隊技能中重新命名或刪除那個技能。");
   expect(failureText(refused("taken", "clash", { skill: "tdd", held_by: "tools.zip", off: false, incoming: "more.zip" })))
     .toBe("「tools.zip」裡已有名為「tdd」的技能，「more.zip」也帶來一個同名的。請在團隊技能中重新命名或刪除其中一個。");
-});
-
-test("an import under way says so under the card, and a file over the window's limit is not sent", async () => {
-  let finish: (value: unknown) => void = () => {};
-  const { root } = await setup(method => method === "skills.library.import" ? new Promise(resolve => { finish = resolve; }) : {});
-  openBox(root);
-  textarea(root).value = "owner/skills";
-  press(root, '[data-skl="import-go"]');
-  expect(document.querySelector('.skl-import .skl-progress[role="status"]')?.textContent).toBe("匯入中…");
-  expect(document.querySelector<HTMLButtonElement>('[data-skl="import-go"]')?.disabled).toBe(true);
-  finish({ package: { ...packages()[2], key: "skill:9", name: "owner" } });
-  await settle(); await settle();
-  // What landed closes the dialog; opened again it is free.
-  expect(document.querySelector(".skl-dlg")).toBeNull();
-  openBox(root);
-  expect(document.querySelector(".skl-progress")?.textContent).toBe("");
-  const input = document.querySelector<HTMLInputElement>("#skl-file")!;
-  Object.defineProperty(input, "files", { configurable: true, value: [{ name: "huge.zip", size: 129 * 1024 * 1024 }] });
-  input.dispatchEvent(new Event("change", { bubbles: true }));
-  await settle();
-  expect(api.core).not.toHaveBeenCalledWith("skills.library.import", expect.objectContaining({ file: expect.anything() }));
-  expect(document.querySelector(".skl-error")?.textContent).toBe("huge.zip 有 129.0 MB，視窗最多送出 128.0 MB。請改選它所在的資料夾。");
 });
 
 /** A pack's skill's page, where its title can become a field. */
