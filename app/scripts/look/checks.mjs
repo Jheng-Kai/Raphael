@@ -13398,7 +13398,8 @@ export function checkFrame(name) {
     // An HTML page that writes no style of its own is drawn by the app's base style (core agent/page_style.py, R-PAGE-06): a document
     // page, in type, table, note, contents box, tabs, cards and figures; and its one rule of its own (h3) wins over it.
     const body = style("body");
-    require(body.backgroundColor === words.bg && body.color === words.fg, `the theme's page: ${body.color} on ${body.backgroundColor}`);
+    // The theme's words, and no colour painted on the body by the window (R-PAGE-10): the canvas, which follows the colour scheme, is the page's ground.
+    require(body.backgroundColor === "rgba(0, 0, 0, 0)" && body.color === words.fg, `the theme's page: ${body.color} on ${body.backgroundColor}`);
     require(body.lineHeight === "24px" && body.fontSize === "15px", `readable type, 15 px on 1.6: ${body.fontSize} / ${body.lineHeight}`);
     require(style("h1").fontSize === "32px" && style("h1").fontWeight === "600" && style("h2").fontSize === "22px", `a 32 px title and 22 px sections: ${style("h1").fontSize}, ${style("h2").fontSize}`);
     require(style("h3").fontSize === "19px", `the page's own rule wins over the base's 17 px: ${style("h3").fontSize}`);
