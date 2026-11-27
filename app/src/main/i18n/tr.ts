@@ -969,7 +969,6 @@ export const tr = {
   "providers.removeHint": "Sağlayıcı yeniden eklenene kadar modelleri kullanılamaz.",
   "providers.close": "Kapat",
   "common.close": "Kapat",
-  "providers.models": "Bulunan modeller",
   "providers.required": "Zorunlu alanları doldurup geçerli http(s) adresi kullanın.",
   "providers.keyOptional": "API anahtarı (isteğe bağlı)",
   "services.keyOptional": "API anahtarı (isteğe bağlı)",

@@ -969,7 +969,6 @@ export const fr = {
   "providers.removeHint": "Ses modèles ne pourront plus être utilisés tant qu’il n’est pas ajouté de nouveau.",
   "providers.close": "Fermer",
   "common.close": "Fermer",
-  "providers.models": "Modèles découverts",
   "providers.required": "Remplissez les champs requis avec une adresse http(s) valide.",
   "providers.keyOptional": "Clé API (facultative)",
   "services.keyOptional": "Clé API (facultative)",

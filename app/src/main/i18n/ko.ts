@@ -969,7 +969,6 @@ export const ko = {
   "providers.removeHint": "다시 추가하기 전까지 이 제공업체의 모델을 사용할 수 없습니다.",
   "providers.close": "닫기",
   "common.close": "닫기",
-  "providers.models": "발견된 모델",
   "providers.required": "필수 항목을 채우고 유효한 http(s) 주소를 사용하세요.",
   "providers.keyOptional": "API 키 (선택 사항)",
   "services.keyOptional": "API 키 (선택 사항)",

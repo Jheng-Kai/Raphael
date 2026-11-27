@@ -969,7 +969,6 @@ export const de = {
   "providers.removeHint": "Seine Modelle lassen sich erst wieder nutzen, wenn der Anbieter erneut hinzugefügt wird.",
   "providers.close": "Schließen",
   "common.close": "Schließen",
-  "providers.models": "Gefundene Modelle",
   "providers.required": "Pflichtfelder ausfüllen und gültige http(s)-Adresse verwenden.",
   "providers.keyOptional": "API-Schlüssel (optional)",
   "services.keyOptional": "API-Schlüssel (optional)",

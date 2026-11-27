@@ -669,7 +669,6 @@ export const ja = {
   "providers.removeHint": "再び追加するまで、このプロバイダーのモデルは使えなくなります。",
   "providers.close": "閉じる",
   "providers.retry": "再試行",
-  "providers.models": "見つかったモデル",
   "providers.search": "モデルを検索",
   "providers.required": "必須項目を入力し、有効な http(s) アドレスを指定してください。",
   "providers.keyOptional": "API キー（任意）",

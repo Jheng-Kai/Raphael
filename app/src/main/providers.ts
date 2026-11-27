@@ -116,7 +116,8 @@ function dialogHTML(v: ProvidersView, lead = ""): string {
           `<label class="field"><textarea id="${esc(inputId(v, field))}" rows="3" autocomplete="off" spellcheck="false" aria-label="${esc(t("providers.pasteAccount"))}" placeholder="${esc(t("providers.pasteAccount"))}"${disabled}></textarea></label></div>`
       : field === "region" || field === "location"
         ? sel(value ? choicesFor(field) : [{ value: "", label: t("providers.unchanged") }, ...choicesFor(field)], value, title, ` id="${esc(inputId(v, field))}" data-pv="field" data-pv-field="${field}" data-value="${esc(value)}"${disabled}`)
-        : fieldHTML(title, value, { id: inputId(v, field), type: secret(field) ? "password" : "text", disabled: v.busy });
+        // The label above the field says what it is: a placeholder that repeats it says nothing twice.
+        : fieldHTML("", value, { id: inputId(v, field), label: title, type: secret(field) ? "password" : "text", disabled: v.busy });
     const getKey = field === credentialField(kind) && kind.docs_url && kind.group !== "local" ? btn(esc(t("providers.getKey")), "pv-link", ` data-pv="docs" data-k="pv-docs"${disabled}`) : "";
     return `<div class="pv-field"><div class="pv-label-row"><label class="pv-label" for="${esc(inputId(v, field))}">${esc(title)}</label>${getKey}</div><div class="svc-line">${control}</div></div>`;
   }).join("");
@@ -145,7 +146,8 @@ function feedbackHTML(v: ProvidersView): string {
 function modelsHTML(v: ProvidersView): string {
   if (v.models === "failed") return `<p class="note">${esc(t("providers.error"))}</p>`;
   if (!Array.isArray(v.models) || !v.models.length) return "";
-  return `<section class="pv-models"><h3>${esc(t("providers.models"))}</h3>` +
+  // The test's line above says "found N models": the list needs no heading of its own.
+  return `<section class="pv-models">` +
     (v.models.length > 10 ? fieldHTML(t("providers.search"), v.query, { id: "pv-model-search", icon: "search" }) : "") +
     `<div class="pv-model-list">${modelListHTML(v)}</div></section>`;
 }

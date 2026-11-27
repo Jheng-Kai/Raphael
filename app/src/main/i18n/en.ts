@@ -669,7 +669,6 @@ export const en = {
   "providers.removeHint": "Its models cannot be used until you add it again.",
   "providers.close": "Close",
   "providers.retry": "Retry",
-  "providers.models": "Discovered models",
   "providers.search": "Search models",
   "providers.required": "Complete the required fields and use a valid http(s) address.",
   "providers.keyOptional": "API key (optional)",

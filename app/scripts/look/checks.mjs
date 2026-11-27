@@ -9606,6 +9606,12 @@ export function checkRendered(name, context = {}) {
     require(column.width >= box.width - 40, `the column fills the dialog: ${column.width} of ${box.width}`);
     const fields = [...dialog.querySelectorAll(".pv-field")];
     require(fields.length >= 1 && fields.every(field => Math.abs(field.getBoundingClientRect().left - column.left) < 1 && Math.abs(field.getBoundingClientRect().width - column.width) < 1), "every field is as wide as the column");
+    // A word is said once: no field repeats its label as its placeholder, and the models have no heading under the test's line.
+    for (const input of dialog.querySelectorAll(".pv-field input")) {
+      const label = dialog.querySelector(`label[for="${input.id}"]`)?.textContent.trim();
+      require(!input.placeholder || input.placeholder !== label, `a field's placeholder repeats its label: ${label}`);
+    }
+    require(!dialog.querySelector(".pv-models h3, .pv-models-host h3"), "the models have no heading of their own");
     const foot = dialog.querySelector(".pv-footer"), buttons = [...foot.querySelectorAll(".btn")];
     require(["test", "save"].every(action => buttons.some(button => button.dataset.pv === action)), "測試連線 and 儲存 are in the foot");
     require(Math.abs(foot.getBoundingClientRect().bottom - box.bottom) < 2, "the foot closes the dialog");

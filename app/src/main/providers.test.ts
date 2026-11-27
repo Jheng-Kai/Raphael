@@ -513,6 +513,26 @@ test.each(["zh-TW", "en", "ja"] as const)("%s: the dialog never tells the user t
   expect(root.querySelector(".pv-feedback")?.textContent).toBe("");
 });
 
+test.each(["zh-TW", "en", "ja"] as const)("%s: no field repeats its label as its placeholder, and the models carry no heading after the test's line", async (locale) => {
+  setLocale(locale);
+  const local = { kind: "ollama", name: "Ollama", group: "local", fields: ["base_url", "key"], default_base_url: "http://localhost:11434/v1", available: true };
+  api.providersList.mockResolvedValue({ providers: [] });
+  api.providersKinds.mockResolvedValue({ kinds: [local, kinds[0]] });
+  const panel = mount(); await panel.load(); connect('[data-pv="add"][data-id="ollama"]');
+  const inputs = [...root.querySelectorAll<HTMLInputElement>("#pv-dialog .pv-field input")];
+  expect(inputs.length).toBe(3);
+  for (const input of inputs) {
+    const label = root.querySelector(`label[for="${input.id}"]`)!.textContent!.trim();
+    expect(input.placeholder, label).toBe("");
+    expect(input.getAttribute("aria-label"), label).toBe(label);
+  }
+  api.providersTest.mockResolvedValue({ ok: true, models: 1, found: [{ id: "a", name: "A", context: 8192 }] });
+  click('[data-pv="test"]'); await flush();
+  const host = root.querySelector(".pv-models-host")!;
+  expect(host.textContent).toContain("A");
+  expect(host.querySelector("h3, h2, h4")).toBeNull();
+});
+
 test("the editor is one narrow column: fields, the result, then the foot, with the key's page beside its field as plain text", async () => {
   api.providersList.mockResolvedValue({ providers: [] });
   api.providersKinds.mockResolvedValue({ kinds: [{ ...kinds[0], docs_url: "https://platform.openai.com/keys" }] });

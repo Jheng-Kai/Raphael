@@ -969,7 +969,6 @@ export const zhCN = {
   "providers.removeHint": "移除后，它的模型将无法再使用，需重新添加才能用。",
   "providers.close": "关闭",
   "common.close": "关闭",
-  "providers.models": "找到的模型",
   "providers.required": "请填写所需字段，并使用有效的 http(s) 地址。",
   "providers.keyOptional": "API 密钥（选填）",
   "services.keyOptional": "API 密钥（选填）",

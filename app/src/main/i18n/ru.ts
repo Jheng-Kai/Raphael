@@ -969,7 +969,6 @@ export const ru = {
   "providers.removeHint": "Модели этого провайдера будут недоступны, пока вы не добавите его снова.",
   "providers.close": "Закрыть",
   "common.close": "Закрыть",
-  "providers.models": "Найденные модели",
   "providers.required": "Заполните обязательные поля и укажите верный адрес http(s).",
   "providers.keyOptional": "Ключ API (необязательно)",
   "services.keyOptional": "Ключ API (необязательно)",

@@ -969,7 +969,6 @@ export const ptBR = {
   "providers.removeHint": "Os modelos dele não poderão ser usados até que seja adicionado novamente.",
   "providers.close": "Fechar",
   "common.close": "Fechar",
-  "providers.models": "Modelos encontrados",
   "providers.required": "Preencha os campos obrigatórios e use um endereço http(s) válido.",
   "providers.keyOptional": "Chave API (opcional)",
   "services.keyOptional": "Chave API (opcional)",

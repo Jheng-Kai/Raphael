@@ -69,7 +69,6 @@
 .pv-account textarea { width: 100%; min-width: 0; resize: vertical; font: inherit; color: inherit; background: transparent; border: 0; outline: 0; }
 .pv-context-warning { grid-column: 1 / -1; justify-self: start; border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
 .pv-models { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-width: 0; }
-.pv-models h3 { margin: 0; font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text-2); }
 .pv-models > .field { width: 100%; }
 .pv-model-list { max-height: 220px; overflow-y: auto; overflow-x: hidden; }
 .pv-model-list ul { list-style: none; margin: 0; padding: 0; }

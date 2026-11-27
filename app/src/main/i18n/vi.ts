@@ -969,7 +969,6 @@ export const vi = {
   "providers.removeHint": "Các mô hình của nhà cung cấp này sẽ không dùng được cho đến khi thêm lại.",
   "providers.close": "Đóng",
   "common.close": "Đóng",
-  "providers.models": "Mô hình tìm thấy",
   "providers.required": "Điền trường bắt buộc và dùng địa chỉ http(s) hợp lệ.",
   "providers.keyOptional": "Khóa API (không bắt buộc)",
   "services.keyOptional": "Khóa API (không bắt buộc)",

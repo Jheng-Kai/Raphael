@@ -668,7 +668,6 @@ export const zhTW = {
   "providers.removeHint": "移除後，它的模型就不能再用，要用得重新加入。",
   "providers.close": "關閉",
   "providers.retry": "重試",
-  "providers.models": "找到的模型",
   "providers.search": "搜尋模型",
   "providers.required": "請填寫所需欄位，並使用有效的 http(s) 位址。",
   "providers.keyOptional": "API 金鑰（選填）",

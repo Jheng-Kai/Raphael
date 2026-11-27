@@ -969,7 +969,6 @@ export const th = {
   "providers.removeHint": "จะใช้โมเดลของผู้ให้บริการนี้ไม่ได้จนกว่าจะเพิ่มใหม่",
   "providers.close": "ปิด",
   "common.close": "ปิด",
-  "providers.models": "โมเดลที่พบ",
   "providers.required": "กรอกช่องที่จำเป็นและใช้ที่อยู่ http(s) ที่ถูกต้อง",
   "providers.keyOptional": "คีย์ API (ไม่บังคับ)",
   "services.keyOptional": "คีย์ API (ไม่บังคับ)",

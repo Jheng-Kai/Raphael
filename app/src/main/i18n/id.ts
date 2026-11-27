@@ -969,7 +969,6 @@ export const id = {
   "providers.removeHint": "Model penyedia ini tidak dapat digunakan sampai ditambahkan lagi.",
   "providers.close": "Tutup",
   "common.close": "Tutup",
-  "providers.models": "Model ditemukan",
   "providers.required": "Lengkapi kolom wajib dan gunakan alamat http(s) valid.",
   "providers.keyOptional": "Kunci API (opsional)",
   "services.keyOptional": "Kunci API (opsional)",
