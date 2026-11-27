@@ -1,7 +1,7 @@
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
-import { messageUrl, tablePlainText } from "./message-content";
+import { messageUrl, tablePlainText, toggleStates } from "./message-content";
 import { mountMessagePaths } from "./message-paths";
 import { copyButton, esc, iconButton, toaster } from "./ui";
 import { type DiagramZoom, mountDiagramZoom } from "./diagram-zoom";
@@ -219,6 +219,13 @@ function colorsOf(root: HTMLElement): Record<string, string> {
 export function mountRichContent(root: HTMLElement): void {
   // Establish container metrics at mount; mutations only use the cached reading state.
   readingAnchor(root);
+  // A toggle the owner opens or closes stays so while the thread is drawn again around it.
+  root.addEventListener("toggle", event => {
+    const toggle = event.target;
+    if (!(toggle instanceof HTMLDetailsElement) || !toggle.matches(".message-details, .owner-details") || !toggle.dataset.source) return;
+    if (toggleStates.size >= 200) toggleStates.delete(toggleStates.keys().next().value!);
+    toggleStates.set(toggle.dataset.source, toggle.open);
+  }, true);
   const checkPaths = mountMessagePaths(root);
   const states = new WeakMap<HTMLElement, string>();
   const themes = new WeakMap<HTMLElement, number>();

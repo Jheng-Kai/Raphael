@@ -68,3 +68,15 @@ export function tableCells(line: string): string[] {
   cells.push(cell.trim()); return cells;
 }
 
+
+/** An inline equation `$…$` starting at `at` (Pandoc's rule: no space inside its edges, no digit straight after it): where it ends, or -1. */
+export function mathEnd(text: string, at: number): number {
+  const next = text[at + 1];
+  if (!next || /\s/.test(next) || next === "$") return -1;
+  for (let end = at + 1; end < text.length; end++) {
+    if (text[end] === "\\") { end++; continue; }
+    if (text[end] !== "$") continue;
+    return end > at + 1 && !/\s/.test(text[end - 1]!) && !/\d/.test(text[end + 1] ?? "") ? end : -1;
+  }
+  return -1;
+}
