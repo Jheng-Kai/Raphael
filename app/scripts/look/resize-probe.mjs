@@ -24,8 +24,36 @@ import { summarizeTrace } from "./drag-probe.mjs";
  *
  * `toggle` instead of an edge opens and closes a pane (the list: "sidebar", the panel: a selector to press) and measures the same.
  * `limits` fails the step. Throws an error that carries `assertion`.
+ *
+ * A drag that misses only a timing limit is measured once more on the same page (the edge went out and back, a toggle closed
+ * again): a PC busy with other work misses a frame budget now and then (1920-wide drags at 16-18 ms under a loaded verify, 5-14 ms
+ * alone), while a real regression misses it twice. What the owner sees (rewraps, drift, overflow, flicker) is never measured again.
  */
-export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = [], everyWord = false, anchor = false, shots = 0, step = 24, limits = {}, ...rest }, directory) {
+export async function resizeProbe(page, options, directory) {
+  const limits = options.limits ?? {};
+  let result = await measureResize(page, options, directory), missed = overLimits(result, limits);
+  if (onlyTiming(missed)) {
+    const first = Object.fromEntries(missed.map(name => [name, result[name]]));
+    result = { ...(await measureResize(page, options, directory)), firstTry: first };
+    missed = overLimits(result, limits);
+  }
+  if (missed.length) {
+    const problems = missed.map(name => `${name} ${JSON.stringify(result[name])} > ${limits[name]}`);
+    throw Object.assign(new Error(`Resizing a pane stalls or shakes: ${problems.join("; ")} | ${JSON.stringify({ ...result, perText: undefined })}`), { assertion: result });
+  }
+  return result;
+}
+
+/** The limits a frame's timing sets, which depend on what else the PC is doing; every other limit is what the screen shows. */
+export const TIMING_LIMITS = new Set(["workMsMax", "workMsP95", "framesOver20", "framesOver25", "framesOver50"]);
+
+/** The names of the limits `result` is over. */
+export const overLimits = (result, limits) => Object.entries(limits).filter(([name, limit]) => result[name] > limit).map(([name]) => name);
+
+/** Whether the limits missed are all timing ones, the only kind measured a second time. */
+export const onlyTiming = missed => missed.length > 0 && missed.every(name => TIMING_LIMITS.has(name));
+
+async function measureResize(page, { edge, dx, moves = 60, toggle, watch = [], everyWord = false, anchor = false, shots = 0, step = 24, ...rest }, directory) {
   // `LOOK_RESIZE_THROTTLE=4` slows the page's CPU four times, as a PC with a quarter of this one's speed.
   const throttle = Number(process.env.LOOK_RESIZE_THROTTLE) || rest.throttle || 1;
   await page.waitForFunction(() => {
@@ -372,8 +400,5 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
       });
     }
   }
-  const problems = [];
-  for (const [name, limit] of Object.entries(limits)) if (result[name] > limit) problems.push(`${name} ${JSON.stringify(result[name])} > ${limit}`);
-  if (problems.length) throw Object.assign(new Error(`Resizing a pane stalls or shakes: ${problems.join("; ")} | ${JSON.stringify({ ...result, perText: undefined })}`), { assertion: result });
   return result;
 }
