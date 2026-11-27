@@ -28,6 +28,8 @@ export interface ProvidersView {
   fieldValues?: Partial<Record<"region" | "location", string>>;
   dirty: boolean;
   canSave?: boolean;
+  /** The form can be sent as it stands: a saved provider needs no change to be tested. */
+  canTest?: boolean;
   testing?: boolean;
 }
 export const emptyProvidersView = (): ProvidersView => ({ providers: [], kinds: [], state: "loading", busy: false, open: null, error: null, result: null, models: [], query: "", dirty: false });
@@ -55,6 +57,10 @@ const fitsRole = (kind: ProviderKind, role = ""): boolean => !ROLE_NEEDS[role] |
 const GROUP_NOTES = { official: () => t("providers.officialNote"), gateway: () => t("providers.gatewayNote"), local: () => t("providers.localNote") };
 const POPULAR = ["openrouter", "litellm", "portkey", "vercel"];
 const allowsMultiple = (kind: ProviderKind): boolean => kind.group === "local" || ["openai_compatible", "litellm", "bifrost"].includes(kind.kind);
+/** The kinds the core connects without a key (OPTIONAL_KEY_KINDS): a server on this computer and the self-hosted gateways. */
+const keyOptional = allowsMultiple;
+/** The field that holds the credential, beside which the page for getting one is offered. */
+const credentialField = (kind: ProviderKind): ProviderField | undefined => kind.fields.find(secret);
 /** What a provider is, in one line: its official API, a model gateway, a cloud host or a server on this computer. */
 export function description(kind: ProviderKind): string {
   if (kind.kind === "openai_compatible") return t("providers.compatibleNote");
@@ -101,7 +107,7 @@ function dialogHTML(v: ProvidersView, lead = ""): string {
   const provider = providerOf(v);
   const disabled = v.busy ? " disabled" : "";
   const fields = (["name", ...kind.fields] as (ProviderField | "name")[]).map((field) => {
-    const title = field === "key" && kind.kind === "bedrock" ? t("providers.secret") : field === "key" && kind.kind === "openai_compatible" ? t("providers.keyOptional") : FIELD_TITLES[field]();
+    const title = field === "key" && kind.kind === "bedrock" ? t("providers.secret") : field === "key" && keyOptional(kind) ? t("providers.keyOptional") : FIELD_TITLES[field]();
     const value = field === "name" ? provider?.name ?? kind.name : field === "base_url" ? provider?.base_url ?? kind.default_base_url ?? "" : field === "region" || field === "location" ? v.fieldValues?.[field] ?? (v.open!.id ? "" : field === "region" ? "us-east-1" : "us-central1") : "";
     const control = secret(field) && (provider?.has_key && !v.open!.replacing || field === "service_account" && v.accountSet)
       ? `<span class="val">${esc(t("providers.set"))}</span>${btn(esc(t("providers.replace")), "", ` data-pv="replace" data-k="pv-replace-${field}"${disabled}`)}`
@@ -111,35 +117,41 @@ function dialogHTML(v: ProvidersView, lead = ""): string {
       : field === "region" || field === "location"
         ? sel(value ? choicesFor(field) : [{ value: "", label: t("providers.unchanged") }, ...choicesFor(field)], value, title, ` id="${esc(inputId(v, field))}" data-pv="field" data-pv-field="${field}" data-value="${esc(value)}"${disabled}`)
         : fieldHTML(title, value, { id: inputId(v, field), type: secret(field) ? "password" : "text", disabled: v.busy });
-    return `<div class="pv-field"><label class="pv-label" for="${esc(inputId(v, field))}">${esc(title)}</label><div class="svc-line">${control}</div></div>`;
+    const getKey = field === credentialField(kind) && kind.docs_url && kind.group !== "local" ? btn(esc(t("providers.getKey")), "pv-link", ` data-pv="docs" data-k="pv-docs"${disabled}`) : "";
+    return `<div class="pv-field"><div class="pv-label-row"><label class="pv-label" for="${esc(inputId(v, field))}">${esc(title)}</label>${getKey}</div><div class="svc-line">${control}</div></div>`;
   }).join("");
-  return `<div class="cs-scrim" data-pv="scrim" data-dialog="provider:${esc(v.adding ? "add" : v.open.id ?? kind.kind)}"><div class="cs-dialog pv-dialog pv-editor${v.adding ? " pv-catalog" : ""}" id="pv-dialog" role="dialog" aria-modal="true" aria-labelledby="pv-title" tabindex="-1" data-trap>` +
-    `<div class="cs-dlg-head">${v.open.id ? "" : backButton(t("providers.back"), ` data-pv="back" data-k="pv-back"${disabled}`)}<span class="ic">${providerMark(kind.kind)}</span><h2 id="pv-title">${esc(provider?.name ?? kind.name)}</h2><span class="sp"></span>${headerCloseButton(t("providers.close"), ' data-pv="close" data-k="pv-close" data-nav-back')}</div><div class="pv-body"><div class="pv-setup">` +
-    (kind.local_context_hint ? `<p class="note">${esc(t("providers.contextHint"))}</p>` : "") +
-    fields + (kind.docs_url ? btn(esc(t("providers.getKey")), "", ` data-pv="docs" data-k="pv-docs"${disabled}`) : "") +
-    (provider && allowsMultiple(kind) ? btn(esc(t("providers.another")), "", ` data-pv="another" data-k="pv-another"${disabled}`) : "") + (v.error ? `<p class="note" role="alert">${esc(errorText(v.error))}</p>` : "") +
-    `<section class="pv-models"><h3>${esc(t("providers.models"))}</h3>` +
-    (Array.isArray(v.models) && v.models.length > 10 ? fieldHTML(t("providers.search"), v.query, { id: "pv-model-search", icon: "search" }) : "") +
-    `<div class="pv-model-list">${modelsHTML(v)}</div></section></div></div>` +
-    `<div class="pv-feedback">${feedbackHTML(v)}</div>` +
+  return `<div class="cs-scrim" data-pv="scrim" data-dialog="provider:${esc(v.adding ? "add" : v.open.id ?? kind.kind)}"><div class="cs-dialog pv-dialog pv-editor" id="pv-dialog" role="dialog" aria-modal="true" aria-labelledby="pv-title" tabindex="-1" data-trap>` +
+    `<div class="cs-dlg-head">${v.open.id ? "" : backButton(t("providers.back"), ` data-pv="back" data-k="pv-back"${disabled}`)}<span class="ic">${providerMark(kind.kind)}</span><h2 id="pv-title">${esc(provider?.name ?? kind.name)}</h2><span class="sp"></span>${headerCloseButton(t("providers.close"), ' data-pv="close" data-k="pv-close" data-nav-back')}</div>` +
+    // One column: the fields, what the test found right under them, then the way to add another. The actions are in the foot.
+    `<div class="pv-body"><div class="pv-setup">` + fields + (v.error ? `<p class="note" role="alert">${esc(errorText(v.error))}</p>` : "") +
+    `<div class="pv-feedback">${feedbackHTML(v)}</div><div class="pv-models-host">${modelsHTML(v)}</div>` +
+    (provider && allowsMultiple(kind) ? btn(esc(t("providers.another")), "pv-link", ` data-pv="another" data-k="pv-another"${disabled}`) : "") +
+    `</div></div>` +
     `<div class="pv-footer">` +
     (v.open.id ? btn(esc(t("providers.remove")), "danger", ` data-pv="remove" data-k="pv-remove"${disabled}`) : "") +
-    `<div class="pv-footer-actions">${btn(esc(t("providers.test")), "", ` data-pv="test" data-k="pv-test"${v.busy || !v.open.id || v.dirty ? " disabled" : ""}`)}` +
+    `<div class="pv-footer-actions">${btn(esc(t("providers.test")), "", ` data-pv="test" data-k="pv-test"${v.busy || !v.canTest ? " disabled" : ""}`)}` +
     btn(esc(t("providers.save")), "pri", ` data-pv="save" data-k="pv-save"${v.busy || !v.canSave ? " disabled" : ""}`) + `</div></div></div></div>`;
 }
 
+/** What the test said, right under the fields: one line, and nothing before a test has been made. */
 function feedbackHTML(v: ProvidersView): string {
-  if (v.testing || v.result) {
-    const text = v.testing ? t("providers.testing") : v.result!.ok ? t("providers.testConnected", { p0: v.result!.models }) :
-      t(v.result!.kind === "auth" ? "providers.auth" : v.result!.kind === "offline" ? "providers.offline" : "providers.error");
-    return `<p class="pv-test-status note${v.testing ? "" : v.result!.ok ? " is-ok" : " is-error"}" role="status">${ico(v.testing ? "refresh" : v.result!.ok ? "check" : "x")}<span title="${esc(text)}">${esc(text)}</span></p>`;
-  }
-  return v.dirty || !v.open?.id ? `<p class="note">${esc(t("providers.saveFirst"))}</p>` : "";
+  if (!v.testing && !v.result) return "";
+  const text = v.testing ? t("providers.testing") : v.result!.ok ? t("providers.testConnected", { p0: v.result!.models }) :
+    t(v.result!.kind === "auth" ? "providers.auth" : v.result!.kind === "offline" ? "providers.offline" : "providers.error");
+  return `<p class="pv-test-status note${v.testing ? "" : v.result!.ok ? " is-ok" : " is-error"}" role="status">${ico(v.testing ? "refresh" : v.result!.ok ? "check" : "x")}<span title="${esc(text)}">${esc(text)}</span></p>`;
 }
 
+/** The models found: nothing at all while there are none, and never a word about saving first. */
 function modelsHTML(v: ProvidersView): string {
-  if (!Array.isArray(v.models)) return `<p class="note">${esc(t(v.models === "loading" ? "providers.loading" : "providers.error"))}</p>`;
-  if (!v.models.length) return `<p class="note">${esc(t("providers.noModels"))}</p>`;
+  if (v.models === "failed") return `<p class="note">${esc(t("providers.error"))}</p>`;
+  if (!Array.isArray(v.models) || !v.models.length) return "";
+  return `<section class="pv-models"><h3>${esc(t("providers.models"))}</h3>` +
+    (v.models.length > 10 ? fieldHTML(t("providers.search"), v.query, { id: "pv-model-search", icon: "search" }) : "") +
+    `<div class="pv-model-list">${modelListHTML(v)}</div></section>`;
+}
+
+function modelListHTML(v: ProvidersView): string {
+  if (!Array.isArray(v.models)) return "";
   const query = v.query.toLowerCase();
   return `<ul>` + v.models.filter((m) => `${m.name} ${m.id}`.toLowerCase().includes(query) || findsName([m.name, m.id], query)).map((m) =>
     `<li><span class="pv-model-name">${esc(m.name)}</span><span class="pv-model-id">${esc(m.id)}</span>${m.context_warning ? `<span class="pv-context-warning">${esc(t("providers.contextWarning"))}</span>` : ""}</li>`).join("") + `</ul>`;
@@ -180,6 +192,8 @@ export function createProviders(host: ProvidersHost) {
   let modelLoads = 0;
   let accountDraft: string | null = null;
   let accountReads = 0;
+  /** The models on screen came from a test of the form, so they say nothing once a field changes. */
+  let testedModels = false;
   function syncForm() {
     const kind = kindOf(state), open = state.open;
     if (!kind || !open) return;
@@ -198,7 +212,7 @@ export function createProviders(host: ProvidersHost) {
         continue;
       }
       const required = field === "name" || field === "base_url" || !open.id || open.replacing && secret(field);
-      if (required && !value && !(field === "key" && kind.kind === "openai_compatible")) valid = false;
+      if (required && !value && !(field === "key" && keyOptional(kind))) valid = false;
       if (field === "base_url" && value) {
         try { if (!["http:", "https:"].includes(new URL(value).protocol)) valid = false; } catch { valid = false; }
       }
@@ -208,10 +222,11 @@ export function createProviders(host: ProvidersHost) {
     }
     state.dirty = changed;
     state.canSave = valid && (!open.id || changed);
+    state.canTest = valid;
     const save = host.root.querySelector<HTMLButtonElement>('[data-pv="save"]');
     if (save) save.disabled = state.busy || !state.canSave;
     const test = host.root.querySelector<HTMLButtonElement>('[data-pv="test"]');
-    if (test) test.disabled = state.busy || !open.id || state.dirty;
+    if (test) test.disabled = state.busy || !state.canTest;
     const feedback = host.root.querySelector(".pv-feedback");
     if (feedback) feedback.innerHTML = feedbackHTML(state);
   }
@@ -265,7 +280,7 @@ export function createProviders(host: ProvidersHost) {
   }
   function show(kind: string, id: string | null) {
     accountDraft = null; accountReads++;
-    modelLoads++;
+    modelLoads++; testedModels = false;
     state = { ...state, adding: id === null, open: { kind, id, replacing: false }, error: null, result: null, testing: false, canSave: false, models: [], query: "", dirty: false, accountSet: false, fieldValues: {} };
     redraw(); host.root.querySelector<HTMLElement>("#pv-dialog")?.focus();
     if (id) void loadModels(id);
@@ -318,15 +333,61 @@ export function createProviders(host: ProvidersHost) {
     } catch { if (mine !== modelLoads || state.open?.id !== id) return; state.models = "failed"; }
     redraw();
   }
+  /** What the form says, as the core takes it. `consume` empties the secret fields (a save); a test leaves them to be saved after. */
+  function gather(consume: boolean): { patch: ProviderPatch; valid: boolean; accountError: boolean } {
+    const open = state.open!, kind = kindOf(state)!;
+    const patch: ProviderPatch = {};
+    let valid = true;
+    for (const field of ["name", ...kind.fields] as (ProviderField | "name")[]) {
+      if (field === "service_account") {
+        const area = host.root.querySelector<HTMLTextAreaElement>(".pv-account textarea");
+        const value = accountDraft ?? area?.value.trim() ?? "";
+        if (consume) {
+          if (area) area.value = "";
+          accountDraft = null; state.accountSet = false; accountReads++;
+        }
+        if (value && validAccount(value)) patch.service_account = value;
+        else if (value || !open.id || open.replacing) return { patch, valid: false, accountError: true };
+        continue;
+      }
+      const input = [...host.root.querySelectorAll<HTMLInputElement | HTMLButtonElement>(".pv-field input, .pv-field [data-pv-field]")].find((el) => el.id === inputId(state, field));
+      if (!input) continue;
+      const value = (input.dataset.pvField ? input.dataset.value ?? "" : input.value).trim();
+      if (consume && secret(field) && input instanceof HTMLInputElement) input.value = "";
+      if (field === "base_url" && value) {
+        try { const url = new URL(value); if (!["http:", "https:"].includes(url.protocol)) valid = false; }
+        catch { valid = false; }
+      }
+      const optionalKey = field === "key" && keyOptional(kind);
+      if (!value && !optionalKey && (!open.id || field === "name" || field === "base_url" || open.replacing && secret(field))) valid = false;
+      if (value || field === "base_url") patch[field] = value;
+    }
+    return { patch, valid, accountError: false };
+  }
+  /** Tests the connection on what the form says now, saved or not: the core keeps nothing of it. A saved provider that was not changed is tested by its id. */
   async function testConnection() {
     const open = state.open;
-    if (!open?.id || state.busy || state.dirty) return;
+    const kind = kindOf(state);
+    if (!open || !kind || state.busy) return;
+    syncForm();
+    if (!state.canTest) return;
+    const draft = !open.id || state.dirty;
+    let params: Parameters<typeof api.providersTest>[0] = { id: open.id ?? "" };
+    if (draft) {
+      const form = gather(false);
+      if (form.accountError || !form.valid) { state.error = form.accountError ? "account" : "required"; redraw(); return; }
+      params = open.id ? { id: open.id, ...form.patch } : { kind: kind.kind, ...form.patch };
+    }
     state.busy = true; state.testing = true; state.result = null; state.error = null; redraw();
     try {
-      const result = await api.providersTest(open.id);
+      const result = await api.providersTest(params);
       if (state.open === open) state.result = result;
-      await load();
-      if (state.open === open) await loadModels(open.id);
+      if (draft) {
+        if (state.open === open) { state.models = result.ok ? result.found ?? [] : []; testedModels = true; }
+      } else {
+        await load();
+        if (state.open === open && open.id) await loadModels(open.id);
+      }
     } catch { if (state.open === open) state.result = { ok: false, kind: "error", models: 0 }; }
     finally { state.busy = false; state.testing = false; redraw(); }
   }
@@ -336,35 +397,13 @@ export function createProviders(host: ProvidersHost) {
     if (!open || !kind || state.busy) return;
     syncForm();
     if (!state.canSave) return;
-    const patch: ProviderPatch = {};
-    let valid = true;
-    for (const field of ["name", ...kind.fields] as (ProviderField | "name")[]) {
-      if (field === "service_account") {
-        const area = host.root.querySelector<HTMLTextAreaElement>(".pv-account textarea");
-        const value = accountDraft ?? area?.value.trim() ?? "";
-        if (area) area.value = "";
-        accountDraft = null; state.accountSet = false; accountReads++;
-        if (value && validAccount(value)) patch.service_account = value;
-        else if (value || !open.id || open.replacing) { state.error = "account"; redraw(); return; }
-        continue;
-      }
-      const input = [...host.root.querySelectorAll<HTMLInputElement | HTMLButtonElement>(".pv-field input, .pv-field [data-pv-field]")].find((el) => el.id === inputId(state, field));
-      if (!input) continue;
-      const value = (input.dataset.pvField ? input.dataset.value ?? "" : input.value).trim();
-      if (secret(field)) input.value = "";
-      if (field === "base_url" && value) {
-        try { const url = new URL(value); if (!["http:", "https:"].includes(url.protocol)) valid = false; }
-        catch { valid = false; }
-      }
-      const optionalKey = field === "key" && kind.kind === "openai_compatible";
-      if (!value && !optionalKey && (!open.id || field === "name" || field === "base_url" || open.replacing && secret(field))) valid = false;
-      if (value || field === "base_url") patch[field] = value;
-    }
+    const { patch, valid, accountError } = gather(true);
+    if (accountError) { state.error = "account"; redraw(); return; }
     if (!valid) { state.error = "required"; redraw(); return; }
     state.busy = true; state.error = null; redraw();
     try {
       const result = open.id ? await api.providersUpdate({ id: open.id, ...patch }) : await api.providersAdd({ kind: kind.kind, ...patch });
-      if (state.open === open) { state.open = { ...open, id: result.provider.id, replacing: false }; state.dirty = false; state.result = null; }
+      if (state.open === open) { state.open = { ...open, id: result.provider.id, replacing: false }; state.dirty = false; state.result = null; testedModels = false; }
       state.providers = [...state.providers.filter((p) => p.id !== result.provider.id), result.provider];
       await load();
       if (state.open?.id === result.provider.id) await loadModels(result.provider.id);
@@ -456,6 +495,7 @@ export function createProviders(host: ProvidersHost) {
           state.accountSet = true; state.dirty = true; state.error = null; state.result = null; redraw(); return;
         }
         state.result = null; state.error = null;
+        if (testedModels) { testedModels = false; state.models = []; const found = host.root.querySelector(".pv-models-host"); if (found) found.innerHTML = ""; }
         host.root.querySelector('.pv-body [role="alert"]')?.remove();
         syncForm();
         return;
@@ -463,7 +503,7 @@ export function createProviders(host: ProvidersHost) {
       if (!(target instanceof HTMLInputElement) || target.id !== "pv-model-search") return;
       state.query = target.value;
       const list = host.root.querySelector(".pv-model-list");
-      if (list) list.innerHTML = modelsHTML(state);
+      if (list) list.innerHTML = modelListHTML(state);
     },
     async change(target: Element): Promise<void> {
       if (!(target instanceof HTMLInputElement) || !target.matches(".pv-file") || state.busy) return;

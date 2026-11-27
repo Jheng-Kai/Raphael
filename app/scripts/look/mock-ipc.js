@@ -2,6 +2,11 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  // What a server on this computer lists (LM Studio in the provider editor's scenes).
+  const LOOK_LOCAL_MODELS = [
+    { id: "qwen3-8b", name: "Qwen3 8B", context: 40960, vision: false, tools: true, audio_in: false, price_in: null, price_out: null },
+    { id: "gemma-3-12b", name: "Gemma 3 12B", context: 131072, vision: true, tools: true, audio_in: false, price_in: null, price_out: null },
+  ];
   if (variant.computerSuggestion) {
     const turn = data.turns.find(turn => turn.id === 2);
     const toHost = variant.computerSuggestion === "this-pc";
@@ -241,6 +246,11 @@ export function installMock(fixture, config = {}, target = window) {
   }
   // The owner turned OpenRouter off: the models chosen on it stay chosen, and say so.
   if (variant.openrouterOff) data.providers = data.providers.map(provider => provider.id === "openrouter" ? { ...provider, enabled: false } : provider);
+  // Settings › 模型's editor for a provider: the kinds that carry a key's page and a server on this computer, and one such server saved.
+  if (variant.moreProviders) data.providerKinds.push(
+    { kind: "openai", name: "OpenAI", group: "official", fields: ["key"], default_base_url: "https://api.openai.com/v1", docs_url: "https://platform.openai.com/api-keys", available: true, features: ["text", "stt", "image"] },
+    { kind: "lmstudio", name: "LM Studio", group: "local", fields: ["base_url", "key"], default_base_url: "http://localhost:1234/v1", docs_url: "https://lmstudio.ai/docs/developer/openai-compat", available: true, local_context_hint: true, features: ["text"] });
+  if (variant.lmstudioSaved) data.providers.push({ id: "p-lmstudio", kind: "lmstudio", name: "LM Studio", base_url: "http://localhost:1234/v1", has_key: false, enabled: true, status: "ok", models: 2 });
   // The quick questions chosen on the ChatGPT plan: signed out, ChatGPT stays listed to sign in again (R-DEFAULT-05).
   if (variant.quickChatgpt) data.settings.quick_model = "@chatgpt:gpt-6-sol";
   if (variant.routineEmpty) data.routines = [];
@@ -2279,7 +2289,13 @@ export function installMock(fixture, config = {}, target = window) {
       case "models.local": return { models: data.localModels };
       case "providers.list": return { providers: data.providers };
       case "providers.kinds": return { kinds: data.providerKinds };
-      case "providers.models": return { models: data.catalog.llm.map(model => ({ id: model.id, name: model.name, context: model.context_length, vision: true, tools: true, audio_in: false, price_in: model.input_per_mtok, price_out: model.output_per_mtok })) };
+      // A test of the form as it stands, saved or not: the core keeps nothing of it. A key spelled look-refused-key is refused.
+      case "providers.test": {
+        if (p.key === "look-refused-key") return { ok: false, kind: "auth", models: 0 };
+        const found = LOOK_LOCAL_MODELS.map(model => ({ ...model, context_warning: false }));
+        return p.id && !p.base_url && !p.key && !p.name ? { ok: true, models: found.length } : { ok: true, models: found.length, found };
+      }
+      case "providers.models": if (p.id === "p-lmstudio") return { models: LOOK_LOCAL_MODELS }; return { models: data.catalog.llm.map(model => ({ id: model.id, name: model.name, context: model.context_length, vision: true, tools: true, audio_in: false, price_in: model.input_per_mtok, price_out: model.output_per_mtok })) };
       case "languages.list": return { groups: data.languages };
       case "audio.devices": return data.audioDevices;
       case "audio.monitor": return {};

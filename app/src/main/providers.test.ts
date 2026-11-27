@@ -157,7 +157,7 @@ test("typing updates footer validity without replacing the active field or inter
   expect(root.querySelector<HTMLButtonElement>('[data-pv="save"]')?.disabled).toBe(false);
 });
 
-test("connection test status stays directly above the footer with an icon while pending and after completion", async () => {
+test("connection test status stands right under the fields with an icon while pending and after completion", async () => {
   const panel = mount(); await panel.load(); click('[data-pv="open"]'); await flush();
   let finish!: (value: unknown) => void;
   api.providersTest.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
@@ -165,7 +165,10 @@ test("connection test status stays directly above the footer with an icon while 
   const status = root.querySelector('.pv-test-status[role="status"]')!;
   expect(status?.textContent).toBe("Testing…");
   expect(status.querySelector(".i")).not.toBeNull();
-  expect(status.parentElement?.nextElementSibling?.classList.contains("pv-footer")).toBe(true);
+  expect(status.parentElement?.classList.contains("pv-feedback")).toBe(true);
+  expect(status.closest(".pv-body")).not.toBeNull();
+  expect(status.closest(".pv-footer")).toBeNull();
+  expect(status.parentElement?.previousElementSibling?.classList.contains("pv-field")).toBe(true);
   finish({ ok: true, models: 41 }); await flush();
   expect(root.querySelector(".pv-test-status")?.textContent).toBe("Connected, found 41 models");
   expect(root.querySelector<HTMLButtonElement>('[data-pv="test"]')?.disabled).toBe(false);
@@ -253,7 +256,7 @@ test("the add dialog protects credentials on back, restores search, and returns 
   search.value = "OpenAI"; search.dispatchEvent(new Event("input", { bubbles: true }));
   click('[data-pv="add"][data-id="openai"]');
   expect(root.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-  expect(root.querySelector('[data-dialog="provider:add"] .pv-catalog')).not.toBeNull();
+  expect(root.querySelector('[data-dialog="provider:add"] .pv-editor')).not.toBeNull();
   fill('input[type="password"]', "draft-credential");
   click('[data-pv="back"]');
   expect(root.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe("draft-credential");
@@ -336,7 +339,7 @@ test("Vertex accepts pasted or locally picked JSON without rendering credentials
   expect(api.providersAdd).toHaveBeenLastCalledWith(expect.objectContaining({ service_account: '{"client_email":"ok@example.com","private_key":"file-private-key"}' }));
 });
 
-test("local kinds explain agent context and only flagged models carry a warning chip", async () => {
+test("local kinds say nothing of a 64K context and only flagged models carry a warning chip", async () => {
   api.providersList.mockResolvedValue({ providers: [{ ...connected, kind: "ollama", name: "Ollama" }] });
   api.providersKinds.mockResolvedValue({ kinds: [{ ...kinds[3], local_context_hint: true }] });
   api.providersModels.mockResolvedValue({ models: [
@@ -344,7 +347,7 @@ test("local kinds explain agent context and only flagged models carry a warning 
     { id: "large", name: "Large", context: 131072, context_warning: false },
   ] });
   const panel = mount(); await panel.load(); click('[data-pv="open"]'); await flush();
-  expect(root.querySelector('[role="dialog"]')?.textContent).toContain("at least 64K");
+  expect(root.querySelector('[role="dialog"]')?.textContent).not.toMatch(/at least 64K|至少要 64K/);
   expect(root.querySelectorAll('.pv-context-warning')).toHaveLength(1);
   expect(root.querySelector('.pv-context-warning')?.closest('li')?.textContent).toContain("Small");
 });
@@ -391,7 +394,7 @@ test.each([
   api.providersTest.mockResolvedValue(result);
   click('[data-pv="test"]'); await flush();
   expect(root.querySelector('[role="dialog"] [role="status"]')?.textContent).toContain(text);
-  expect(api.providersTest).toHaveBeenCalledWith("p3");
+  expect(api.providersTest).toHaveBeenCalledWith({ id: "p3" });
 });
 
 test("removing a provider asks in the red dialog before removing the connection", async () => {
@@ -450,20 +453,80 @@ test("an externally removed provider closes its stale dialog", async () => {
   expect(root.querySelector('[role="dialog"]')).toBeNull();
 });
 
-test("a replacement must be saved before testing so the result describes the new credentials", async () => {
+test("a typed replacement is tested before it is saved, on the typed values, and nothing is saved by the test", async () => {
   const panel = mount(); await panel.load();
   click('[data-pv="open"]'); await flush();
   click('[data-pv="replace"]');
   expect(root.querySelector<HTMLButtonElement>('[data-pv="save"]')?.disabled).toBe(true);
+  expect(root.querySelector<HTMLButtonElement>('[data-pv="test"]')?.disabled).toBe(true);
   const key = root.querySelector<HTMLInputElement>('input[type="password"]')!;
   key.value = "new-secret"; key.dispatchEvent(new Event("input", { bubbles: true }));
   expect(root.querySelector<HTMLButtonElement>('[data-pv="save"]')?.disabled).toBe(false);
-  expect(root.querySelector<HTMLButtonElement>('[data-pv="test"]')?.disabled).toBe(true);
-  expect(root.querySelector('[role="dialog"]')?.textContent).toContain(t("providers.saveFirst"));
+  expect(root.querySelector<HTMLButtonElement>('[data-pv="test"]')?.disabled).toBe(false);
+  api.providersTest.mockResolvedValue({ ok: true, models: 1, found: [{ id: "gpt-x", name: "GPT X", context: 8192 }] });
+  click('[data-pv="test"]'); await flush();
+  expect(api.providersTest).toHaveBeenCalledWith({ id: "p3", name: "OpenAI", key: "new-secret" });
+  expect(api.providersUpdate).not.toHaveBeenCalled();
+  expect(root.querySelector(".pv-test-status")?.textContent).toBe("Connected, found 1 models");
+  expect(root.querySelector(".pv-models-host")?.textContent).toContain("GPT X");
+  // The typed key stays in its field to be saved, and is rendered nowhere.
+  expect(root.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe("new-secret");
+  expect(root.innerHTML).not.toContain("new-secret");
   api.providersUpdate.mockResolvedValue({ provider: connected });
   click('[data-pv="save"]'); await flush();
   expect(api.providersUpdate).toHaveBeenCalledWith({ id: "p3", name: "OpenAI", key: "new-secret" });
-  expect(root.querySelector<HTMLButtonElement>('[data-pv="test"]')?.disabled).toBe(false);
+});
+
+test("a provider that is not saved yet is tested on its form, a local server with no key at all", async () => {
+  const lmstudio = { kind: "lmstudio", name: "LM Studio", group: "local", fields: ["base_url", "key"], default_base_url: "http://localhost:1234/v1", docs_url: "https://lmstudio.ai/docs", available: true, local_context_hint: true };
+  api.providersKinds.mockResolvedValue({ kinds: [lmstudio] });
+  api.providersList.mockResolvedValue({ providers: [] });
+  const panel = mount(); await panel.load(); connect('[data-pv="add"][data-id="lmstudio"]');
+  const test = () => root.querySelector<HTMLButtonElement>('[data-pv="test"]')!;
+  expect(test().disabled).toBe(false);
+  expect(root.querySelector<HTMLButtonElement>('[data-pv="save"]')?.disabled).toBe(false);
+  api.providersTest.mockResolvedValue({ ok: true, models: 2, found: [{ id: "qwen3", name: "Qwen3", context: 40960 }, { id: "gemma", name: "Gemma", context: 8192 }] });
+  click('[data-pv="test"]'); await flush();
+  expect(api.providersTest).toHaveBeenCalledWith({ kind: "lmstudio", name: "LM Studio", base_url: "http://localhost:1234/v1" });
+  expect(api.providersAdd).not.toHaveBeenCalled();
+  expect(root.querySelectorAll(".pv-model-list li")).toHaveLength(2);
+  // A field that changes after the test says the models no longer describe the form.
+  fill('input[aria-label="API address"]', "http://localhost:1235/v1");
+  expect(root.querySelector(".pv-models")).toBeNull();
+  expect(root.querySelector(".pv-test-status")).toBeNull();
+  // A refused test shows its one line and lists nothing.
+  api.providersTest.mockResolvedValue({ ok: false, kind: "offline", models: 0 });
+  click('[data-pv="test"]'); await flush();
+  expect(root.querySelector(".pv-test-status")?.textContent).toBe(t("providers.offline"));
+  expect(root.querySelector(".pv-models")).toBeNull();
+});
+
+test.each(["zh-TW", "en", "ja"] as const)("%s: the dialog never tells the user to save first, nor says no models were found", async (locale) => {
+  setLocale(locale);
+  api.providersList.mockResolvedValue({ providers: [] });
+  const panel = mount(); await panel.load(); connect('[data-pv="add"][data-id="openai"]');
+  fill('input[type="password"]', "typed");
+  const words = root.querySelector('[role="dialog"]')!.textContent!;
+  for (const old of ["請先按「儲存」", "儲存後可測試連線", "尚未找到模型", "Save this provider", "Save to test", "No models found", "64K"]) expect(words).not.toContain(old);
+  expect(root.querySelector(".pv-models")).toBeNull();
+  expect(root.querySelector(".pv-models-host")?.textContent).toBe("");
+  expect(root.querySelector(".pv-feedback")?.textContent).toBe("");
+});
+
+test("the editor is one narrow column: fields, the result, then the foot, with the key's page beside its field as plain text", async () => {
+  api.providersList.mockResolvedValue({ providers: [] });
+  api.providersKinds.mockResolvedValue({ kinds: [{ ...kinds[0], docs_url: "https://platform.openai.com/keys" }] });
+  const panel = mount(); await panel.load(); connect('[data-pv="add"][data-id="openai"]');
+  const dialog = root.querySelector("#pv-dialog")!;
+  expect(dialog.classList.contains("pv-catalog")).toBe(false);
+  const column = dialog.querySelector(".pv-body > .pv-setup")!;
+  expect([...column.children].map((child) => child.className)).toEqual(["pv-field", "pv-field", "pv-feedback", "pv-models-host"]);
+  const link = dialog.querySelector<HTMLButtonElement>('[data-pv="docs"]')!;
+  expect(link.classList.contains("pv-link")).toBe(true);
+  expect(link.closest(".pv-label-row")?.querySelector("label")?.getAttribute("for")).toBe(root.querySelector('input[type="password"]')?.id);
+  expect(link.closest(".pv-footer")).toBeNull();
+  expect([...dialog.querySelectorAll(".pv-footer button")].map((b) => b.getAttribute("data-pv"))).toEqual(["test", "save"]);
+  expect(dialog.querySelectorAll("p.note")).toHaveLength(0);
 });
 
 test("a custom endpoint can connect without a key while invalid addresses stay in the dialog", async () => {

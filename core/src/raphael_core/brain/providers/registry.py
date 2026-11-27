@@ -404,6 +404,8 @@ class ProviderRegistry:
         return rows
 
     async def test(self, params):
+        if set(params) - {"id"}:
+            return await self._test_draft(params)
         pid = _text(params["id"])
         self.config(pid)
         try:
@@ -417,6 +419,59 @@ class ProviderRegistry:
             kind = "auth" if kind == "auth" else "offline" if kind in ("offline", "network", "timeout") else "error"
             self._status[pid] = kind if kind != "error" else "unknown"
             return {"ok": False, "kind": kind, "models": 0}
+
+    def _draft_credential(self, config, params, pid):
+        """The credential a draft is tested with: what was typed, else (for a saved provider) the stored one. Never stored."""
+        kind = config["kind"]
+        fields = {"bedrock": ("key_id", "secret"), "vertex": ("service_account",)}.get(kind, ("key",))
+        typed = {field: params[field] for field in fields if params.get(field)}
+        stored = self._secret(pid).get() if pid and len(typed) < len(fields) else None
+        if kind == "bedrock":
+            credentials = json.loads(stored) if stored else {}
+            credentials.update(typed)
+            return json.dumps(credentials) if any(credentials.values()) else ""
+        return typed.get(fields[0]) or stored or ""
+
+    async def _test_draft(self, params):
+        """Test the fields of a form that is not saved: the typed values over the saved ones, nothing kept.
+
+        No setting, model list, status or secret is written, so a refused key leaves the provider as it was
+        and a key typed here is read once, held by the client that asks, and dropped.
+        """
+        params = dict(params)
+        pid = params.pop("id", None)
+        old = None
+        if pid is not None:
+            pid = _text(pid)
+            if pid == "chatgpt":
+                raise ValueError("Use ChatGPT sign-in RPCs")
+            old = self.config(pid)
+        config = self._checked(params, old)
+        try:
+            credential = self._draft_credential(config, params, pid)
+        except Exception:
+            return {"ok": False, "kind": "auth", "models": 0}
+        client = None
+        try:
+            if config["kind"] == "openrouter":
+                # Its list is public: only the key says whether the account answers.
+                await asyncio.wait_for(self.openrouter.key_info(credential), 6)
+                rows = [model_info(row, kind="openrouter") for row in await asyncio.wait_for(self.openrouter.models(timeout_s=5), 6)]
+            else:
+                cls = {"anthropic": AnthropicProvider, "vertex": VertexProvider,
+                       "bedrock": BedrockProvider}.get(config["kind"], CompatibleProvider)
+                client = cls(config["kind"], config["base_url"], lambda: credential or None,
+                    api_version=config.get("api_version", ""), http=self._http,
+                    **({"region": config["region"]} if config["kind"] == "bedrock" else {}))
+                rows = await asyncio.wait_for(client.models(timeout_s=5), 6)
+        except (OpenRouterError, TimeoutError) as error:
+            kind = getattr(error, "kind", "timeout")
+            return {"ok": False, "kind": "auth" if kind == "auth" else "offline" if kind in ("offline", "network", "timeout") else "error", "models": 0}
+        finally:
+            if client is not None:
+                await client.aclose()
+        found = [{**row, "context_warning": False} for row in rows if not row.get("generation_only")]
+        return {"ok": True, "models": len(rows), "found": found}
 
     async def models(self, params):
         pid = _text(params["id"])

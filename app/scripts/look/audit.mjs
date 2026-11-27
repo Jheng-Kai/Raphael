@@ -316,9 +316,12 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (!floatingLatest && element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
       const routineNavigation = element.matches('.chat-message .routine-origin > button.routine-run-link[data-act="open-routine"]');
       const dockerSetupInChat = element.matches('.desktop-docker-setup > button.desktop-docker-help[data-docker-help]');
+      // A provider's dialog: the page where a key is made (on the key field's label line) and 再新增一個 are plain blue words, as the
+      // app's inline links are (R-PROV-EDITOR-01); every other action of the dialog is a framed button.
+      const providerLink = element.matches('.pv-dialog .pv-label-row > button.pv-link[data-pv="docs"], .pv-dialog .pv-setup > button.pv-link[data-pv="another"]');
       // On a floating surface (R-FLOAT-01) a control is framed by its fill (`--float-ctl`), like the chips and 「Connect」 buttons.
       const filledOnFloat = !!element.closest('.modal, .mb-dialog, .cs-dialog, .au-pop, .cb-card, .menu') && !/rgba\(0, 0, 0, 0\)|transparent/.test(style.backgroundColor);
-      if (!navigation && !routineNavigation && !dockerSetupInChat && !element.matches(".queued-actions > .btn:is([data-act=cancel-message], [data-act=send-now])") && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder && !filledOnFloat) violation('R-UI-18', 'Text action button has no frame');
+      if (!navigation && !routineNavigation && !dockerSetupInChat && !providerLink && !element.matches(".queued-actions > .btn:is([data-act=cancel-message], [data-act=send-now])") && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder && !filledOnFloat) violation('R-UI-18', 'Text action button has no frame');
     }
     // The guide's row follows the rule like any other: its round arrow (or ×) is at the left of the black
     // primary, not stacked above it, so nothing in the guide is exempt.

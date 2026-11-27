@@ -9593,6 +9593,42 @@ export function checkRendered(name, context = {}) {
     directoryCloseStays(dialog);
     return { check: name, kinds: sections.length };
   }
+  if (name === "provider-editor" || name === "provider-editor-tested") {
+    // One tidy column: the fields, what the test found right under them, the actions in the foot. Nothing tells the owner to save first,
+    // nothing says no models were found, and no line is about a context size (R-PROV-TEST-01).
+    const dialog = document.querySelector("#pv-dialog");
+    require(visible(dialog) && dialog.classList.contains("pv-editor") && !dialog.classList.contains("pv-catalog"), "the editor, not the wide list of kinds");
+    const box = dialog.getBoundingClientRect();
+    require(box.width <= 560.5, `a narrow dialog, not a wide one with a narrow column in it: ${box.width}`);
+    require(box.left >= 0 && box.right <= innerWidth + 0.5 && box.top >= 0 && box.bottom <= innerHeight + 0.5, "the dialog fits the window");
+    require(!/請先按|儲存後可測試|尚未找到模型|64K/.test(dialog.textContent), `no sentence about saving first, no models, 64K: ${dialog.textContent}`);
+    const column = dialog.querySelector(".pv-setup").getBoundingClientRect();
+    require(column.width >= box.width - 40, `the column fills the dialog: ${column.width} of ${box.width}`);
+    const fields = [...dialog.querySelectorAll(".pv-field")];
+    require(fields.length >= 1 && fields.every(field => Math.abs(field.getBoundingClientRect().left - column.left) < 1 && Math.abs(field.getBoundingClientRect().width - column.width) < 1), "every field is as wide as the column");
+    const foot = dialog.querySelector(".pv-footer"), buttons = [...foot.querySelectorAll(".btn")];
+    require(["test", "save"].every(action => buttons.some(button => button.dataset.pv === action)), "測試連線 and 儲存 are in the foot");
+    require(Math.abs(foot.getBoundingClientRect().bottom - box.bottom) < 2, "the foot closes the dialog");
+    require(!dialog.querySelector(".pv-body .btn[data-pv='test'], .pv-body .btn[data-pv='save']"), "no action floats among the fields");
+    const key = dialog.querySelector('[data-pv="docs"]');
+    if (key) {
+      const style = getComputedStyle(key), row = key.closest(".pv-label-row").getBoundingClientRect(), keyField = key.closest(".pv-field").querySelector(".svc-line").getBoundingClientRect();
+      require(style.backgroundColor === "rgba(0, 0, 0, 0)" && parseFloat(style.borderTopWidth) === 0, "the key's page is plain text, no fill, no frame");
+      require(key.getBoundingClientRect().right <= keyField.right + 1 && key.getBoundingClientRect().bottom <= keyField.top + 1, "it stands above the key's field, at its right end");
+      require(row.height < 32, `on the label's own line: ${row.height}`);
+    }
+    if (name === "provider-editor-tested") {
+      const status = dialog.querySelector(".pv-feedback .pv-test-status");
+      require(visible(status), "the test's line is right under the fields");
+      require(status.getBoundingClientRect().top >= fields.at(-1).getBoundingClientRect().bottom - 1, "under the last field");
+      const list = dialog.querySelector(".pv-model-list");
+      if (list) {
+        require(list.getBoundingClientRect().top >= status.getBoundingClientRect().bottom - 1, "the models come after the line");
+        require(list.getBoundingClientRect().bottom <= foot.getBoundingClientRect().top + 1, "and end above the foot");
+      }
+    }
+    return { check: name, width: Math.round(box.width) };
+  }
   if (name === "provider-directory-stt") {
     // Connected from speech to text: only the kinds that turn speech into text, no subscription, and the reason said.
     const dialog = document.querySelector("#pv-dialog");
