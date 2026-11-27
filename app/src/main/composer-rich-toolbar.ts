@@ -302,11 +302,11 @@ export function composerToolbar(host: HTMLElement): ComposerToolbar {
   const back = (): void => { editor!.view.focus(); };
   const chooseBlock = (anchor: HTMLElement): void => {
     openMenu(anchor, choices(), current(), value => { back(); BLOCKS.find(block => block.value === value)?.run(editor!); later(); },
-      undefined, [], { selectionIndicator: true });
+      undefined, [], { selectionIndicator: true, placement: "start", anchorRect: () => anchor.getBoundingClientRect() });
   };
   const chooseTable = (anchor: HTMLElement): void => {
     openMenu(anchor, TABLE_OPS.map(op => ({ value: op.value, label: op.label() })), "", value => { back(); TABLE_OPS.find(op => op.value === value)?.run(editor!); later(); },
-      undefined, [], { selectionIndicator: false });
+      undefined, [], { selectionIndicator: false, placement: "start", anchorRect: () => anchor.getBoundingClientRect() });
   };
 
   // A press on a control changes the words and leaves the caret where it is (the editor keeps the focus).
