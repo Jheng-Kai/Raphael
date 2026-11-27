@@ -8742,6 +8742,14 @@ export function checkRendered(name, context = {}) {
     const band = getComputedStyle(dock), surface = getComputedStyle(composer);
     require(/^(transparent|rgba\(\d+, \d+, \d+, 0\))$/.test(band.backgroundColor) && band.backgroundImage === "none" && band.pointerEvents === "none", `no band behind the composer: ${band.backgroundColor}, ${band.backgroundImage}, pointer ${band.pointerEvents}`);
     require(/^rgb\(/.test(surface.backgroundColor) && parseFloat(surface.borderTopWidth) >= 1 && surface.boxShadow !== "none" && surface.pointerEvents !== "none", `the composer floats on its own surface and takes the pointer: ${surface.backgroundColor}, ${surface.boxShadow}`);
+    // R-PAGE-15: while a page stands the composer is one line, the words and the send or voice button: the +, the permission, the folder
+    // and branch and the model (the brain's mark) are away, and the words and the button stand side by side in one row.
+    for (const control of composer.querySelectorAll(".cmp-attach, .cmp-mode, .cmp-work, .cmp-model")) require(getComputedStyle(control).display === "none", `the composer is one line while a page stands: ${control.className} is still drawn`);
+    const field = composer.querySelector(".cmp-field"), pair = composer.querySelector(".cmp-pair");
+    require(field && pair && visible(field) && visible(pair), "the composer keeps its words and its send or voice button");
+    const fieldBox = field.getBoundingClientRect(), pairBox = pair.getBoundingClientRect();
+    require(pairBox.left >= fieldBox.right - 1 && pairBox.top < fieldBox.bottom && pairBox.bottom > fieldBox.top, `the words and the button are one row: ${Math.round(fieldBox.right)} then ${Math.round(pairBox.left)}`);
+    require(composerBox.height <= 76, `the composer is one line high: ${Math.round(composerBox.height)} px`);
     return { areaBox, dockBox, composerBox };
   };
   if (name === "page-inplace" || name === "page-opened-whole" || name === "page-expanded" || name === "page-library-open") {
@@ -8803,14 +8811,31 @@ export function checkRendered(name, context = {}) {
     // The area does not scroll (the page scrolls in its frame), and nothing scrolls under the band, so there is no fade there.
     require(areaStyle.overflowY === "hidden" && areaStyle.maskImage === "none" && area.scrollHeight <= area.clientHeight + 1 && area.contains(box), `the area does not scroll: ${areaStyle.overflowY}, ${area.scrollHeight} in ${area.clientHeight}`);
     const bandRoom = parseFloat(areaStyle.paddingTop), footRoom = parseFloat(areaStyle.paddingBottom);
-    require(Math.abs(shown.top - (areaBox.top + bandRoom)) <= 1 && Math.abs(shown.bottom - (areaBox.bottom - footRoom)) <= 1, `the frame fills the area from under the header's band to above the composer's row: ${Math.round(shown.top)}-${Math.round(shown.bottom)} of ${Math.round(areaBox.top)}-${Math.round(areaBox.bottom)}`);
-    require(bandRoom >= arrow.bottom - areaBox.top - 1 && footRoom > 0, `the band holds the header's buttons and the composer's row is kept clear: ${bandRoom} px, ${footRoom} px`);
-    // It runs to the window's foot with the composer standing over it; the frame ends above the composer's row, and behind that row the area shows the page's own background.
+    // R-PAGE-16: the frame starts at the window's top edge and the header is transparent over it, so no strip of the app's own colour stands above the page.
+    require(Math.abs(shown.top - areaBox.top) <= 1 && Math.abs(shown.top) <= 1 && Math.abs(shown.bottom - areaBox.bottom) <= 1, `the frame fills the area from the window's top edge to its foot: ${Math.round(shown.top)}-${Math.round(shown.bottom)} of ${Math.round(areaBox.top)}-${Math.round(areaBox.bottom)}`);
+    require(bandRoom === 0 && footRoom === 0, `nothing is kept clear above or below the page by the area: ${bandRoom} px, ${footRoom} px`);
+    const headRoom = area.querySelector(":scope > .pgv-head"), header = pane.querySelector(":scope > .mb-head");
+    require(headRoom && getComputedStyle(headRoom).visibility === "hidden" && headRoom.getBoundingClientRect().height >= arrow.bottom - areaBox.top - 1, "the room the header's buttons take at the head is only measured, and holds them");
+    require(/^(transparent|rgba\(0, 0, 0, 0\))$/.test(getComputedStyle(header).backgroundColor), `the header is transparent over the page: ${getComputedStyle(header).backgroundColor}`);
+    // The window's own buttons stand over the page too (R-PAGE-16), with no plate of their own (R-PAGE-17) unless the page has no one ground: the page's helper
+    // says its tone, the window's buttons are drawn in the ink it asks for, and their pixels' contrast is read from the screen (the driver's `page-band`).
+    const caption = document.querySelector(".window-chrome .window-controls"), tone = document.documentElement.dataset.pageTone;
+    if (caption && visible(caption) && tone) {
+      const plate = getComputedStyle(caption).backgroundColor, ink = getComputedStyle(caption.querySelector(".window-button")).color;
+      require(["light", "dark", "mixed"].includes(tone), `the page's tone is told to the window: ${tone}`);
+      if (tone !== "mixed") require(/^(transparent|rgba\(0, 0, 0, 0\))$/.test(plate), `the window's buttons have no plate over a page of one tone (${tone}): ${plate}`);
+      else require(/^rgb\(/.test(plate), `over a page with no one ground the window's buttons keep a surface of their own: ${plate}`);
+      const channels = ink.match(/\d+/g).map(Number), brightness = (channels[0] * 299 + channels[1] * 587 + channels[2] * 114) / 1000;
+      require(tone === "mixed" || (tone === "light" ? brightness < 100 : brightness > 150), `the ink is the one the page's tone asks for: ${ink} on a ${tone} page`);
+    }
+    // R-PAGE-11: it runs to the window's foot with the composer standing over it: the frame is the page's window all the way down, so no strip of
+    // another colour stands under it, and the window paints nothing behind it (the page's own background is the only one).
     const { composerBox } = pageUnderComposer(stage, area);
-    require(frameBox.bottom <= composerBox.top - 0.5, `the page's window ends above the composer: ${Math.round(frameBox.bottom)} against ${Math.round(composerBox.top)}`);
-    const behind = getComputedStyle(area, "::before"), say = area.style.getPropertyValue("--pgv-bg");
-    require(/^rgba?\(/.test(behind.backgroundColor) && behind.backgroundColor !== "rgba(0, 0, 0, 0)" && Math.abs(parseFloat(behind.top) - bandRoom) <= 1 && Math.abs(parseFloat(behind.height) - (areaBox.height - bandRoom)) <= 1, `the page's own background is under the composer's row, from the band to the window's foot: ${behind.backgroundColor}, ${behind.top}, ${behind.height}`);
-    require(!say || /^rgba?\(\d+, \d+, \d+(, [\d.]+)?\)$/.test(say), `what the page said is a plain colour: ${say}`);
+    require(Math.abs(frameBox.bottom - innerHeight) <= 1 && frameBox.bottom >= composerBox.bottom - 0.5, `the page's window runs to the window's foot, under the composer: ${Math.round(frameBox.bottom)} of ${innerHeight}, the composer ends at ${Math.round(composerBox.bottom)}`);
+    const behind = getComputedStyle(area, "::before");
+    require(!behind.content || /^(none|normal)$/.test(behind.content), `the window paints nothing behind the page: ${behind.content}`);
+    require(!area.style.getPropertyValue("--pgv-bg"), "no colour of the page's is painted by the window");
+    require(area.querySelector(":scope > .pgv-foot") && getComputedStyle(area.querySelector(":scope > .pgv-foot")).visibility === "hidden", "the room the composer takes is only measured, never drawn");
     require(!view.querySelector(".pgv-title"), "the title is the pill's, not a line of the page");
     require(view.querySelector(".pgv-status")?.hidden !== false || name !== "page-inplace", "nothing waits under the page before anything is sent");
     require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
@@ -9017,14 +9042,17 @@ export function checkRendered(name, context = {}) {
     else require(area.scrollHeight <= area.clientHeight + 1 && area.scrollTop === 0, `the area does not scroll: ${area.scrollHeight} in ${area.clientHeight}`);
     const line = view.querySelector(".pgv-status:not([hidden]) > *"), say = line && visible(line) ? line.getBoundingClientRect() : null;
     const floor = Math.min(composerBox.top, say?.top ?? Infinity);
-    // The page's own last line: an HTML page's window ends above the composer (and the answer line over it), a report's last section's foot stands clear of them.
+    // The page's own last line: an HTML page's window runs to the window's foot under the composer (its own last line is checked inside the frame, by the
+    // driver's `page-band`, which reads it and the composer); a report's last section's foot stands clear of the composer and the answer line over it.
     const box = view.querySelector(".pgv-frame-box");
-    const end = report ? Math.max(...[...view.querySelectorAll(".rp-body > .rp-sec")].filter(visible).map(section => section.getBoundingClientRect().bottom))
-      : box.getBoundingClientRect().bottom;
-    require(Number.isFinite(end) && end <= floor - (report ? 4 : 0.5), `its last line stands clear above the composer${say ? " and the answer over it" : ""}: ${Math.round(end)} against ${Math.round(floor)}`);
-    // Scrolled exactly far enough: past its end only a gap (a report keeps its own foot under its last section; an HTML page's window ends a gap above the row).
-    const room = report ? 2 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sp-6")) + 48 : 48;
-    if (!report || area.scrollTop > 0) require(floor - end <= room, `with no more than a gap's room past it: ${Math.round(floor - end)} px`);
+    if (!report) require(Math.abs(box.getBoundingClientRect().bottom - innerHeight) <= 1, `the page's window runs to the window's foot: ${Math.round(box.getBoundingClientRect().bottom)} of ${innerHeight}`);
+    else {
+      const end = Math.max(...[...view.querySelectorAll(".rp-body > .rp-sec")].filter(visible).map(section => section.getBoundingClientRect().bottom));
+      require(Number.isFinite(end) && end <= floor - 4, `its last line stands clear above the composer${say ? " and the answer over it" : ""}: ${Math.round(end)} against ${Math.round(floor)}`);
+      // Scrolled exactly far enough: past its end only a gap (a report keeps its own foot under its last section).
+      const room = 2 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sp-6")) + 48;
+      if (area.scrollTop > 0) require(floor - end <= room, `with no more than a gap's room past it: ${Math.round(floor - end)} px`);
+    }
     // A press on the composer is the composer's; beside it and under it, the page's (an HTML page's frame, or the report).
     const middle = document.elementFromPoint((composerBox.left + composerBox.right) / 2, composerBox.top + 12);
     require(middle && composer.contains(middle), `a press on the composer is the composer's: ${middle?.className || middle?.tagName}`);
@@ -9034,7 +9062,7 @@ export function checkRendered(name, context = {}) {
       const beside = document.elementFromPoint((areaBox.left + composerBox.left) / 2, (composerBox.top + composerBox.bottom) / 2);
       require(beside && area.contains(beside) && !dock.contains(beside), `beside the composer a press is the page's: ${beside?.className || beside?.tagName}`);
     }
-    return { check: name, end: Math.round(end), floor: Math.round(floor), gap: Math.round(floor - end), scrolled: Math.round(area.scrollTop) };
+    return { check: name, floor: Math.round(floor), scrolled: Math.round(area.scrollTop), report };
   }
   // Escape goes back, and a draft in the composer is neither lost nor cleared by it.
   if (name === "page-inplace-escaped") {
@@ -9152,20 +9180,16 @@ export function checkRendered(name, context = {}) {
     return { check: name, column: Math.round(column), aside };
   }
   if (name === "page-rail") {
-    // R-PAGE-10, R-PAGE-11: the page's window is the area from under the header's band to just above the composer's row, so a rail one window
-    // tall (and its buttons at its foot) is whole above the composer; behind that row the area shows the page's own background, which the page said.
+    // R-PAGE-10, R-PAGE-11: the page's window is the area from the window's top edge to its foot, so a rail one window tall is whole
+    // in it; the header floats over its head and the composer over its foot, and nothing of the window's own is painted behind the page.
     const stage = document.querySelector(".page-agent .ra-stage"), view = stage.querySelector(":scope > .pgv"), area = view.querySelector(".pgv-page"), frame = view.querySelector(".pgv-frame-box iframe");
     require(stage.classList.contains("is-page") && frame && visible(frame) && area, "the page is open in the conversation's place");
     const { composerBox, areaBox } = pageUnderComposer(stage, area), box = frame.getBoundingClientRect(), style = getComputedStyle(area);
-    require(box.bottom <= composerBox.top - 0.5 && box.bottom >= composerBox.top - 64, `the page's window ends just above the composer: ${Math.round(box.bottom)} against ${Math.round(composerBox.top)}`);
-    require(Math.abs(box.top - (areaBox.top + parseFloat(style.paddingTop))) <= 1 && Math.abs(box.height - (areaBox.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom))) <= 1, `it fills the area under the band: ${Math.round(box.top)}, ${Math.round(box.height)}`);
-    const dark = document.documentElement.dataset.theme === "dark", said = area.style.getPropertyValue("--pgv-bg");
-    require(said === (dark ? "rgb(27, 23, 16)" : "rgb(246, 239, 224)"), `the page said its own background and the area paints it: ${said}`);
-    require(getComputedStyle(area, "::before").backgroundColor === said, `behind the composer's row: ${getComputedStyle(area, "::before").backgroundColor}`);
-    const behind = document.elementFromPoint((composerBox.left + composerBox.right) / 2, (composerBox.bottom + areaBox.bottom) / 2);
-    require(behind && area.contains(behind) && behind !== frame && !stage.querySelector(":scope > .ra-dock").contains(behind), `under the composer is the area, not the page's window: ${behind?.className || behind?.tagName}`);
+    require(Math.abs(box.bottom - innerHeight) <= 1 && box.bottom >= composerBox.bottom - 0.5, `the page's window runs to the window's foot, under the composer: ${Math.round(box.bottom)} of ${innerHeight}, the composer ends at ${Math.round(composerBox.bottom)}`);
+    require(Math.abs(box.top - areaBox.top) <= 1 && Math.abs(box.height - areaBox.height) <= 1, `it fills the area from the window's top edge: ${Math.round(box.top)}, ${Math.round(box.height)}`);
+    require(!area.style.getPropertyValue("--pgv-bg") && (!getComputedStyle(area, "::before").content || /^(none|normal)$/.test(getComputedStyle(area, "::before").content)), "the window paints no background behind the page");
     require(area.scrollHeight <= area.clientHeight + 1 && area.scrollTop === 0, "the area does not scroll: the article scrolls in the page's window");
-    return { check: name, window: [Math.round(box.top), Math.round(box.bottom)], composer: Math.round(composerBox.top), background: said };
+    return { check: name, window: [Math.round(box.top), Math.round(box.bottom)], composer: Math.round(composerBox.top) };
   }
   if (name === "page-base") {
     // An HTML page that writes no style of its own, opened in the conversation's place: since R-PAGE-10 its frame is the whole area, edge to edge
@@ -13357,7 +13381,7 @@ export function checkRendered(name, context = {}) {
  * Browser assertions run inside a page frame (the `frame-check` step): a member's HTML page is another origin, so the app's own checks
  * cannot read it. Self-contained, as `checkRendered` is: it is sent to the frame as text.
  */
-export function checkFrame(name) {
+export function checkFrame(name, args) {
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
   const style = (selector, pseudo) => getComputedStyle(document.querySelector(selector), pseudo);
   const dark = getComputedStyle(document.documentElement).colorScheme === "dark";
@@ -13389,7 +13413,8 @@ export function checkFrame(name) {
     // An HTML page that writes no style of its own is drawn by the app's base style (core agent/page_style.py, R-PAGE-06): a document
     // page, in type, table, note, contents box, tabs, cards and figures; and its one rule of its own (h3) wins over it.
     const body = style("body");
-    require(body.backgroundColor === words.bg && body.color === words.fg, `the theme's page: ${body.color} on ${body.backgroundColor}`);
+    // The theme's words, and no colour painted on the body by the window (R-PAGE-10): the canvas, which follows the colour scheme, is the page's ground.
+    require(body.backgroundColor === "rgba(0, 0, 0, 0)" && body.color === words.fg, `the theme's page: ${body.color} on ${body.backgroundColor}`);
     require(body.lineHeight === "24px" && body.fontSize === "15px", `readable type, 15 px on 1.6: ${body.fontSize} / ${body.lineHeight}`);
     require(style("h1").fontSize === "32px" && style("h1").fontWeight === "600" && style("h2").fontSize === "22px", `a 32 px title and 22 px sections: ${style("h1").fontSize}, ${style("h2").fontSize}`);
     require(style("h3").fontSize === "19px", `the page's own rule wins over the base's 17 px: ${style("h3").fontSize}`);
@@ -13419,8 +13444,63 @@ export function checkFrame(name) {
     require(style("blockquote").borderInlineStartWidth === "3px" && style("code").backgroundColor === words.surface, "a quote with its rule, code on the surface");
     return { check: name, dark, width: innerWidth, table: table.display, tracks };
   }
+  // R-PAGE-10, R-PAGE-11: what the driver's `page-band` needs of the page itself, read inside its frame: where the page's body and its content stand, how
+  // far it is scrolled, and the colour the page paints (its root's, else its body's: the one the canvas shows), never a colour of the window's.
+  if (name === "page-band-measure") {
+    const painted = element => { const color = getComputedStyle(element).backgroundColor; return /^rgba?\(/.test(color) && !/^rgba\(\d+, \d+, \d+, 0\)$/.test(color) ? color : null; };
+    const flow = [...document.body.querySelectorAll("*")].filter(element => {
+      const box = element.getBoundingClientRect(), style = getComputedStyle(element);
+      return box.width > 0 && box.height > 0 && style.display !== "none" && style.visibility !== "hidden" && !/^(fixed|sticky)$/.test(style.position) && !/^(SCRIPT|STYLE)$/.test(element.tagName);
+    });
+    const body = document.body.getBoundingClientRect();
+    return { check: name, canvas: painted(document.documentElement) ?? painted(document.body), bodyLeft: body.left, bodyRight: body.right,
+      firstTop: Math.min(...flow.map(element => element.getBoundingClientRect().top)), lastBottom: Math.max(...flow.map(element => element.getBoundingClientRect().bottom)),
+      image: getComputedStyle(document.documentElement).backgroundImage !== "none" || getComputedStyle(document.body).backgroundImage !== "none",
+      fades: [...document.querySelectorAll("[data-raphael-fade]")].map(fade => { const style = getComputedStyle(fade), colours = style.backgroundImage.match(/rgba?\([^)]*\)/g) ?? [];
+        const parts = text => (text?.match(/[\d.]+/g) ?? []).map(Number);
+        return { at: fade.dataset.raphaelFade, visible: style.display !== "none" && fade.getBoundingClientRect().height > 0, fixed: style.position === "fixed", pointer: style.pointerEvents,
+          colour: parts(colours[0]).slice(0, 3), clear: parts(colours[colours.length - 1])[3] === 0, height: Math.round(fade.getBoundingClientRect().height) }; }),
+      innerHeight, scrollY: Math.round(scrollY), scrollMax: Math.max(0, document.documentElement.scrollHeight - innerHeight), foot: parseFloat(getComputedStyle(document.documentElement).paddingBottom) || 0, head: parseFloat(getComputedStyle(document.documentElement).paddingTop) || 0 };
+  }
+  // R-PAGE-16: nothing a person can press stands under what floats over the page. `args.zones` are the places of the composer, the answer line, the
+  // header's buttons and the window's own, in this frame's coordinates (page-band.mjs `pageCovered`). What the page's own flow has under them is
+  // judged at the end it is read to (`where`: the head at its "top", the foot at its "end"); what is fixed or sticky never scrolls clear, so it is
+  // judged against both whatever the end ("stuck" judges only it).
+  if (name === "page-covered") {
+    const { zones, where } = args, clickable = "a[href], button, input:not([type=hidden]), select, textarea, summary, [role=button], [role=link], [onclick], [tabindex]:not([tabindex=\"-1\"])";
+    const stuck = element => { for (let at = element; at && at.nodeType === 1; at = at.parentElement) { const position = getComputedStyle(at).position; if (position === "fixed" || position === "sticky") return true; } return false; };
+    const hidden = [];
+    for (const element of document.querySelectorAll(clickable)) {
+      const rect = element.getBoundingClientRect(), style = getComputedStyle(element);
+      if (!(rect.width > 0 && rect.height > 0) || style.visibility === "hidden" || style.display === "none" || style.pointerEvents === "none" || element.disabled) continue;
+      if (rect.bottom <= 0 || rect.top >= innerHeight) continue;
+      const fixed = stuck(element), judged = zones.filter(zone => fixed || (where === "top" && zone.side === "head") || (where === "end" && zone.side === "foot"));
+      for (const zone of judged) {
+        const across = Math.min(rect.right, zone.right) - Math.max(rect.left, zone.left), down = Math.min(rect.bottom, zone.bottom) - Math.max(rect.top, zone.top);
+        if (across >= 4 && down >= 4) hidden.push(`${element.tagName.toLowerCase()}${element.id ? "#" + element.id : ""}「${(element.textContent || element.getAttribute("aria-label") || "").trim().slice(0, 16)}」${fixed ? " (fixed to the window)" : ""} under ${zone.name} (${Math.round(across)} x ${Math.round(down)} px)`);
+      }
+    }
+    require(hidden.length === 0, `something to press is covered: ${hidden.join("; ")}`);
+    return { check: name, where, zones: zones.map(zone => zone.name) };
+  }
+  // R-PAGE-17: a column fixed or sticky to the window and as tall as it (a rail) runs to the window's foot at every scroll position, the page read
+  // to its end included: its dividing line and its colour do not stop short of the foot, with a blank strip under it. Only a column that has stuck
+  // at the window's top is judged (one still in the flow, above where it sticks, stands where the page put it), and there must be one.
+  if (name === "page-tall-reach") {
+    const columns = [...document.body.querySelectorAll("*")].filter(element => {
+      const style = getComputedStyle(element), box = element.getBoundingClientRect();
+      return /^(sticky|fixed)$/.test(style.position) && box.width > 0 && box.height >= innerHeight * 0.6;
+    });
+    const stuck = columns.filter(element => element.getBoundingClientRect().top <= 1);
+    require(stuck.length > 0, `a column as tall as the window has stuck at its top: ${columns.length} such columns, none stuck (scrolled ${Math.round(scrollY)} px)`);
+    for (const element of stuck) {
+      const box = element.getBoundingClientRect();
+      require(box.bottom >= innerHeight - 1, `a column as tall as the window runs to its foot: it ends at ${Math.round(box.bottom)} of ${innerHeight}, ${Math.round(innerHeight - box.bottom)} px short (${element.tagName.toLowerCase()}.${element.className})`);
+    }
+    return { check: name, columns: stuck.length, scrolled: Math.round(scrollY), window: innerHeight };
+  }
   // R-PAGE-10: the frame is the page's own window, as in a browser: a rail one window tall and sticky stays while the article scrolls, and its
-  // buttons at its foot are in the window, which ends above the composer (the app's own check, `page-rail`, measures that end).
+  // buttons at its foot are in the window, which runs to the window's foot (the app's own check, `page-rail`, measures that end).
   if (name === "page-rail") {
     const rail = document.querySelector(".rail"), rect = rail.getBoundingClientRect(), article = document.querySelector("article").getBoundingClientRect();
     require(scrollY > 300 && article.top < -300, `the article has scrolled inside the page's window: ${Math.round(scrollY)} px`);
@@ -13428,8 +13508,13 @@ export function checkFrame(name) {
     require(document.documentElement.scrollHeight > innerHeight * 2, `the page is much taller than its window: ${document.documentElement.scrollHeight} of ${innerHeight}`);
     for (const id of ["hide", "copy"]) {
       const button = document.getElementById(id).getBoundingClientRect();
-      require(button.top >= rect.top && button.bottom <= innerHeight + 0.5 && button.bottom > innerHeight - 80 && button.width > 40, `the button ${id} is in the window, at the rail's foot: ${Math.round(button.top)}-${Math.round(button.bottom)} of ${innerHeight}`);
+      // R-PAGE-16: the rail is as tall as the window (its background runs to the edge) and what stands at its foot floats above what the window keeps there.
+      const foot = parseFloat(getComputedStyle(document.documentElement).paddingBottom) || 0;
+      require(foot > 40 && button.top >= rect.top && button.bottom <= innerHeight - foot + 0.5 && button.bottom > innerHeight - foot - 80 && button.width > 40, `the button ${id} is above the room the composer keeps, at the rail's foot: ${Math.round(button.top)}-${Math.round(button.bottom)} of ${innerHeight}, foot ${foot}`);
     }
+    // R-PAGE-16: stuck at the window's top, the rail takes the room the header's buttons keep as its own padding, so its first words stand clear under them.
+    const head = parseFloat(getComputedStyle(document.documentElement).paddingTop) || 0;
+    require(head > 30 && document.querySelector(".rail b").getBoundingClientRect().top >= head - 1, `the rail's first words stand below the header's buttons: ${Math.round(document.querySelector(".rail b").getBoundingClientRect().top)} against ${head}`);
     const hide = document.getElementById("hide").getBoundingClientRect(), copy = document.getElementById("copy").getBoundingClientRect();
     require(hide.bottom <= copy.top + 1, "the two buttons stand one over the other");
     require(document.documentElement.scrollWidth <= innerWidth + 1, "nothing runs out sideways");

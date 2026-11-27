@@ -39,6 +39,10 @@ for (const [theme, palette] of Object.entries({ light, dark })) {
   if (minimum < 4.5) process.exitCode = 1;
   contrast.captionClose = +ratio(palette["on-close"], palette.close).toFixed(2);
   if (contrast.captionClose < 4.5) process.exitCode = 1;
+  // The window's buttons over an open page (R-PAGE-17): the dark ink on a white page and the light ink on a black one (a page's tone is light above a
+  // luminance of 0.179, where the two inks read the same, so these are the ends of what they are drawn on).
+  contrast.captionInk = { onLight: +ratio(palette["caption-ink-on-light"], "#ffffff").toFixed(2), onDark: +ratio(palette["caption-ink-on-dark"], "#0a0a0a").toFixed(2) };
+  if (Math.min(contrast.captionInk.onLight, contrast.captionInk.onDark) < 4.5) process.exitCode = 1;
   // The delete dialog's Delete button (members.css `.mb-delete`): white words on the app's solid red, and the red against the dialog's surface.
   contrast.deleteButton = { words: contrast.captionClose, onPanel: +ratio(palette.close, palette.panel).toFixed(2), onFloat: +ratio(palette.close, palette.float).toFixed(2), onDialog: +ratio(palette.close, palette.dialog).toFixed(2) };
   if (contrast.deleteButton.onPanel < 3 || contrast.deleteButton.onFloat < 3 || contrast.deleteButton.onDialog < 3) process.exitCode = 1;

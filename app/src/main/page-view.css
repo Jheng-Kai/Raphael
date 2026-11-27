@@ -1,12 +1,13 @@
 /* A page in the conversation's place (page-view.ts). The thread stays laid out under it, hidden, so its place and its scroll are as they
    were when the owner goes back; the composer stays below, so a change can be asked for where the page is read. There is no
-   scrim and no ×: the way back is the round arrow in the conversation header (members.css, styles.css `.pgv-back`).
+   scrim and no ?: the way back is the round arrow in the conversation header (members.css, styles.css `.pgv-back`).
    The page (R-PAGE-08) is the whole area right of the sidebar:
    the details panel is folded while it stands, the header's centre is the page's own pill and Share is at the right. A report
    scrolls as one in that area; an HTML page does not: its frame is the page's own window (R-PAGE-10) and the page scrolls in it.
    The area (R-PAGE-11) runs to the window's foot and the composer floats over it at its usual place and width, on its own surface,
-   with no band behind it. What floats there (page-view.ts measures it: `--pgv-dock`, the composer's dock, and `--pgv-say`, the
-   answer line over it) is `--pgv-under`: a report scrolls its last line clear above it, and an HTML page's frame ends above it. */
+   with no band behind it, and as one line (R-PAGE-15). What floats there (page-view.ts measures it: `--pgv-dock`, the composer's dock, and
+   `--pgv-say`, the answer line over it) is `--pgv-under`: a report scrolls its last line clear above it, and an HTML page is told
+   it (page-card.ts `.pgv-foot`) and scrolls its own last line clear above it, its frame itself running to the window's foot. */
 .ra-stage.is-page { --pgv-under: calc(var(--pgv-dock, 0px) + var(--sp-1) + var(--pgv-say, 0px) + var(--sp-2)); display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
 /* The voice flyer is the one thing that stays beside them: the thread's own "hearing" line is hidden with the thread, so it is the
    only sign left that the owner is heard (voice-mode.ts). It stands over the page, takes no pointer there (the
@@ -30,6 +31,11 @@
    them is the page's, which scrolls and works under it. */
 .ra-stage.is-page > .ra-dock { grid-area: 2 / 1; position: relative; z-index: 2; background: none; pointer-events: none; }
 .ra-stage.is-page > .ra-dock > * { pointer-events: auto; }
+/* While a page stands the composer is one line (R-PAGE-15): the words and the send or voice button, with none of what sets the
+   next message up (the +, the permission, the folder and the branch, the model). They are back as soon as the page is put away. */
+.ra-stage.is-page > .ra-dock .composer :is(.cmp-attach, .cmp-mode, .cmp-work, .cmp-model) { display: none; }
+.ra-stage.is-page > .ra-dock .composer .cmp-row { grid-template-columns: minmax(0, 1fr) auto; align-items: end; column-gap: var(--sp-1); }
+.ra-stage.is-page > .ra-dock .composer .cmp-bar { align-self: end; }
 .pgv { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; background: var(--content); }
 .pgv[hidden] { display: none; }
 .pgv-body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; }
@@ -46,12 +52,27 @@
 
 /* An HTML page: the whole area, edge to edge (R-PAGE-10): the page is as wide as the area, with no side margin, frame, corner or edge, so its own
    background reaches the sidebar and the window's right edge. The frame is the page's own window, as a browser gives one: it fills the area from
-   under the header's band (`--row-lead`) down to just above the composer's row (`--pgv-under`), and the page scrolls in it, so `100vh`, sticky
-   and fixed parts and columns that scroll apart work as in a browser. The area itself does not scroll and nothing scrolls under the band,
-   so there is no fade there. Behind the composer's row (R-PAGE-11) the area shows the page's own background (`--pgv-bg`, which the page says;
-   the area's own without one), so the page still reads as running to the window's foot. */
-.pgv-page { position: relative; box-sizing: border-box; min-height: 0; overflow: hidden; padding: var(--row-lead) 0 var(--pgv-under, 0px); background: var(--content); }
-.pgv-page::before { content: ""; position: absolute; inset: var(--row-lead) 0 0; background: var(--pgv-bg, var(--content)); pointer-events: none; }
+   the window's top edge to its foot (R-PAGE-11, R-PAGE-16), and the page scrolls in it, so `100vh`, sticky and fixed parts and columns that
+   scroll apart work as in a browser. The header (the arrow, the page's pill, Share) is transparent and floats over its head, each button on a
+   surface of its own, and the composer floats over its foot: the page is told how much of each (`.pgv-head` and `.pgv-foot`, below) and keeps
+   its first and last lines clear of them. The area itself does not scroll. The window paints nothing behind the page (its frame is
+   transparent): a page's own background is the only one, so no band of any other colour stands above, below or beside it. */
+.pgv-page { position: relative; box-sizing: border-box; min-height: 0; overflow: hidden; padding: 0; background: var(--content); }
+/* The rooms the header's buttons take at the head, and the composer and the answer line over it at the foot: measures only (page-card.ts reads
+   their heights and tells the page). */
+.pgv-head, .pgv-foot { position: absolute; left: 0; right: 0; visibility: hidden; pointer-events: none; }
+.pgv-head { top: 0; height: var(--row-lead); }
+.pgv-foot { bottom: 0; height: var(--pgv-under, 0px); }
+/* The window's own buttons stand over the page's head too, with no plate: they melt into the page and are drawn in the ink its own ground asks for
+   (the helper says the page's tone, page-card.ts sets it on the root while a page stands, R-PAGE-17): dark ink on a light page, light ink on a dark
+   one, whatever the app's theme is; a soft fill of the ink's own colour only under the pointer. A page whose ground is a gradient or a picture
+   (tone mixed) is no one tone, so there the buttons keep a surface of their own (the pill's), which reads on any of them. */
+:root[data-page-tone="light"] .window-chrome .window-button { color: var(--caption-ink-on-light); }
+:root[data-page-tone="dark"] .window-chrome .window-button { color: var(--caption-ink-on-dark); }
+:root[data-page-tone="light"] .window-chrome .window-button:not(.window-close):hover, :root[data-page-tone="dark"] .window-chrome .window-button:not(.window-close):hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+:root[data-page-tone="light"] .window-chrome .window-button:not(.window-close):active, :root[data-page-tone="dark"] .window-chrome .window-button:not(.window-close):active { background: color-mix(in srgb, currentColor 22%, transparent); }
+:root[data-page-tone] .window-chrome .window-close:is(:hover, :active) { color: var(--on-close); }
+:root[data-window-layout="main"][data-page-tone="mixed"] .window-chrome[data-conversation-caption] .window-controls { border-bottom-left-radius: var(--r-lg); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); overflow: hidden; }
 .pgv-page:focus { outline: none; }
 .pgv-frame-box { position: relative; width: 100%; height: 100%; }
 .pgv-frame-box > .pg-frame { position: absolute; inset: 0; width: 100%; height: 100%; }

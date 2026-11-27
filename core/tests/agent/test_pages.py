@@ -967,27 +967,100 @@ def test_the_helper_does_not_pass_on_growth_that_only_follows_its_frame():
     assert _HELPER.index("framed = innerHeight;") < _HELPER.index("post('height', {height})")
 
 
-def test_the_helper_tells_the_window_the_pages_own_background_as_a_plain_colour():
-    # R-PAGE-10: the window paints it behind the composer's row, so a page whose frame ends above the composer still reads as running to
-    # the window's foot. The first non-transparent computed background of the body, then of the root, said once the page is parsed and
-    # again once it has loaded (its style sheets may come late); the window takes only rgb() or rgba(), so the helper converts any other
-    # notation and says an empty colour for none.
+def test_the_window_paints_no_background_of_its_own_on_a_page():
+    # R-PAGE-10: a page's own background must never show as bars because of how Raphael frames it. The app's base style narrows
+    # the root (a centred column), so a body the window painted was a strip of that column's width, with the body's own padding
+    # as a band above and below the content, wherever the page painted its root or a wrapper itself (its own light theme over
+    # the app's dark one). The window paints nothing on the body: the page's own background, or the canvas, is all there is.
+    from raphael_core.agent.pages import document, page_file
+    page = {"title": "t", "html": "<h1>x</h1>", "source": "html", "network": {}}
+    for text in (document(page, "dark"), document(page, "light"), page_file(page)):
+        head = text[:text.index("</style>")]
+        assert "body{color:var(--fg);font-family:var(--font)}" in head
+        assert "background:var(--bg)" not in head
+    # The theme is told as a variable and a colour scheme: the canvas of a page that paints none follows the app's theme.
+    assert "color-scheme:dark" in document(page, "dark") and "color-scheme:light" in document(page, "light")
+
+
+def test_the_helper_says_nothing_of_its_background_and_takes_the_room_over_the_page():
+    # R-PAGE-11, R-PAGE-16: the frame is the page's window from the window's top edge to its foot and the header's buttons and the
+    # composer float over it, so nothing is painted behind them and the page's own background is never reported. The window tells the
+    # page how much of its head and foot they cover (`head`, `foot`): the root's own padding, so the page's first line stands clear
+    # under the buttons, its last clear above the composer, and its canvas (its own background) runs under both.
     from raphael_core.agent.pages import _HELPER
-    assert "const tell = () => post('background', {color: background()});" in _HELPER
-    assert "addEventListener('DOMContentLoaded', tell, {once: true});" in _HELPER
-    assert "addEventListener('load', tell, {once: true});" in _HELPER
-    background = _HELPER[_HELPER.index("const background = () => {"):_HELPER.index("const tell = ")]
-    assert background.index("document.body") < background.index("document.documentElement")
-    assert "getComputedStyle(root).backgroundColor" in background
-    # A transparent one is none; a colour in another notation goes through a canvas, so only rgb()/rgba() text is ever sent.
-    plain = _HELPER[_HELPER.index("const plain = value => {"):_HELPER.index("const background = () => {")]
-    assert "if (!(a > 0)) return '';" in plain and "getImageData" in plain
-    assert "'rgb(' +" in plain and "'rgba(' +" in plain
+    assert "post('background'" not in _HELPER and "getComputedStyle(root).backgroundColor" not in _HELPER
+    assert "own && (data.type === 'foot' || data.type === 'head') && Number.isFinite(data.y)" in _HELPER
+    assert "const room = Math.max(0, Math.min(2000, Math.round(data.y)));" in _HELPER
+    assert "root.paddingTop = head ? head + 'px' : '';" in _HELPER and "root.paddingBottom = foot ? foot + 'px' : '';" in _HELPER
+    # Only the window that holds the page may say it.
+    assert "own = event.source === parent && data && data.raphaelPage === 1;" in _HELPER
     # The helper is a Python string: a backslash in it would be an escape of Python's, not of the page's script.
     assert "\\" not in _HELPER
 
 
-async def test_the_page_a_window_gets_carries_the_helper_that_says_its_background(conn):
+def test_the_helper_moves_a_fixed_or_sticky_part_clear_of_the_composer_and_the_header():
+    # R-PAGE-16: a rail one window tall (sticky, its buttons at its foot) or a bar at an edge is fixed to the window, so the room the
+    # window keeps would cover it for good. A part as tall as the window takes the room as its own padding (its background still runs to the
+    # edge, what stands at its foot floats clear), a smaller one moves by it; what was moved is put back first at every pass, so
+    # the pass reads the page as the page made it and the page's own inline styles come back when the window is gone.
+    from raphael_core.agent.pages import _HELPER
+    lifting = _HELPER[_HELPER.index("const lift = () => {"):_HELPER.index("const settleSoon")]
+    assert "style.position !== 'fixed' && style.position !== 'sticky'" in lifting
+    assert "tall = box.height >= innerHeight * 0.6" in lifting
+    assert "element.style.boxSizing = 'border-box'" in lifting and "side = edge === 'bottom' ? 'paddingBottom' : 'paddingTop'" in lifting
+    assert "box.bottom + beyond > innerHeight - foot && box.top < innerHeight);" in lifting
+    assert "take('top', head, head > 0 && box.top < head && box.bottom > 0);" in lifting
+    assert "else if (style[edge] !== 'auto')" in lifting
+    # What was moved is put back before anything is read again.
+    assert lifting.index("for (const [element, was] of moved)") < lifting.index("querySelectorAll('*')")
+    # It runs when the window says a room, when the page has loaded and when the page changes or the window is resized.
+    assert "addEventListener('resize', settleSoon)" in _HELPER and "new MutationObserver(settleSoon)" in _HELPER
+    # A sticky part reaches a room only once it sticks, as the page is read down to it.
+    assert "addEventListener('scroll', settleSoon, {passive: true})" in _HELPER
+    assert "\\" not in _HELPER
+
+
+def test_the_helper_says_the_pages_own_tone_and_fades_what_scrolls_under_the_window_in_the_pages_own_colour():
+    # R-PAGE-17: the window's own buttons stand over the page with no plate, drawn in ink that reads on the page's own ground, so the helper says
+    # its tone (light or dark by the luminance of the colour its root paints, else its body's, else the app's own colour behind the frame; mixed
+    # for a gradient, a picture or a translucent colour, which has no one ground). What scrolls under the header's buttons and the composer
+    # fades out in that same colour (two fixed, pointer-less layers, none when there is no one ground), never the app's black or white.
+    from raphael_core.agent.pages import _HELPER
+    ground = _HELPER[_HELPER.index("const ground = () => {"):_HELPER.index("const lin = ")]
+    assert "style.backgroundImage !== 'none'" in ground and "if (root.image || body.image) return null;" in ground
+    assert ground.index("getComputedStyle(element)") < ground.index("colorScheme === 'dark' ? [10, 10, 10] : [255, 255, 255]")
+    assert "(own.length > 3 && own[3] !== 1)" in ground
+    assert "!clear(root.numbers) ? root.numbers : !clear(body.numbers) ? body.numbers : null" in ground
+    shade = _HELPER[_HELPER.index("const shade = () => {"):_HELPER.index("const lift = () => {")]
+    assert "0.2126 * lin(colour[0]) + 0.7152 * lin(colour[1]) + 0.0722 * lin(colour[2]) > 0.179 ? 'light' : 'dark'" in shade
+    assert "post('tone', {tone})" in shade and "'mixed'" in shade
+    assert "position:fixed;left:0;right:0;pointer-events:none" in shade and "linear-gradient(" in shade
+    assert "(at === 'top' ? 'to bottom' : 'to top')" in shade and "const on = room > 0 && colour;" in shade
+    # A page opened again is told its tone again; it is read again after a press, a transition, a class or a theme change.
+    assert "tone = '';" in _HELPER
+    assert "addEventListener('click', settleSoon, true)" in _HELPER and "addEventListener('transitionend', settleSoon, true)" in _HELPER
+    assert "'data-theme'" in _HELPER
+    assert "\\" not in _HELPER
+
+
+def test_a_sticky_part_as_tall_as_the_window_runs_on_to_the_foot_when_the_page_is_read_to_its_end():
+    # R-PAGE-17: a rail one window tall is sticky in a container that ends where the page's content does, so read to its end it stopped short of the
+    # window's foot by the body's own padding and the room the composer keeps (its dividing line ended well above the foot). A negative bottom
+    # margin of that much, taken from the container's content box and the page's scroll height, lets it run on to the foot; it is put back first
+    # at every pass like everything else the helper moves.
+    from raphael_core.agent.pages import _HELPER
+    lifting = _HELPER[_HELPER.index("const lift = () => {"):_HELPER.index("const settleSoon")]
+    assert "tall && style.position === 'sticky' && element.parentElement" in lifting
+    assert "document.documentElement.scrollHeight - (parent.getBoundingClientRect().bottom + scrollY" in lifting
+    assert "was.marginBottom = element.style.marginBottom; element.style.marginBottom = ((parseFloat(style.marginBottom) || 0) - beyond) + 'px';" in lifting
+    assert lifting.index("for (const [element, was] of moved)") < lifting.index("tall && style.position === 'sticky'")
+    # What the margin lets run on to the foot reaches the room the composer keeps, so the padding that lifts what stands at its foot counts it.
+    assert "take('bottom', foot, foot > 0 && box.bottom + beyond > innerHeight - foot && box.top < innerHeight);" in lifting
+    assert lifting.index("let beyond = 0;") < lifting.index("take('bottom'")
+    assert "\\" not in _HELPER
+
+
+async def test_the_page_a_window_gets_carries_the_helper_before_its_own_markup(conn):
     from raphael_core.agent.pages import _HELPER
     page = stored(conn, title="Daily lesson", html=LESSON)
     host = PageHost(PageStore(conn))
@@ -995,7 +1068,7 @@ async def test_the_page_a_window_gets_carries_the_helper_that_says_its_backgroun
         body = (await fetch(await host.url(page["id"], "dark"))).split("\r\n\r\n", 1)[1]
     finally:
         await host.aclose()
-    assert "post('background', {color: background()})" in body and body.index(_HELPER) < body.index("<header>")
+    assert body.index(_HELPER) < body.index("<header>") and "body{color:var(--fg)" in body
 
 
 # A member's page shaped like a daily lesson: a Google Fonts style sheet in its head, its words built by its own script at
