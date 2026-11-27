@@ -1122,7 +1122,7 @@ export async function perform(page, step, evidenceDirectory) {
     // `method` is a core method (`members.list`) or a native command (`device_settings_set`).
     case "wait-call":
       try {
-        await page.waitForFunction(({ method, holding }) => window.__look.calls.some(call => (call.method === method || call.command === method) && (!holding || JSON.stringify(call.params).includes(holding))),
+        await page.waitForFunction(({ method, holding }) => window.__look.calls.some(call => (call.method === method || call.command === method) && (!holding || JSON.stringify(call.params ?? call.patch ?? null).includes(holding))),
           { timeout: 6000 }, { method: step.method, holding: step.holding ?? "" });
       } catch (error) { throw new Error(`The window never called ${step.method}${step.holding ? ` with ${step.holding}` : ""}`, { cause: error }); }
       break;
