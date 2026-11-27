@@ -68,13 +68,20 @@ def files_below(folder, *, skip=(), keep=None):
     return sorted(found), True
 
 
-def listing(folder, files, whole, *, binary=True):
+def listing(folder, files, whole, *, binary=True, limit=LISTED):
     lines = []
-    for relative, size in files[:LISTED]:
+    for relative, size in files[:limit]:
         note = ", binary" if binary and is_binary(Path(folder) / relative) else ""
         lines.append(f"- {relative} ({size_of(size)}{note})")
-    if len(files) > LISTED or not whole:
-        lines.append(f"- and more: {'over ' if not whole else ''}{len(files)} files in all; list a folder with a command to see them")
+    if len(files) > limit or not whole:
+        # What is not named is told by its folders, so that the model knows where to look: a folder is read by its path.
+        rest = {}
+        for relative, _ in files[limit:]:
+            top = relative.split("/")[0] + "/" if "/" in relative else "."
+            rest[top] = rest.get(top, 0) + 1
+        where = ", ".join(f"{count} in {top}" for top, count in sorted(rest.items(), key=lambda item: -item[1])[:6])
+        lines.append(f"- and more: {'over ' if not whole else ''}{len(files)} files in all{f' ({where})' if where else ''}; "
+                     "read a folder's name with skill_read and reference to list it")
     return lines
 
 
