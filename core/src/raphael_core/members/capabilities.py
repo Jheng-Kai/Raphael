@@ -105,11 +105,17 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         """The one folder the team's skills and plugins are kept in, which the Docker computers mount as it is."""
         return self.homes.home(SHARED) / "skills"
 
-    def where(self, member_id, path) -> str:
+    def guest(self, member_id):
+        """The library's path in `member_id`'s Docker computer, or None. It reads the database (the member's computer and the
+        computer's mounts), so it is asked on the event loop's thread, never in a thread that reads files."""
+        return self.guest_library(member_id) if self.guest_library is not None and member_id is not None else None
+
+    def where(self, member_id, path, *, guest=...) -> str:
         """`path` as the commands of `member_id` reach it: below the mounted library when its computer is a Docker one that mounts
-        it (the guest path), else the path on this PC, always written with `/`."""
+        it (the guest path), else the path on this PC, always written with `/`. `guest` is the member's `guest()` when it was
+        asked already."""
         path = Path(path)
-        guest = self.guest_library(member_id) if self.guest_library is not None and member_id is not None else None
+        guest = self.guest(member_id) if guest is ... else guest
         if guest:
             try:
                 relative = path.relative_to(self.library_folder()).as_posix()
@@ -484,22 +490,26 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             inputs = self._named_skill(member_id, name)
             if inputs is None:
                 return None
-            text = await asyncio.to_thread(self._read_skill_text, inputs, member_id)
+            # The guest path reads the database, whose connection belongs to this thread: it is asked here, and the files
+            # are read in a thread with it (a member on a Docker computer could read no skill: SQLite refused the thread).
+            text = await asyncio.to_thread(self._read_skill_text, inputs, member_id, self.guest(member_id))
             if revision == self.skill_revision():
                 return text
 
-    def _read_skill_text(self, inputs, member_id=None):
+    def _read_skill_text(self, inputs, member_id=None, guest=...):
         """The skill's document with what a model needs to reach the rest of it: where its folder is in the member's own computer,
-        the references that are short, and the other files by name and size (skill_index.py)."""
+        the references that are short, and the other files by name and size (skill_index.py). Read in a thread, it is given the
+        member's `guest()` path, which it may not ask for there."""
         from .skill_index import plugin_entry_points, skill_files
 
+        guest = self.guest(member_id) if guest is ... else guest
         owner, skill, path, plugin = inputs
         path = self.homes.safe(path)
         if path.stat().st_size > MAX_SKILL_BYTES:
             return None
         text = path.read_text(encoding="utf-8")
-        here = self.where(member_id, path.parent)
-        root = self.where(member_id, self.homes.safe(plugin["root"])) if plugin else None
+        here = self.where(member_id, path.parent, guest=guest)
+        root = self.where(member_id, self.homes.safe(plugin["root"]), guest=guest) if plugin else None
         for variable in ("${CLAUDE_SKILL_DIR}", "${SKILL_DIR}", "${HERMES_SKILL_DIR}"):
             text = text.replace(variable, here)
         if plugin:
@@ -519,8 +529,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
                 inlined.append(reference.relative_to(path.parent).as_posix())
         files = skill_files(path.parent, inlined)
         if files or skill["source"].startswith("local:") or skill["source"] == "upload" or plugin:
-            runs = ("vm_exec in your Docker computer" if self.guest_library is not None and member_id is not None
-                    and self.guest_library(member_id) and here.startswith(self.guest_library(member_id)) else "the local command tool")
+            runs = "vm_exec in your Docker computer" if guest and here.startswith(guest) else "the local command tool"
             text += "\n\nSkill folder: " + here
             if files:
                 text += "\nFiles of this skill (a binary is run, never read):\n" + "\n".join(files)
@@ -582,7 +591,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             if inputs is None:
                 return request, False
             revision = self.skill_revision()
-            result, error = await asyncio.to_thread(self._load_slash, request, inputs, member_id)
+            result, error = await asyncio.to_thread(self._load_slash, request, inputs, member_id, self.guest(member_id))
             if revision == self.skill_revision():
                 if on_failure is not None and error is not None:
                     on_failure(inputs[1]["slash_name"], error)
@@ -627,14 +636,14 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             return rest, inputs
         return text, None
 
-    def _load_slash(self, request, inputs, member_id=None):
+    def _load_slash(self, request, inputs, member_id=None, guest=...):
         from .skill_library import fingerprint
 
         _, skill, path, _ = inputs
         try:
             # The folder is looked at, not read: a skill with large assets costs no more to call than one without.
             fingerprint(self.homes.safe(path).parent)
-            document = self._read_skill_text(inputs, member_id)
+            document = self._read_skill_text(inputs, member_id, guest)
             if document is None:
                 raise MemberError("not_found", "skill document is unavailable")
         except (MemberError, HomeError, OSError, UnicodeError) as error:
