@@ -1451,7 +1451,6 @@ export const zhCN = {
   "chat.regenerate": "重新产生",
   "chat.showAll": "显示全部",
   "chat.latest": "跳至最新消息",
-  "agent.taskCancelled": "已中止",
   "agent.reason.cancelled": "已中止",
   "agent.taskLimit": "达到上限",
   "agent.taskFailed": "没有完成",

@@ -1451,7 +1451,6 @@ export const th = {
   "chat.regenerate": "สร้างใหม่",
   "chat.showAll": "แสดงทั้งหมด",
   "chat.latest": "ไปล่าสุด",
-  "agent.taskCancelled": "หยุดแล้ว",
   "agent.reason.cancelled": "หยุดแล้ว",
   "agent.taskLimit": "ถึงขีดจำกัด",
   "agent.taskFailed": "ไม่เสร็จ",

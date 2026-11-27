@@ -129,8 +129,8 @@ const REASONS: Record<string, MessageKey> = {
 };
 /** The states of a task that did not finish: it can be run again. */
 export const RERUNNABLE: ReadonlySet<string> = new Set(["interrupted", "cancelled", "limit", "failed"]);
+// A task the owner stopped says nothing of it (R-CHAT-STOP-02): its card keeps the count of what it did.
 const TASK_ENDS: Record<string, MessageKey> = {
-  cancelled: "agent.taskCancelled",
   limit: "agent.taskLimit",
   failed: "agent.taskFailed",
   interrupted: "agent.taskInterrupted",
@@ -239,8 +239,11 @@ export const shortModel = (model: string): string => model.slice(model.lastIndex
 
 // ---------- what a turn did ----------
 
-/** The steps a reader is shown: everything but the model calls that went well, which are the thinking between them. */
-export const shownSteps = (turn: AgentTurn): AgentStep[] => (turn.steps ?? []).filter((step) => (step.kind !== "model" || step.outcome !== "ok") && !bookkeeping(step));
+/**
+ * The steps a reader is shown: everything but the model calls that went well, which are the thinking between them, and a call
+ * the owner's Stop cut off, which says nothing (R-CHAT-STOP-02).
+ */
+export const shownSteps = (turn: AgentTurn): AgentStep[] => (turn.steps ?? []).filter((step) => (step.kind !== "model" || step.outcome !== "ok") && step.outcome !== "cancelled" && !bookkeeping(step));
 
 /**
  * Steps that are no step to the reader: a background task looking through the tools it was given (no
@@ -508,10 +511,10 @@ function taskCardHTML(turn: AgentTurn, state: TimelineState): string {
   const mark = live
     ? task.state === "queued" ? ico("clock") : SPINNER
     : waiting ? ico("clock")
-    : task.state === "done" ? `<span class="task-check${ended ? " is-pop" : ""}">${ico("check")}</span>` : ico("stop");
+    : task.state === "done" ? `<span class="task-check${ended ? " is-pop" : ""}">${ico("check")}</span>` : task.state === "cancelled" ? "" : ico("stop");
   const since = live ? task.started_at_ms ? ` data-since="${task.started_at_ms}"` : ` data-duration="${workMs(turn, 0)}"` : "";
   const summary = btn(
-    `<span class="task-mark">${mark}</span><span class="task-lead">${esc(lead)}</span>` +
+    (mark ? `<span class="task-mark">${mark}</span>` : "") + `<span class="task-lead">${esc(lead)}</span>` +
       (time ? `<span class="task-time num"${since}>${live ? "" : esc(time)}</span>` : "") +
       (bad ? `<span class="steps-bad">${esc(bad)}</span>` : "") +
       `<span class="steps-chev">${ico("down")}</span>`,

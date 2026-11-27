@@ -1451,7 +1451,6 @@ export const de = {
   "chat.regenerate": "Neu generieren",
   "chat.showAll": "Alle anzeigen",
   "chat.latest": "Zum neuesten springen",
-  "agent.taskCancelled": "Gestoppt",
   "agent.reason.cancelled": "Gestoppt",
   "agent.taskLimit": "Limit erreicht",
   "agent.taskFailed": "Nicht abgeschlossen",

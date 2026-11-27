@@ -1451,7 +1451,6 @@ export const id = {
   "chat.regenerate": "Buat ulang",
   "chat.showAll": "Tampilkan semua",
   "chat.latest": "Ke yang terbaru",
-  "agent.taskCancelled": "Dihentikan",
   "agent.reason.cancelled": "Dihentikan",
   "agent.taskLimit": "Batas tercapai",
   "agent.taskFailed": "Tidak selesai",

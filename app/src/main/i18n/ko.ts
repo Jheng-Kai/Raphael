@@ -1451,7 +1451,6 @@ export const ko = {
   "chat.regenerate": "다시 생성",
   "chat.showAll": "모두 표시",
   "chat.latest": "최신으로 이동",
-  "agent.taskCancelled": "중지됨",
   "agent.reason.cancelled": "중지됨",
   "agent.taskLimit": "한도에 도달했습니다",
   "agent.taskFailed": "완료하지 못했습니다",

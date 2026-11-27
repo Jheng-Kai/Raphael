@@ -1451,7 +1451,6 @@ export const ptBR = {
   "chat.regenerate": "Gerar novamente",
   "chat.showAll": "Mostrar tudo",
   "chat.latest": "Ir para o mais recente",
-  "agent.taskCancelled": "Interrompido",
   "agent.reason.cancelled": "Interrompido",
   "agent.taskLimit": "Limite atingido",
   "agent.taskFailed": "Não terminou",

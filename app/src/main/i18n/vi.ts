@@ -1451,7 +1451,6 @@ export const vi = {
   "chat.regenerate": "Tạo lại",
   "chat.showAll": "Hiện tất cả",
   "chat.latest": "Đến mới nhất",
-  "agent.taskCancelled": "Đã dừng",
   "agent.reason.cancelled": "Đã dừng",
   "agent.taskLimit": "Đã đạt giới hạn",
   "agent.taskFailed": "Chưa xong",

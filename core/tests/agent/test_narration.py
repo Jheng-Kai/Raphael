@@ -248,8 +248,10 @@ async def test_a_resumed_turn_can_be_cancelled(make_rig, plugins, client):
     await task
     [turn] = await rig.turns()
     assert turn["status"] == "cancelled"
-    assert turn["messages"][-1]["kind"] == "reply"
-    assert turn["text"] and turn["cost_usd"] >= 0.3
+    # A stop says nothing (R-CHAT-STOP-02): the line it had said stays, and no 取消 line, word or prefix follows it.
+    assert [message["text"] for message in turn["messages"] if message["kind"] == "reply"] == []
+    assert not turn["prefix"] and "cancel" not in json.dumps(turn["messages"]).lower() and "已取消" not in json.dumps(turn, ensure_ascii=False)
+    assert turn["cost_usd"] >= 0.3
 
 
 async def test_a_confirmed_result_can_supply_the_address_for_the_next_round(make_rig, plugins, client, monkeypatch):
