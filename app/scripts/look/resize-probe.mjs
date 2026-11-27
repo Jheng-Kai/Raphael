@@ -179,6 +179,8 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
     }, sampled, watch, everyWord, anchor);
 
     const before = await read();
+    // LOOK_CPUPROFILE=1: the script's own time, by function, of the press (the timed pass only).
+    if (!sampled && process.env.LOOK_CPUPROFILE) { await client.send("Profiler.enable"); await client.send("Profiler.setSamplingInterval", { interval: 200 }); await client.send("Profiler.start"); }
     if (toggle) {
       // Open or close as the owner does (a key, a click) and let the pane settle: twice, so it ends where it began.
       for (let round = 0; round < 2; round++) {
@@ -199,6 +201,13 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
       await new Promise(resolve => setTimeout(resolve, 300));
     }
     const after = await read();
+    let profile = null;
+    if (!sampled && process.env.LOOK_CPUPROFILE) {
+      const { profile: taken } = await client.send("Profiler.stop");
+      const self = new Map(), byId = new Map(taken.nodes.map(node => [node.id, node]));
+      taken.samples.forEach((id, at) => { const frame = byId.get(id).callFrame, key = `${frame.functionName || "(anonymous)"} ${frame.url.split("/").slice(-2).join("/")}:${frame.lineNumber + 1}`; self.set(key, (self.get(key) ?? 0) + (taken.timeDeltas[at] ?? 0) / 1000); });
+      profile = [...self.entries()].sort((a, b) => b[1] - a[1]).slice(0, 14).map(([name, ms]) => [name, Math.round(ms)]);
+    }
     await page.evaluate(() => { window.__resize.end = window.__resize.frames.length; });
     let events = [];
     if (!sampled) {
@@ -211,7 +220,7 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
       seen.tasks.disconnect(); seen.mutations.disconnect(); seen.frameObserver?.disconnect(); seen.observer?.disconnect(); seen.beat?.remove(); seen.frameLoop = false;
       return { frames: seen.frames, work: seen.work, anchorMode: seen.anchorMode, anchorText: seen.anchorText, loaf: seen.loaf, longTasks: seen.longTasks, writes: seen.writes, observerRuns: (window.__resizeRuns ?? 0) - seen.runsBefore, samples: seen.samples, wordNames: seen.wordNames, marks: seen.marks, end: seen.end };
     });
-    return { before, after, events, seen };
+    return { before, after, events, seen, profile };
   };
 
   const timed = await pass(false);
@@ -270,7 +279,7 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
     // The work of a frame up to its layout, from its start to the ResizeObserver told after it, and the frames that came later than 20 ms.
     workMsMax: round(Math.max(0, ...timed.seen.work.slice(1))), workMsP95: round([...timed.seen.work.slice(1)].sort((a, b) => a - b)[Math.floor(timed.seen.work.length * 0.95)] ?? 0, 2),
     workMsMedian: round([...timed.seen.work.slice(1)].sort((a, b) => a - b)[Math.floor(timed.seen.work.length * 0.5)] ?? 0, 2),
-    framesOver20: frames.filter(gap => gap > 20).length, shots: shotFiles,
+    framesOver20: frames.filter(gap => gap > 20).length, shots: shotFiles, ...(timed.profile ? { profile: timed.profile } : {}),
     // How many elements each width write restyled: the quantity the mechanism changes, the same on any PC (a width written where every
     // element inherits it restyles the window; one written on the elements that read it, a hundred or so).
     recalcElementsPerWrite: timed.seen.writes ? Math.round(recalcs.reduce((sum, event) => sum + (event.args?.elementCount ?? 0), 0) / timed.seen.writes) : 0,

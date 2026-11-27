@@ -37,8 +37,12 @@ root and `--pa-det` on the page, which every element beneath inherits: each move
 window for its cursor and its press (`edge-drag.ts`); it no longer sets `cursor` and `user-select` on the root. `resize-probe`
 (`scripts/look/resize-probe.mjs`) drags an edge out and back, or toggles a pane, and reports frames, style and layout work, the
 elements each write restyled (`recalcElementsPerWrite`), ResizeObserver runs and how the words moved (read where the owner sees
-them, after the app's own observers). `LOOK_RESIZE_THROTTLE=4` runs it with a CPU four times slower, `LOOK_INVALIDATIONS=1` names
-what invalidated the styles and `LOOK_SERIES=1` lists each word's jumps.
+them, after the app's own observers; the probe makes its observer again once the edge is held, so it is told after the drag's own).
+With `anchor` (R-PERF-27) it also reports how far any text of the conversation reaches past the area between the panes
+(`overflowMax`, `hscrollMax`), how far the line the owner reads moves (`anchorDrift`: the last line of a thread at its bottom, otherwise the
+first one whole in view), words that jump one way and back in the next frame (`flicker`), the work of each frame up to its layout
+(`workMsP95`, `workMsMax`) and, with `shots`, photographs of the window taken while the hand holds the edge. `LOOK_RESIZE_THROTTLE=4` runs it with a CPU four times slower, `LOOK_INVALIDATIONS=1` names
+what invalidated the styles, `LOOK_SERIES=1` lists each word's jumps and the line read's top for every frame, and `LOOK_CPUPROFILE=1` lists the script time of the press by function.
 
 ## Selected rendered verification
 
