@@ -26,9 +26,10 @@ def refetchable(origin, source):
         return False
     if source.startswith("local:"):
         return Path(source[6:]).exists()
+    from . import skill_git
     from .skill_github import refetchable as github
 
-    return github(source)
+    return skill_git.is_address(source) or github(source)
 
 
 def refreshable(origin, source, skills):

@@ -1050,7 +1050,6 @@ class App(Router):
             self.handbacks.release_browser = self.desktop_viewer.finish_browser_card
             self.vm.host_work_busy = lambda: bool(host.active or host.browser.downloads or host.browser.transfers)
         self.members.use_event_tools(self.gate)
-        self.members.use_attachment_store(self.attachment_store)
         self.members.register(self)
         from .computer.teaching import Teaching
         self.desktop_viewer.teaching = Teaching(self.desktop_viewer, self.members, self.memory)
