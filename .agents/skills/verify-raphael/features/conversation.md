@@ -553,7 +553,7 @@ half-width lines with the right of the box empty. The restore and reset confirma
 新增角色 keep the 440 px shell with hairlines (`member-maker`, `member-maker-taken`).
 
 ```powershell
-npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete polish-caption-confirm raphael-clear-confirm raphael-cleared member-maker member-maker-taken --theme both --width 1120,720,1920x1080
+npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete polish-caption-confirm member-maker member-maker-taken --theme both --width 1120,720,1920x1080
 ```
 
 ## Card buttons at the right; confirmations
@@ -583,7 +583,7 @@ npm run look -- admin-approval admin-approval-batch admin-approval-long admin-de
 ```
 
 ```
-npm run look -- room-delete raphael-clear-confirm computer-maintenance-reset card-question-waiting card-permission-waiting card-mail-ready card-connect-waiting card-key-waiting card-send-failed card-page-failed card-mcp-draft connector-key email-draft-handed-off chat-secret-masked card-send-retry card-mail-failed card-key-failed --theme both --width 1120,720,1920x1080
+npm run look -- room-delete computer-maintenance-reset card-question-waiting card-permission-waiting card-mail-ready card-connect-waiting card-key-waiting card-send-failed card-page-failed card-mcp-draft connector-key email-draft-handed-off chat-secret-masked card-send-retry card-mail-failed card-key-failed --theme both --width 1120,720,1920x1080
 ```
 
 ## Opening a conversation fast
@@ -1175,9 +1175,10 @@ default in turn order, moving turns, calls, cards, drafts, pages, proposals and 
 the folded summaries and CLI sessions go, and a partial unique index keeps one standard
 conversation per member; Raphael's quick conversation is folded into its main one by schema 102 (R-RAPHAEL-04). `conversations.create`,
 `.rename` and `.delete` are gone from the core, the shell allowlist, the management tools and the
-look mock; `list` and `clear` remain. No panel lists conversations, Raphael's included: it has the one, and its
-Alt+Space questions are turns of it. The header names only the member. Raphael's header has a ⋯ at the right where a
-slime has its share button, with one red item 清除對話 (`raphael-clear-menu`, `raphael-clear-confirm`, `raphael-cleared`).
+look mock; `list` and `clear` remain in the core (Settings › 資料 clears Raphael's conversation), and no menu of the conversation
+calls `clear`. No panel lists conversations, Raphael's included: it has the one, and its
+Alt+Space questions are turns of it. The header names only the member. Raphael's header has no ⋯: its right slot, where a
+slime has its share button, holds only that button, hidden for it (R-UI-183; `raphael-space` asserts the empty slot).
 
 A message's ⋯ and a right click open one menu (R-UI-104): a colleague's message has its
 reactions above 回覆 and 複製, and 重新產生 on the latest answer; the owner's has 回覆 and 複製.
@@ -1199,7 +1200,7 @@ A message shows the one emoji it has as a chip (one per message, R-REACT-01); th
 single emoji and still takes back the old ✓ and ?.
 
 ```powershell
-npm run look -- raphael-details-no-list member-conversation-sections raphael-one-conversation raphael-clear-confirm raphael-cleared actions reaction-bar emoji-picker emoji-picker-speed header-pill-hover emoji-search thread-new-divider-latest raphael-details details member-panel-details composer-voice-pending-0 composer-voice-pending-1 empty-conversation-recording empty-conversation-hearing --theme both --width 1120,720,1920x1080
+npm run look -- raphael-details-no-list member-conversation-sections raphael-one-conversation actions reaction-bar emoji-picker emoji-picker-speed header-pill-hover emoji-search thread-new-divider-latest raphael-details details member-panel-details composer-voice-pending-0 composer-voice-pending-1 empty-conversation-recording empty-conversation-hearing --theme both --width 1120,720,1920x1080
 ```
 
 Core: tests/brain/test_one_conversation_migration.py and tests/agent/test_folded_conversations.py.
@@ -1216,8 +1217,8 @@ A delivered conversation lists what colleagues asked or handed it as one closed 
 previews, search, unread state and every model read exclude those exchanges and room turns. Room answers stay in their room/thread and have no shortcut into private history.
 Raphael has one conversation, like every member: what is said at Alt+Space and right-Alt voice (the
 `quick` flag, `destination: "quick"`) is written to it beside what is typed, and only how it is answered
-differs (see Quick questions below). Its permanent identity has the ⋯ 清除對話 in its header; individual
-messages can still be deleted. What is typed names its conversation and never a destination.
+differs (see Quick questions below). Its permanent identity has nothing to clear in its header; individual
+messages are deleted one at a time from their own menus. What is typed names its conversation and never a destination.
 
 ## One waiting line (R-UI-38/42)
 
@@ -1452,19 +1453,38 @@ words) cover those, and the native Alt+Space entry needs its own live check.
 ## Raphael's guided tour (R-RAPHAEL-05)
 
 An empty conversation of Raphael's begins its tour on its own: the page asks `members.greet {id: 0}` once it has read the empty
-conversation and an answer model is chosen (agent.ts `greetIfSilent`; clearing the conversation asks again), and the core writes the hidden first
+conversation and an answer model is chosen (agent.ts `greetIfSilent`; it asks again when the conversation became empty again after it had words, its messages deleted or its data cleared in Settings), and the core writes the hidden first
 turn on Raphael's persona (`persona.TOUR`): a few sentences on what the app is and where the owner stands, then one `ask_owner` card of what to do
 first (make the first slime, connect an app, dictation, calendar and usage, settings), in the owner's language. The pick starts a turn of Raphael's
 own (`begin_setup`, `persona.TOUR_ANSWER`) that explains that part and offers to do it with its own tools under the usual approval rules. With no
-answer model the empty page shows the existing 「回答還沒選模型」 notice and its choose button. The look fixture's `tour` variant is the fake brain.
+answer model one quiet line above the composer in the dock says 「回答還沒選模型」 with its choose button (`.model-chips`, the quota and sign-in lines'
+shape; only while the conversation is empty). The look fixture's `tour` variant is the fake brain.
 
 ```powershell
-npm run look -- raphael-tour raphael-tour-answer raphael-no-model raphael-clear-menu raphael-clear-confirm raphael-cleared --theme both --width 1120,720,1920x1080
+npm run look -- raphael-tour raphael-tour-answer raphael-no-model --theme both --width 1120,720,1920x1080
 ```
 
 `raphael-tour` checks the welcome and its card as one message (four lettered options, free text, nothing in the owner's mouth, no old greeting,
-one `members.greet` for Raphael); `raphael-tour-answer` the card answered in place with the tour going on below it; `raphael-no-model` the notice and
-its button with no greeting and no greet call; `raphael-cleared` that the cleared conversation asks for the tour again. Core: tests/members/test_raphael_tour.py.
+one `members.greet` for Raphael); `raphael-tour-answer` the card answered in place with the tour going on below it; `raphael-no-model` the line and
+its button just above the docked composer with no greeting and no greet call. Core: tests/members/test_raphael_tour.py.
+
+### An empty conversation is the ordinary layout (R-UI-183)
+
+No start screen exists: a conversation with nothing in it, Raphael's or a slime's, is the empty thread with the composer docked at the bottom, as
+every conversation has it (agent.ts `render`: the thread and the dock are shown, the thread empty; the one dock holds the composer, the card, the
+quota lines and, for Raphael with no model, `.model-chips`). A thread that could not be read says so in the thread's one quiet line (`.ra-none`).
+While a greeting is coming the page is this same layout; the greeting is the first line that arrives in it. The voice flyer lands just above the
+composer (no emblem to land on). Deleting messages until none is left leaves this layout and asks for the greeting again, as does emptying the
+conversation in Settings; the tour or the greeting is asked once for each time the conversation became empty after it had words.
+
+```powershell
+npm run look -- empty member-empty raphael-no-model voice-flyer-empty empty-conversation-recording empty-conversation-hearing no-naming start-conversation no-slimes no-chief --theme both --width 1120,720,1920x1080
+```
+
+`empty` (Raphael, no turns) and `member-empty` (a slime whose greeting did not come, `greetRefused`) run `conversation-empty`: no `.ra-empty`, `.ra-hero`,
+`.ra-hi`, `.ra-slot` or `.ra-notice`, an empty thread, and the composer in the lower half of the stage, on its column, with its bottom at the stage's
+bottom; `raphael-no-model` adds the one line just above it; `voice-flyer-empty` (`voice-flyer-above-composer`) that the voice flyer lands centred just above the docked composer. Unit evidence: pages/raphael-conversation.test.ts and agent-members.test.ts (the layout, the
+no-model line, the read failure, the tour, the removed ⋯, the greeting asked again after deletions).
 
 ## Connecting an app from the chat (P08a)
 
@@ -1625,8 +1645,8 @@ npm run look -- context-menu-message context-menu-conversation --theme both --wi
 The composer fixes the member and the selected conversation before recording. Its voice
 question, waiting line, pending turn and answer remain there through navigation, including
 non-default conversations. Only the desktop question hotkey asks the quick way (`destination: "quick"`).
-No panel lists conversations. Raphael's header ⋯ offers 清除對話 through `confirmDelete` with the clear wording;
-its identity remains after clearing. Clearing removes every delivered turn, message, step, summary, card and CLI resume ID.
+No panel lists conversations, and no ⋯ of Raphael's header clears its conversation (R-UI-183). Clearing, which Settings › 資料 still does through
+`conversations.clear`, keeps the conversation's identity and removes every delivered turn, message, step, summary, card and CLI resume ID.
 
 Private and exchange deliveries belong to one conversation. Queries, paging and deletion
 apply that identity to both scopes. Room history remains in its room. Member deletion removes
@@ -1637,7 +1657,7 @@ legacy rows use their existing default or are removed if none exists. Empty fini
 records never create an exchange line or a date separator. Reopening the database is idempotent.
 
 ```powershell
-npm run look -- raphael-details-no-list member-conversation-sections raphael-clear-confirm raphael-cleared composer-voice-pending-0 composer-voice-answer-0 composer-voice-pending-1 composer-voice-answer-1 --theme both --width 1120,720,1920x1080
+npm run look -- raphael-details-no-list member-conversation-sections composer-voice-pending-0 composer-voice-answer-0 composer-voice-pending-1 composer-voice-answer-1 --theme both --width 1120,720,1920x1080
 ```
 
 Regression coverage: `conversation-list.test.ts`, `conversation.test.ts`,
@@ -2419,7 +2439,7 @@ npm run look -- slime-states sidebar-unread usage usage-allowances-chatgpt --the
 
 Animation clocks are not content identity: retained slimes keep their phase, delight and handover transition; new room messages retain older slime lines. ui-patch.test.ts::a changed row preserves its slime clock and active transition and group-chats.test.ts::a new room message retains older slime lines across animation clocks pin this. slime-states now updates a row preview during WorkerChanged traffic and asserts the actual CSS animation objects, start times and delays remain unchanged before checking the real member states.
 
-The prompt, empty-page hero and active voice flyer also patch their unchanged faces during roster updates. Evidence: pages/agent-members.test.ts::a changed roster preview retains the prompt and empty-page faces and voice-mode.test.ts::an unchanged voice redraw retains the listening picture. Voice consumers:
+The prompt and active voice flyer also patch their unchanged faces during roster updates. Evidence: pages/agent-members.test.ts::a changed roster preview retains the prompt face and voice-mode.test.ts::an unchanged voice redraw retains the listening picture. Voice consumers:
 ```powershell
 npm run look -- composer-voice-recording empty-conversation-recording --theme both --width 1120,720,1920x1080
 ```

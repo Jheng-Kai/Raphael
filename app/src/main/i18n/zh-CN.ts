@@ -840,8 +840,6 @@ export const zhCN = {
   "chooser.downloadUse": "下载并使用",
   "chooser.selection": "选择：",
   "chooser.effort": "思考程度",
-  "conversations.clear": "清除对话",
-  "conversations.clearConfirm": "清除「{p0}」的纪录？",
   "chooser.favorites": "我的最爱",
   "chooser.all": "所有模型",
   "chooser.rail": "供应商",

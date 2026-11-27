@@ -2013,22 +2013,17 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     const conversation = await newConversation(context);
     await typed(context, "Native journey first typed turn", conversation);
     await typed(context, "Native journey second typed turn", conversation);
-    // No panel lists conversations: a member's one conversation has no delete, and Raphael's is cleared from its header's ⋯ (the page then
-    // asks for its guided tour again, so what is read back is only that what was typed here is gone).
+    // No panel lists conversations, a member's one conversation has no delete, and nothing in Raphael's header clears it: no ⋯, and
+    // never a start screen of its own (a message is deleted one at a time, from its own menu).
     result.beforeDelete = await snapshot();
     await details(page);
     result.noConversationList = !await page.$(".mb-det .conversation-list, .mb-det .conversation-row");
     if (!result.noConversationList) result.failures.push("A panel lists conversations it should not");
-    const typedTurns = result.beforeDelete.agent_turns.filter(row => row.conversation_id === conversation && !row.source?.startsWith("greeting")).map(row => row.id);
-    await click(page, '[data-act="raphael-more"]');
-    await click(page, '#app-popover [data-pick="clear"]');
-    await click(page, '.mb-confirm [data-dlg="delete"]');
-    await page.waitForFunction(() => !document.querySelector(".mb-confirm"));
-    await pause(900);
-    result.afterClear = await snapshot();
-    result.stillThere = result.afterClear.agent_turns.filter(row => typedTurns.includes(row.id)).map(row => row.id);
-    if (!result.afterClear.conversations.some(row => row.id === conversation) || typedTurns.length < 2 || result.stillThere.length) result.failures.push(`Raphael's conversation clear did not retain only its identity: ${JSON.stringify(result.stillThere)}`);
-    await capture("raphael-conversation-cleared");
+    result.noClearMenu = !await page.$('[data-act="raphael-more"]');
+    if (!result.noClearMenu) result.failures.push("Raphael's header still offers a ⋯ that clears its conversation");
+    result.noStartScreen = !await page.$(".ra-empty, .ra-hero");
+    if (!result.noStartScreen) result.failures.push("A start screen of its own stands in a conversation");
+    await capture("raphael-conversation");
   } else if (name === "gmail-connect") {
     await chat(page);
     const conversation = await newConversation(context);

@@ -92,8 +92,6 @@
   --pa-ask-face: calc(30px + 14 * var(--pa-u));
   --pa-ask-fs: var(--fs-md);
   --pa-ask-r: var(--r-lg);
-  --pa-hi: var(--fs-h1);
-  --pa-hero-m: calc(96px + 24 * var(--pa-u));
   /* the details panel */
   --pa-dpad: var(--sp-4);
   --pa-dgap: var(--sp-5);
@@ -162,7 +160,8 @@
 .ra-col { max-width: var(--pa-colw); margin: 0 auto; }
 .ra-older { display: flex; justify-content: center; padding: var(--sp-1) 0 var(--sp-1); }
 .ra-wait { padding-top: var(--sp-5); }
-.ra-none { margin: 40px 0; text-align: center; color: var(--text-3); font-size: var(--pa-dfs); }
+/* An empty conversation is the ordinary layout with nothing in its thread; when the thread could not be read this one quiet line stands in it. */
+.ra-none { margin: var(--sp-5) 0; text-align: center; color: var(--text-2); font-size: var(--pa-dfs); line-height: 1.6; overflow-wrap: anywhere; }
 
 .thread { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--pa-gap); }
 /* The day reads like the other system lines: centred grey words, no chip. */
@@ -761,17 +760,6 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .page-agent .btn.ask-yes:active:not(:disabled) { background: color-mix(in srgb, var(--rg-btn) 85%, var(--text)); filter: none; }
 .ask-yes-t { position: relative; z-index: 1; }
 
-/* ---------- nothing yet: Raphael in the middle, its line, the composer under it ---------- */
-.ra-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); min-height: 0; padding: var(--sp-4) var(--sp-4) 48px; text-align: center; }
-/* Raphael's picture is 132 px at every size: the voice mode's flyer lands on it and is the same box (voice-mode.ts) */
-.ra-hero { width: 132px; height: 132px; }
-.ra-hi { max-width: 100%; margin: 0; min-height: 1.6em; font: 500 var(--pa-hi)/1.6 var(--voice); letter-spacing: 0.04em; color: var(--text); overflow-wrap: anywhere; }
-.ra-empty.is-failed .ra-hi { font-size: var(--pa-dfs); letter-spacing: 0; color: var(--text-2); }
-/* No answer model yet, so Raphael cannot speak: the one line that says so and the button that chooses it, where its words would stand. */
-.ra-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-2); max-width: 100%; color: var(--text-2); font-size: var(--pa-dfs); line-height: 1.6; }
-.ra-notice[hidden] { display: none; }
-.ra-slot { width: min(calc(560px + 160 * var(--pa-u)), 100%); margin-top: var(--sp-1); text-align: left; }
-
 /* ---------- the voice mode: Raphael flies up over the conversation ---------- */
 .ra-flyer { position: absolute; left: 0; top: 0; z-index: 5; width: 132px; height: 132px; transform-origin: 50% 50%; cursor: pointer; }
 .ra-flyer > .av { width: 132px; height: 132px; }
@@ -782,8 +770,6 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 @supports not (overflow-clip-margin: 1px) { .ra-flyer:has(> .ra-flyer-emblem) { overflow: visible; clip-path: inset(-24px); } }
 /* the person's picture in a circle: a thin ring around it brightens with the voice (--lvl, 0 to 1) */
 .ra-flyer:has(> .av-custom)::after { content: ""; position: absolute; inset: -5px; border-radius: var(--r-pill); border: 2px solid var(--accent-text); opacity: calc(0.35 + 0.65 * var(--lvl, 0)); pointer-events: none; }
-/* the voice mode writes no words: the empty page's line steps aside, its place kept */
-.ra-stage.is-voice .ra-hi { visibility: hidden; }
 
 @keyframes ra-turn-in { from { opacity: 0; transform: translateY(10px); } }
 @keyframes ra-step-in { from { opacity: 0; transform: translateY(5px); } }

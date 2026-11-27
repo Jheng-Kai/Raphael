@@ -20,7 +20,6 @@ export interface OverflowRow {
 export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: "[data-member-more]", row: ".mb-item" },
   { more: "[data-group-more]", row: ".mb-ghead" },
-  { more: '[data-act="raphael-more"]', row: ".mb-chat > .mb-head" },
   { more: "[data-room-more]", row: ".au-room-row" },
   { more: "[data-room-menu]", row: ".au-room-pane > .page-head" },
   { more: '[data-desktop="menu"]', row: ".desktop-dock" },

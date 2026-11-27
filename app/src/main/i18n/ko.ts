@@ -840,8 +840,6 @@ export const ko = {
   "chooser.downloadUse": "다운로드 및 사용",
   "chooser.selection": "선택됨:",
   "chooser.effort": "추론 강도",
-  "conversations.clear": "대화 지우기",
-  "conversations.clearConfirm": "“{p0}”의 기록을 지울까요?",
   "chooser.favorites": "즐겨찾기",
   "chooser.all": "모든 모델",
   "chooser.rail": "제공업체",

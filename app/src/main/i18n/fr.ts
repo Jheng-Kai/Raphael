@@ -840,8 +840,6 @@ export const fr = {
   "chooser.downloadUse": "Télécharger et utiliser",
   "chooser.selection": "Sélectionné :",
   "chooser.effort": "Effort de raisonnement",
-  "conversations.clear": "Effacer la conversation",
-  "conversations.clearConfirm": "Effacer l’historique de « {p0} » ?",
   "chooser.favorites": "Favoris",
   "chooser.all": "Tous les modèles",
   "chooser.rail": "Fournisseurs",

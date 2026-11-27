@@ -550,8 +550,6 @@ export const ja = {
   "chooser.downloadUse": "ダウンロードして使用",
   "chooser.selection": "選択：",
   "chooser.effort": "思考の深さ",
-  "conversations.clear": "会話を消去",
-  "conversations.clearConfirm": "「{p0}」の履歴を消去しますか？",
   "chooser.favorites": "お気に入り",
   "chooser.all": "すべてのモデル",
   "chooser.rail": "プロバイダー",

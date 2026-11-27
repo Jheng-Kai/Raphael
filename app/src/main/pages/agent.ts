@@ -39,7 +39,7 @@ import { composioAction } from "../composio-result";
 // thread is its own: the search looks in it alone, and no turn of another thread shows in it but
 // the closed line of what a colleague asked it (exchange-line.ts).
 
-import { clearConversation, conversationChange, newestConversation, type ConversationInfo } from "../conversation-list";
+import { conversationChange, newestConversation, type ConversationInfo } from "../conversation-list";
 import { eventRead } from '../event-read';
 import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
@@ -185,8 +185,6 @@ export function askLabels(q: AgentQuestion | null): { yes: string; no: string; a
   };
 }
 
-/** The words of the empty page: the overlay's greeting to a question, without its last stop. */
-
 /**
  * The question's words stay separate from all file types. Null when there is nothing to send or
  * it is too long. With files attached, no words is a question too: "", interpreted by the core.
@@ -280,20 +278,18 @@ export function createAgent(app: AppContext, places?: {
     // The status list at the left and share at the right, symmetric (status-light.ts): an icon; the dots are in its list.
     iconButton("steps", t("status.idle"), ' data-act="status" aria-haspopup="menu" aria-expanded="false" data-level="idle"', "ra-tool status-light") +
     `</span><span class="mb-head-c"></span><div class="ra-tools">${iconButton("share", t("template.export"), ' data-act="share-member" aria-haspopup="menu" aria-expanded="false" hidden', "ra-tool")}` +
-    // Raphael is not shared as a template; the same place holds its ⋯, whose one item clears its conversation.
-    `${iconButton("more", t("chat.more"), ' data-act="raphael-more" aria-haspopup="menu" aria-expanded="false" hidden', "ra-tool")}</div></div>` +
+    // Raphael is not shared as a template: its share button stays hidden and nothing else stands in its place.
+    `</div></div>` +
     `<div class="ra-find" hidden></div>` +
     `<div class="ra-stage">` +
     `<div class="ra-scroll"><div class="ra-col"><div class="ra-older" hidden></div><ol class="thread"></ol><p class="ra-none" hidden></p></div></div>` +
     `<div class="ra-wait" hidden></div>` +
-    `<div class="ra-empty" hidden><div class="ra-hero"></div><p class="ra-hi"></p><div class="ra-notice" hidden></div><div class="ra-slot"></div></div>` +
     `<div class="ra-dock"></div>` +
     `</div>` +
     `</section>`;
   const heading = el.querySelector<HTMLElement>("h1")!;
   const statusButton = el.querySelector<HTMLElement>('[data-act="status"]')!;
   const shareButton = el.querySelector<HTMLElement>('[data-act="share-member"]')!;
-  const moreButton = el.querySelector<HTMLElement>('[data-act="raphael-more"]')!;
   const find = el.querySelector<HTMLElement>(".ra-find")!;
 
   const stage = el.querySelector<HTMLElement>(".ra-stage")!;
@@ -307,11 +303,6 @@ export function createAgent(app: AppContext, places?: {
   mountCardFloat({ stage, scroller, thread });
   const none = el.querySelector<HTMLElement>(".ra-none")!;
   const wait = el.querySelector<HTMLElement>(".ra-wait")!;
-  const empty = el.querySelector<HTMLElement>(".ra-empty")!;
-  const hero = el.querySelector<HTMLElement>(".ra-hero")!;
-  const hi = el.querySelector<HTMLElement>(".ra-hi")!;
-  const notice = el.querySelector<HTMLElement>(".ra-notice")!;
-  const slot = el.querySelector<HTMLElement>(".ra-slot")!;
   const dock = el.querySelector<HTMLElement>(".ra-dock")!;
   /** The open thread's questions from the background, above the composer wherever it is. */
   let waiting: BackgroundQuestions | null = null;
@@ -370,7 +361,6 @@ export function createAgent(app: AppContext, places?: {
       drawDock();
       drawFaces();
       drawConversation();
-      sayHi(emptyLine());
       draftPanel.redraw();
       if (visible && !scroller.hidden) drawThread();
     },
@@ -425,6 +415,8 @@ export function createAgent(app: AppContext, places?: {
   let targetQuiet = false;
   const quotaHost = document.createElement("div"); quotaHost.className = "quota-chips";
   quotaHost.hidden = true;
+  /** Raphael's empty conversation with no answer model: the one line above the composer that says so (`drawModelLine`). */
+  const modelHost = document.createElement("div"); modelHost.className = "model-chips";
   let quotas: { provider: string; reset_at_ms: number | null }[] = [];
   let quotaTimer: ReturnType<typeof setTimeout> | undefined;
   /**
@@ -624,8 +616,8 @@ export function createAgent(app: AppContext, places?: {
   composerFolder = mountComposerFolder(composer.querySelector<HTMLElement>(".cmp-folder")!, composer.querySelector<HTMLElement>(".cmp-branch")!,
     () => members.member(), { onEvent: handler => app.onEvent(handler) });
   bindComposerRow(composer);
-  composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { onEvent: handler => app.onEvent(handler), changed: () => { drawEmptyNotice(); greetIfSilent(); } });
-  empty.addEventListener("click", event => { if ((event.target as Element).closest("[data-model-missing]")) composer.querySelector<HTMLButtonElement>(".cmp-model .mp-trigger")?.click(); });
+  composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { onEvent: handler => app.onEvent(handler), changed: () => { drawModelLine(); greetIfSilent(); } });
+  modelHost.addEventListener("click", event => { if ((event.target as Element).closest("[data-model-missing]")) composer.querySelector<HTMLButtonElement>(".cmp-model .mp-trigger")?.click(); });
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;
   const fileChip = composer.querySelector<HTMLElement>(".cmp-file")!;
@@ -680,6 +672,10 @@ export function createAgent(app: AppContext, places?: {
   let pending = false;
   let loads = 0;
   let loadedThread = false;
+  /** The members asked this session to open their own conversation: once each; the core decides the rest. */
+  const greetAsked = new Set<number>();
+  /** Whether the open conversation showed words since it was opened: the one that becomes empty again is greeted again. */
+  let hadTurns = false;
   const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
   const pacing = new ReplyPacing(() => { if (visible) render(); }, () => reducedMotion?.matches ?? false);
   reducedMotion?.addEventListener("change", () => { pacing.flush(); if (visible) render(); });
@@ -882,8 +878,6 @@ export function createAgent(app: AppContext, places?: {
     stage,
     button: () => (voiceButton.isConnected && !composer.hidden && !voiceButton.hidden ? voiceButton : null),
     composer: () => (composer.isConnected && !composer.hidden ? composer : null),
-    // Under a page the empty page is hidden: the flyer stands above the composer, over the page.
-    target: () => (empty.hidden || !inRaphael() || stage.classList.contains("is-page") ? null : hero.querySelector<HTMLElement>(".av")),
     face: () => avatarHTML({ size: 132, loop: true }),
     live: () => currentAvatar() === null,
     onClick: () => void endVoice(),
@@ -892,14 +886,13 @@ export function createAgent(app: AppContext, places?: {
   // ---------- drawing ----------
 
   /**
-   * The face of who the thread is with, where the composer, the card and the empty page show it:
+   * The face of who the thread is with, where the composer and the card show it:
    * Raphael's or the member's. Every thread's voice button is the gold emblem (拉斐爾大師), never a picture.
    */
   function drawFaces(): void {
     drawComposerTask();
     // Each conversation wears its member's colour, Raphael's being the first blue slime's (R-UI-81).
     const member = members.member(), color = memberColor(member);
-    patchHTML(hero, faceHTML(member, inRaphael() ? 132 : 96));
     const bubble = ownerBubble(color);
     memberChat.dataset.memberBubble = bubble.words;
     memberChat.style.setProperty("--member-bubble", bubble.fill);
@@ -931,21 +924,19 @@ export function createAgent(app: AppContext, places?: {
     const words = setup ? t("chat.askAboutSetup", { p0: brand[setup] ?? setup }) : asked ? t("ownerQuestion.type") : memberPlaceholder(members.member().name);
     if (input.placeholder !== words) input.placeholder = words;
     if (input.getAttribute("aria-label") !== words) input.setAttribute("aria-label", words);
-    empty.classList.toggle("is-member", !inRaphael());
   }
 
-  /** The words of the empty page: the member's name (Raphael's tour begins on its own: `greetIfSilent`). */
-  const emptyLine = (): string => members.member().name;
-  const sayHi = (words: string): void => { if (hi.textContent !== words) hi.textContent = words; };
   /**
-   * Raphael cannot speak without an answer model: its empty page then says so, with the one button that chooses it (the
-   * notice the core's own `ModelMissing` toast shows, models-notice.ts), where the greeting used to stand.
+   * Raphael cannot speak without an answer model: while its conversation is empty one quiet line above the composer says so, with
+   * the one button that chooses it (the notice the core's own `ModelMissing` toast shows, models-notice.ts). It sits in the dock
+   * like the quota and sign-in lines, and its tour waits for the model (`greetIfSilent`).
    */
-  function drawEmptyNotice(): void {
-    const missing = inRaphael() && composerBrain?.answerChosen() === false;
-    if (notice.hidden === !missing) return;
-    notice.hidden = !missing;
-    notice.innerHTML = missing ? modelMissingHTML("answer") : "";
+  function drawModelLine(): void {
+    const missing = inRaphael() && composerBrain?.answerChosen() === false && loadedThread && isEmpty();
+    if (missing === modelHost.isConnected) return;
+    if (!missing) { modelHost.remove(); modelHost.replaceChildren(); return; }
+    modelHost.innerHTML = `<div class="quota-chip signin-chip model-chip" role="status">${ico("alert")}${modelMissingHTML("answer")}</div>`;
+    dock.prepend(modelHost);
   }
 
   /** The words of the composer, the card and the search, in the language of the window. */
@@ -961,7 +952,6 @@ export function createAgent(app: AppContext, places?: {
       button.setAttribute("aria-label", label);
       button.title = label;
     }
-    sayHi(emptyLine());
     drawAskLabels();
     drawConversation();
     askCard.setAttribute("aria-label", t("agent.asking"));
@@ -1040,12 +1030,12 @@ export function createAgent(app: AppContext, places?: {
     alwaysButton.hidden = labels.always === null;
   }
 
-  /** The composer or, while Raphael asks, the card in its place; under the thread, or under Raphael on the empty page. */
+  /** The composer or, while Raphael asks, the card in its place; always the dock under the thread, empty or not. */
   function drawDock(): void {
     selectQuestion();
     drawComposerTask();
-    hero.hidden = hi.hidden = false;
-    const home = empty.hidden ? dock : slot;
+    drawModelLine();
+    const home = dock;
     if (backgroundSlot.parentElement !== home) home.prepend(backgroundSlot);
     if (composer.parentElement !== home) home.append(composer);
     if (!quotaHost.hidden && quotaHost.nextElementSibling !== composer) home.insertBefore(quotaHost, composer);
@@ -1302,33 +1292,35 @@ export function createAgent(app: AppContext, places?: {
     // An open conversation between members follows the turns it is read from, and closes with its conversation.
     if (peer) queueMicrotask(() => peer?.update());
     stage.setAttribute("aria-busy", String(pending));
-    // Only a thread not read yet says it is loading: a refresh of an empty one keeps its empty state (R-UI-71).
+    // Only a thread not read yet says it is loading: a refresh of an empty one keeps its ordinary empty layout (R-UI-71, R-UI-183).
     if (pending && isEmpty() && !loadedThread) {
       wait.innerHTML = loadingHTML();
       wait.hidden = false;
-      scroller.hidden = empty.hidden = dock.hidden = true;
-      shareButton.hidden = moreButton.hidden = true;
+      scroller.hidden = dock.hidden = true;
+      shareButton.hidden = true;
       return;
     }
     wait.hidden = true;
     const shown = turns;
-    // Raphael is the app's own: it is not shared as a template, and its ⋯ clears its one conversation.
+    // Raphael is the app's own: it is not shared as a template.
     shareButton.hidden = inRaphael();
-    moreButton.hidden = !inRaphael();
     if (shown.length === 0 && searching) closeSearch(false);
+    // An empty conversation is the ordinary layout with nothing in the thread: the composer stays in the dock at the bottom.
     if (isEmpty()) {
       thread.replaceChildren();
       renderedThread = [];
-      scroller.hidden = dock.hidden = true;
-      empty.hidden = false;
-      empty.classList.toggle("is-failed", failure !== null);
-      sayHi(failure ? `${t("agent.loadFailed")} ${failure()}` : emptyLine());
+      scroller.hidden = dock.hidden = false;
+      none.textContent = failure ? `${t("agent.loadFailed")} ${failure()}` : "";
+      none.hidden = failure === null;
       drawDock();
       stopTicker();
+      // A conversation that had words and is empty again (its messages deleted, or its data cleared) is greeted again, as one
+      // that was never written in: the owner is never left on a blank page.
+      if (hadTurns) { hadTurns = false; greetAsked.delete(memberId()); greetIfSilent(); }
       return;
     }
-    const wasEmpty = scroller.hidden;
-    empty.hidden = true;
+    hadTurns = true;
+    const wasEmpty = scroller.hidden || renderedThread.length === 0;
     scroller.hidden = dock.hidden = false;
     const keepUp = !searching && (follow || wasEmpty || richScrollFollows(scroller));
     if (follow) turnWindow.latest();
@@ -1580,13 +1572,11 @@ export function createAgent(app: AppContext, places?: {
     }
   }
 
-  /** The members asked this session to open their own conversation: once each; the core decides the rest. */
-  const greetAsked = new Set<number>();
   /**
-   * A member's conversation is never an empty page: a member made
-   * without its greeting (by a way of making members that did not greet yet) is asked once to write it. Raphael's empty
-   * conversation begins its guided tour the same way, once an answer model is chosen to speak with (until then the page
-   * says so). The core starts it only while the owner has written nothing there and no greeting runs (members.greet); it
+   * A member's conversation is never left empty: a member made
+   * without its greeting (by a way of making members that did not greet yet) is asked once to write it, and again when its
+   * messages were all deleted. Raphael's empty conversation begins its guided tour the same way, once an answer model is chosen
+   * to speak with (until then a line above the composer says so). The core starts it only while the owner has written nothing there and no greeting runs (members.greet); it
    * refuses otherwise.
    */
   function greetIfSilent(): void {
@@ -2079,7 +2069,7 @@ export function createAgent(app: AppContext, places?: {
     if (next) openConversation(memberId(), next.id);
   });
 
-  /** The conversation is gone in the core: the page drops every turn it loaded and shows the empty page. */
+  /** The conversation is gone in the core: the page drops every turn it loaded and shows the empty thread. */
   function forgetTurns(): void {
     pacing.flush();
     turns = [];
@@ -2162,6 +2152,7 @@ export function createAgent(app: AppContext, places?: {
     attachmentMedia.reset();
     resetDrop();
     turns = [];
+    hadTurns = false;
     canLoadEarlier = false;
     loadingEarlier = false;
     pending = false;
@@ -2184,7 +2175,6 @@ export function createAgent(app: AppContext, places?: {
     fit();
     drawComposer();
     drawFaces();
-    sayHi(emptyLine());
     // the card of another thread's question goes, and this thread's comes
     delete askCard.dataset.id;
     // The thread is asked for first: the core answers in order, and the rest of the page can wait for it. A page that is not on screen reads it, and the rest, as it shows (show()).
@@ -2976,16 +2966,6 @@ export function createAgent(app: AppContext, places?: {
       case "search-close":
         break;
       // One choice, 建立副本 with a line saying what follows (a file saved, or a publish request prepared on GitHub; never a link), and only that asks the member to package itself.
-      // Raphael's ⋯: its one conversation is cleared in the red dialog, and its tour begins again on the empty page.
-      case "raphael-more": {
-        const conversation = conversationId();
-        if (conversation === undefined) break;
-        openActions(act, [{ id: "clear", label: t("conversations.clear"), icon: "trash" }], () => {
-          void clearConversation(RAPHAEL_ID, conversation, members.member().name).then(cleared => { if (cleared) greetAsked.delete(RAPHAEL_ID); })
-            .catch(error => toaster.info(describeError(error)));
-        });
-        break;
-      }
       case "share-member": {
         const member = memberId();
         // Its mark is the member itself, twice: the copy that is about to be made.
@@ -3559,9 +3539,8 @@ export function createAgent(app: AppContext, places?: {
       }
       void readQuotas();
       void readSignin();
-      // A draft goes into the field at once; the composer may then move (the empty page has it
-      // under Raphael, the thread under the turns) or give way to a question, which takes the
-      // focus away: it is given back once each of those is known.
+      // A draft goes into the field at once; the composer may give way to a question, which takes the
+      // focus away: it is given back once that is known.
       if (draft !== null) putDraft(draft);
       void api
         .agentQuestionOpen()

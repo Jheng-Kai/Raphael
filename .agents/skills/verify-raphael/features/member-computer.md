@@ -1202,12 +1202,12 @@ owned containers) the next time that host answers; a remote volume left with no 
 
 Selected scenes (both themes, 1120,720,1920x1080): member-delete-ask (a member without a computer),
 member-delete-ask-computer (one with a computer on a host), member-delete (the result), press-through-delete-dialog,
-room-delete and raphael-clear-confirm (the shared dialog). `member-delete-ask` asserts the member's name, one
+and room-delete (the shared dialog). `member-delete-ask` asserts the member's name, one
 sentence, two buttons, no row, switch or field, and no word about a computer; `member-delete` asserts the call
 carries exactly `{"id":2}`. A real Docker engine and host are unverified: the tests use a fake engine.
 
 ```powershell
-npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete raphael-clear-confirm --theme both --width 1120,720,1920x1080
+npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete --theme both --width 1120,720,1920x1080
 ```
 
 ## Viewer transport isolation, phase 1
@@ -1378,7 +1378,7 @@ Synthetic zh-TW matrix, both themes and 1120/720/1920x1080:
 npm run look -- computer-maintenance-menu computer-maintenance-restart computer-maintenance-update computer-maintenance-repair computer-maintenance-reset computer-maintenance-reset-done computer-sleep-menu computer-state-sleeping computer-state-waking computer-state-updating computer-state-repairing computer-low-disk desktop-panel takeover-menu --theme both --width 1120,720,1920x1080
 ```
 
-Compare maintenance/idle menus to takeover-menu and computer-menu-teach-only, reset to raphael-clear-confirm,
+Compare maintenance/idle menus to takeover-menu and computer-menu-teach-only, reset to member-delete-ask,
 and sleeping/working faces and header icon controls to desktop-panel at matching
 theme/size. Maintenance descriptions use the shared mdesc rows, so their content
 requires a wider/taller menu; reset adds a scope paragraph to the shared dialog.
