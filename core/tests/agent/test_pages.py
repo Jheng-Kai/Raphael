@@ -21,6 +21,7 @@ from raphael_core.agent.report_page import FILE_POLICY, file_name
 from raphael_core.agent.speaker import RAPHAEL
 from raphael_core.brain.db import connect
 from raphael_core.protocol import INVALID_PARAMS, RpcError
+from second_conversation import another_conversation
 
 from .test_narration import chat, typed, use
 from .test_plugins import plugins, calls  # noqa: F401
@@ -399,7 +400,7 @@ async def test_pages_open_reports_typed_gone_error(make_rig):
 
 async def test_update_cannot_replace_a_page_from_another_conversation(make_rig, client):
     rig = make_rig()
-    page = stored(rig.conn, conversation_id=rig.service.conversations.quick())
+    page = stored(rig.conn, conversation_id=another_conversation(rig.conn))
     other = rig.service.conversations.main()
     client.chats = [chat("Updating.", use("update_page", {"page_id": page["id"], "html": "Changed"})),
                     chat('{"text":"Please choose a page in this conversation."}')]
@@ -448,7 +449,7 @@ async def test_a_page_the_owner_has_open_is_what_here_and_this_mean_in_their_nex
 
 async def test_a_page_open_in_another_conversation_or_of_another_member_is_not_told(make_rig, client):
     rig = make_rig()
-    elsewhere = stored(rig.conn, conversation_id=rig.service.conversations.quick())
+    elsewhere = stored(rig.conn, conversation_id=another_conversation(rig.conn))
     await rig.call("pages.viewing", {"id": elsewhere["id"]})
     client.chats = [chat('{"text":"Ok."}')]
     await typed(rig, "Change this")

@@ -2,83 +2,56 @@
 import { afterEach, expect, test, vi } from "vitest";
 const core = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ core }));
-import { mountConversationList, newestConversation, type ConversationInfo } from "./conversation-list";
+import { clearConversation, newestConversation, relativeTime, type ConversationInfo } from "./conversation-list";
 import { closeMenu } from "./ui";
-import { installContextMenus } from "./context-menu";
 
 afterEach(() => { closeMenu(); document.body.replaceChildren(); vi.clearAllMocks(); });
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
-const RAPHAEL = [
-  { id: 2, member_id: 0, title: "Project", is_default: 1, kind: "standard", updated_at_ms: Date.now() },
-  { id: 9, member_id: 0, title: "", kind: "quick", updated_at_ms: 1 },
-];
 
-test("a window opens the one conversation, and the quick one only when nothing else is there", () => {
-  const rows = [{id:3,kind:'quick',updated_at_ms:100},{id:1,kind:'standard',is_default:1,updated_at_ms:10}] as ConversationInfo[];
-  expect(newestConversation(rows)?.id).toBe(1);
-  expect(newestConversation([rows[0]!])?.id).toBe(3);
+test("a window opens the member's one conversation, or the newest where a database still holds more", () => {
+  const rows = [{ id: 3, updated_at_ms: 100 }, { id: 1, is_default: 1, updated_at_ms: 10 }] as ConversationInfo[];
+  expect(newestConversation(rows)?.id).toBe(3);
+  expect(newestConversation([rows[1]!])?.id).toBe(1);
+  expect(newestConversation([{ id: 5, updated_at_ms: 7 }, { id: 4, is_default: 1, updated_at_ms: 7 }] as ConversationInfo[])?.id).toBe(4);
   expect(newestConversation([])).toBeUndefined();
-  expect(rows.map(row=>row.id)).toEqual([3,1]);
+  expect(rows.map(row => row.id)).toEqual([3, 1]);
 });
 
-test("Raphael's panel has two rows, its conversation and quick questions, with no search, new or rename", async () => {
-  core.mockResolvedValue({ conversations: RAPHAEL });
-  const host = document.createElement("div"); document.body.append(host);
-  const onOpen = vi.fn();
-  let current = 2;
-  const list = mountConversationList(host, { memberId: 0, onOpen, current: () => current }); await flush();
-  const rows = [...host.querySelectorAll<HTMLButtonElement>("[data-conversation-open]")];
-  expect(rows.map(row => [row.dataset.conversationOpen, row.querySelector("span")!.textContent, row.getAttribute("aria-current")]))
-    .toEqual([["2", "主要對話", "true"], ["9", "快速提問", "false"]]);
-  expect(host.querySelector("input, [data-conversation-new]")).toBeNull();
-  expect(rows[0]!.closest(".conversation-row")!.querySelector("[data-conversation-more]")).toBeNull();
-  rows[1]!.click(); expect(onOpen).toHaveBeenCalledWith(9);
-  current = 9; window.dispatchEvent(new CustomEvent("conversation-opened", { detail: 0 }));
-  expect(host.querySelector('[data-conversation-open="9"]')!.getAttribute("aria-current")).toBe("true");
-  list.destroy();
+test("times read as just now, minutes, hours and days", () => {
+  const now = Date.UTC(2026, 10, 27, 12);
+  expect(relativeTime(now - 10_000, now)).toBe("剛剛");
+  expect(relativeTime(now - 5 * 60_000, now)).toBe("5 分鐘前");
+  expect(relativeTime(now - 3 * 3_600_000, now)).toBe("3 小時前");
+  expect(relativeTime(now - 2 * 86_400_000, now)).toBe("2 天前");
 });
 
-test("quick history clears only after the shared confirmation and keeps its row; right click offers the same", async () => {
-  core.mockResolvedValue({ conversations: RAPHAEL });
-  const host = document.createElement("div"); document.body.append(host);
-  const list = mountConversationList(host, { memberId: 0, onOpen() {} }); await flush();
-  const stop = installContextMenus(document);
+test("a conversation is cleared only after the shared red confirmation, and every window of the member reads it again", async () => {
+  core.mockResolvedValue({});
+  const changed = vi.fn();
+  window.addEventListener("conversations-changed", changed);
   try {
-    const quick = host.querySelector('[data-conversation-open="9"]')!;
-    quick.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 2, clientX: 10, clientY: 10 }));
-    quick.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 10, clientY: 10 }));
-    expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item => item.dataset.pick)).toEqual(["clear"]);
-    closeMenu();
-    host.querySelector<HTMLButtonElement>('[data-conversation-more="9"]')!.click();
-    document.querySelector<HTMLButtonElement>('[data-pick="clear"]')!.click();
-    expect(document.querySelector(".mb-confirm h2")?.textContent).toBe("清除「快速提問」的紀錄？");
-    expect(core).not.toHaveBeenCalledWith("conversations.clear", expect.anything());
-    document.querySelector<HTMLButtonElement>('[data-dlg="delete"]')!.click(); await flush();
-    expect(core).toHaveBeenCalledWith("conversations.clear", { id: 9 });
+    const cleared = clearConversation(0, 9, "拉斐爾");
+    await flush();
+    expect(document.querySelector(".mb-confirm h2")?.textContent).toBe("清除「拉斐爾」的紀錄？");
+    expect(document.querySelector('[data-dlg="delete"]')?.textContent).toBe("清除對話");
+    expect(core).not.toHaveBeenCalled();
+    document.querySelector<HTMLButtonElement>('[data-dlg="delete"]')!.click();
+    expect(await cleared).toBe(true);
+    expect(core).toHaveBeenCalledExactlyOnceWith("conversations.clear", { id: 9 });
     expect(core).not.toHaveBeenCalledWith("conversations.delete", expect.anything());
-    expect(host.querySelector('[data-conversation-open="9"]')).not.toBeNull();
-  } finally { stop(); list.destroy(); }
+    expect((changed.mock.calls[0]![0] as CustomEvent<number>).detail).toBe(0);
+  } finally { window.removeEventListener("conversations-changed", changed); }
 });
 
-test("a refresh patches the rows already on screen and a failed read keeps them", async () => {
-  core.mockResolvedValue({ conversations: RAPHAEL });
-  const host = document.createElement("div"); document.body.append(host);
-  const list = mountConversationList(host, { memberId: 0, onOpen() {}, current: () => 2 }); await flush();
-  const row = host.querySelector('[data-conversation-open="2"]')!, quick = host.querySelector('[data-conversation-open="9"]')!;
-  const changes: string[] = [];
-  const watch = new MutationObserver(records => records.forEach(record => record.removedNodes.forEach(node => changes.push((node as Element).outerHTML ?? node.textContent ?? ""))));
-  watch.observe(host, { childList: true, subtree: true });
-  core.mockResolvedValue({ conversations: [{ ...RAPHAEL[0]!, updated_at_ms: Date.now() + 61_000 }, RAPHAEL[1]!] });
-  await list.refresh(); await flush();
-  expect(host.querySelector('[data-conversation-open="2"]')).toBe(row);
-  expect(host.querySelector('[data-conversation-open="9"]')).toBe(quick);
-  // A read that fails leaves the rows, and says nothing over them.
-  core.mockRejectedValue(new Error("offline"));
-  await list.refresh(); await flush();
-  await Promise.resolve();
-  expect(host.querySelector('[data-conversation-open="2"]')).toBe(row);
-  expect(host.querySelector(".conversation-row")).not.toBeNull();
-  watch.disconnect();
-  expect(changes.filter(html => html.includes("conversation-open"))).toEqual([]);
-  list.destroy();
+test("no to the confirmation clears nothing and tells nobody", async () => {
+  const changed = vi.fn();
+  window.addEventListener("conversations-changed", changed);
+  try {
+    const cleared = clearConversation(0, 9, "拉斐爾");
+    await flush();
+    document.querySelector<HTMLButtonElement>('[data-dlg="cancel"]')!.click();
+    expect(await cleared).toBe(false);
+    expect(core).not.toHaveBeenCalled();
+    expect(changed).not.toHaveBeenCalled();
+  } finally { window.removeEventListener("conversations-changed", changed); }
 });

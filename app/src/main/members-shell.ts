@@ -219,8 +219,6 @@ export function createMembers(host: MembersHost): MembersShell {
     close: () => setDetails(false),
     // The gear: the member's settings page in the main area, or, when it is open, back to the conversation.
     openSettings: () => { if (settings.isOpen()) host.app.go("agent"); else host.app.go("agent", `member-settings:${current}`); },
-    openConversation: host.onOpenConversation ? (member, conversation) => host.onOpenConversation!(member, conversation) : undefined,
-    conversationOf: member => host.conversationOf?.(member),
     openTurn: (member, conversation, turn) => host.onOpenConversation?.(member, conversation!, turn),
     openPage: page => host.onOpenPage?.(current, page),
   });

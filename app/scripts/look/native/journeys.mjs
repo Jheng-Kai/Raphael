@@ -124,7 +124,7 @@ async function newConversation(context, member = 0) {
   }
   await details(context.page);
   for (let i = 0; i < 80; i++) {
-    const main = (await context.snapshot()).conversations.find(row => row.member_id === member && row.is_default && row.kind !== "quick");
+    const main = (await context.snapshot()).conversations.find(row => row.member_id === member && row.is_default);
     if (main) { await wait(context.page, ".cmp-input"); return main.id; }
     await pause(100);
   }
@@ -1029,12 +1029,9 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
       await capture(`${label}-turn`);
     };
     await chat(page); await perform(page, { action: "member", id: 0 });
-    const main = (await snapshot()).conversations.find(row => row.member_id === 0 && row.is_default && row.kind !== "quick");
+    const main = (await snapshot()).conversations.find(row => row.member_id === 0 && row.is_default);
     await assertTurn(answer.id, "high", "answer", main.id);
-    await details(page);
-    const quickConversation = (await snapshot()).conversations.find(row => row.kind === "quick");
-    await click(page, `[data-conversation-open="${quickConversation.id}"]`);
-    await assertTurn(quick.id, "high", "quick", quickConversation.id);
+    // The quick model is saved above and read back; a quick question itself is the Alt+Space key's, not typed text, so it is not asked here.
     const created = await context.rpc("members.create", { name: "NativeModel", role: "Model routing audit" });
     await perform(page, { action: "member", id: created.member.id });
     const other = await context.rpc("members.create", { name: "NativeOther", role: "Keeps its own model" });
@@ -1603,7 +1600,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     await inspect("sidebar-folded-1280", ["sidebar-shell", "content-width"]);
     await page.setViewport({ width: 1920, height: 1080 });
     await chat(page); await details(page); await pause(250);
-    await inspect("details-1920", ["details-alignment", "conversation-header", "details-quick-once", "conversation-scroll-edge"]);
+    await inspect("details-1920", ["details-alignment", "conversation-header", "conversation-scroll-edge"]);
     await click(page, '.mb-det [data-det="close"]');
     await page.setViewport({ width: 720, height: 900 }); await pause(250);
     await inspect("conversation-720", ["conversation-header"]);
@@ -2016,33 +2013,22 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     const conversation = await newConversation(context);
     await typed(context, "Native journey first typed turn", conversation);
     await typed(context, "Native journey second typed turn", conversation);
-    // A member's one conversation has no delete (no ⋯ is drawn for it); only the quick questions' history is cleared.
+    // No panel lists conversations: a member's one conversation has no delete, and Raphael's is cleared from its header's ⋯ (the page then
+    // asks for its guided tour again, so what is read back is only that what was typed here is gone).
     result.beforeDelete = await snapshot();
     await details(page);
-    result.mainHasNoDelete = !await page.$(`[data-conversation-more="${conversation}"]`);
-    if (!result.mainHasNoDelete) result.failures.push(`The main conversation ${conversation} offers a ⋯ it should not have`);
-    result.afterDelete = result.beforeDelete;
-    const quick = result.afterDelete.conversations.find(row => row.kind === "quick");
-    if (!quick) throw new Error("The quick conversation was not created by the real app");
-    await details(page); await click(page, `[data-conversation-open="${quick.id}"]`);
-    await typed(context, "Native journey quick first turn", quick.id);
-    await typed(context, "Native journey quick second turn", quick.id);
-    result.quickDeleteUI = !!await page.$(`[data-conversation-more="${quick.id}"]`);
-    if (!result.quickDeleteUI) throw new Error("Quick conversation has no sidebar clear-history menu");
-    await click(page, `[data-conversation-more="${quick.id}"]`);
+    result.noConversationList = !await page.$(".mb-det .conversation-list, .mb-det .conversation-row");
+    if (!result.noConversationList) result.failures.push("A panel lists conversations it should not");
+    const typedTurns = result.beforeDelete.agent_turns.filter(row => row.conversation_id === conversation && !row.source?.startsWith("greeting")).map(row => row.id);
+    await click(page, '[data-act="raphael-more"]');
     await click(page, '#app-popover [data-pick="clear"]');
     await click(page, '.mb-confirm [data-dlg="delete"]');
     await page.waitForFunction(() => !document.querySelector(".mb-confirm"));
     await pause(900);
-    result.afterQuickClear = await snapshot();
-    result.quickRemaining = remaining(result.afterQuickClear, quick.id);
-    if (!result.afterQuickClear.conversations.some(row => row.id === quick.id && row.kind === "quick") ||
-        // The quick conversation stays, and so does its CLI generation: a clear moves it on, so a late session of the cleared
-        // history cannot come back (agent/cli/loop.py).
-        Object.entries(result.quickRemaining).some(([table, rows]) => !["conversations", "agent_cli_generations"].includes(table) && rows.length)) result.failures.push(`Quick history clear did not retain only its permanent conversation: ${JSON.stringify(result.quickRemaining)}`);
-    result.quickTimeline = await page.evaluate(privateTimeline);
-    if (result.quickTimeline.rows.length) result.failures.push(`Cleared quick history retains timeline rows: ${JSON.stringify(result.quickTimeline)}`);
-    await capture("quick-history-cleared");
+    result.afterClear = await snapshot();
+    result.stillThere = result.afterClear.agent_turns.filter(row => typedTurns.includes(row.id)).map(row => row.id);
+    if (!result.afterClear.conversations.some(row => row.id === conversation) || typedTurns.length < 2 || result.stillThere.length) result.failures.push(`Raphael's conversation clear did not retain only its identity: ${JSON.stringify(result.stillThere)}`);
+    await capture("raphael-conversation-cleared");
   } else if (name === "gmail-connect") {
     await chat(page);
     const conversation = await newConversation(context);

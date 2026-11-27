@@ -20,7 +20,7 @@ export interface OverflowRow {
 export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: "[data-member-more]", row: ".mb-item" },
   { more: "[data-group-more]", row: ".mb-ghead" },
-  { more: "[data-conversation-more]", row: ".conversation-row" },
+  { more: '[data-act="raphael-more"]', row: ".mb-chat > .mb-head" },
   { more: "[data-room-more]", row: ".au-room-row" },
   { more: "[data-room-menu]", row: ".au-room-pane > .page-head" },
   { more: '[data-desktop="menu"]', row: ".desktop-dock" },
@@ -45,7 +45,7 @@ export function overflowAt(target: EventTarget | null): { button: HTMLButtonElem
   for (let node = target instanceof Element ? target : null; node; node = node.parentElement) {
     for (const { more, row } of OVERFLOW_ROWS) {
       if (!node.matches(row)) continue;
-      const button = [...node.querySelectorAll<HTMLButtonElement>(more)].find((candidate) => !candidate.disabled);
+      const button = [...node.querySelectorAll<HTMLButtonElement>(more)].find((candidate) => !candidate.disabled && !candidate.hidden);
       if (button) return { button, row: node };
     }
   }

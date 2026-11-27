@@ -124,7 +124,7 @@ ACTIONS = (
     row("room_members", "rooms.update", "Replace group chat membership. The card names the complete new membership.", {"room_id": ID, "member_ids": IDS}, ("room_id", "member_ids"), destructive=True),
     row("room_stop", "rooms.stop", "Stop all work belonging to a group chat.", {"room_id": ID}, ("room_id",)),
     row("room_delete", "rooms.delete", "Delete a group chat, messages and associated room state.", {"room_id": ID}, ("room_id",), destructive=True),
-    row("conversation_clear", "conversations.clear", "Clear the selected conversation. Read conversations.list for the permanent quick conversation ID.", {"id": ID}, ("id",), destructive=True),
+    row("conversation_clear", "conversations.clear", "Clear the selected conversation (Raphael's one conversation, whose quick questions are in it). Read conversations.list for its ID.", {"id": ID}, ("id",), destructive=True),
     row("member_library_list", "skills.library.list", "List team skill packages and access.", {}),
     row("member_library_import", "skills.library.import",
         "Import a team skill package from a GitHub or skills.sh link (a repository, a folder, a SKILL.md), owner/repo, a local folder or "
@@ -146,7 +146,7 @@ ACTIONS = (
     row("member_skill_delete", "members.skills.delete", "Delete a member or shared skill package and grants.", {"member_id": MEMBER_ID, "shared": BOOL, "id": ID}, ("member_id", "id"), destructive=True),
     row("member_command_save", "members.commands.save", "Save a member's slash command template containing {input}.", {"member_id": MEMBER_ID, "id": ID, **{key: TEXT for key in ("name", "description", "template")}}, ("member_id", "name", "template")),
     row("member_command_delete", "members.commands.delete", "Delete a member's slash command.", {"member_id": MEMBER_ID, "id": ID}, ("member_id", "id"), destructive=True),
-    row("conversation_list", "conversations.list", "Read a member's conversation IDs, including the quick conversation.", {"member_id": MEMBER_ID, "query": TEXT}, ("member_id",)),
+    row("conversation_list", "conversations.list", "Read a member's conversation ID: each member, Raphael included, has the one.", {"member_id": MEMBER_ID, "query": TEXT}, ("member_id",)),
     row("dictionary_list", "dictionary.list", "Read the dictionary with entry IDs."),
     row("settings_read", "settings.get", "Read current non-secret settings."),
     row("member_skills_list", "members.skills.list", "Read a member's installed skills including disabled packages.", {"member_id": MEMBER_ID, "shared": BOOL}, ("member_id",)),

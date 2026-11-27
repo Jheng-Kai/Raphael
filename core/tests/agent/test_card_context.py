@@ -21,6 +21,8 @@ from raphael_core.connectors.cards import ConnectorCards
 from raphael_core.connectors.secret_cards import SecretCards
 from raphael_core.memory.conversation import Conversation, turn_text
 
+from second_conversation import another_conversation
+
 from .test_narration import chat, typed
 from .test_service import NOW_MS, make_rig  # noqa: F401
 
@@ -65,8 +67,8 @@ async def test_a_new_owner_message_skips_only_earlier_waiting_cards_in_its_conve
     handbacks = HandbackCards(conn, SimpleNamespace(stop_run=lambda run, _: stopped.append(run)), now_ms=clock)
     rig = make_rig(cards=connectors, secret_cards=secrets, handbacks=handbacks)
     quick = source == "overlay"
-    conversation = rig.service.conversations.quick() if quick else rig.service.conversations.main(0)
-    other = rig.service.conversations.main(0) if quick else rig.service.conversations.quick()
+    conversation = rig.service.conversations.main(0)
+    other = another_conversation(conn)
 
     def add(*, member_id=0, destination=conversation):
         identifier = turn(rig.history, member_id=member_id, conversation_id=destination)
@@ -256,7 +258,7 @@ def test_handed_draft_projects_to_original_author_and_current_holder_only(conn):
 def test_other_conversations_cards_do_not_enter_current_context(conn, client):
     from raphael_core.agent.conversations import Conversations
     conversations = Conversations(conn, lambda: NOW_MS)
-    main, quick = conversations.main(0), conversations.quick()
+    main, quick = conversations.main(0), another_conversation(conn)
     history = AgentHistory(conn, lambda: NOW_MS)
     own = turn(history, conversation_id=main)
     elsewhere = turn(history, conversation_id=quick)

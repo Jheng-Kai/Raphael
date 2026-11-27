@@ -70,7 +70,7 @@ async def test_a_cli_native_command_that_would_open_something_is_refused_in_an_o
 def quick_ask(rig, text='Inspect synthetic processes'):
     # As a question typed in the quick conversation asks (the overlay's spoken one reaches the same turn).
     return rig.call('agent.ask', {'session_id': 'live', 'text': text, 'ui_language': 'en', 'source': 'app', 'member_id': 0,
-                                  'destination': 'quick', 'conversation_id': rig.service.conversations.quick()})
+                                  'destination': 'quick', 'conversation_id': rig.service.conversations.main(0)})
 
 
 @pytest.mark.parametrize('brain', ['api', 'claude', 'codex', 'gemini'])
@@ -98,7 +98,7 @@ async def test_a_quick_question_publishes_running_action_before_completion_and_s
     task = asyncio.create_task(quick_ask(rig))
     try:
         await asyncio.wait_for(started.wait(), 5)
-        [turn] = rig.history.list(5, conversation_id=rig.service.conversations.quick())
+        [turn] = rig.history.list(5, conversation_id=rig.service.conversations.main(0))
         assert turn.status == 'running'
         actions = [json.loads(item['text']) for item in rig.history.messages([turn.id])[turn.id] if item['kind'] == 'event']
         assert actions[-1]['state'] == 'running'

@@ -210,7 +210,7 @@ def test_the_local_tools_door_asks_the_services_question():
 @pytest.mark.parametrize("brain", ["api", "cli"])
 async def test_a_quick_question_still_has_the_owners_pc_and_the_words_for_it(make_rig, client, conn, monkeypatch, brain):
     rig = rig_with_pc(make_rig, conn)
-    quick = rig.service.conversations.quick()
+    quick = rig.service.conversations.main(0)
     if brain == "api":
         client.chats = [chat('{"text":"Done."}')]
         result = await ask(rig, "quick", source="app", destination="quick", conversation_id=quick)
@@ -244,7 +244,7 @@ async def test_a_quick_question_keeps_the_rule_it_had_for_a_local_command(make_r
     rig = rig_with_pc(make_rig, conn)
     rig.settings.set("action_mode", mode)
     client.chats = [chat("Checking.", ("local__local_exec", {"command": "Get-Process"})), chat('{"text":"Done."}')]
-    result = await ask(rig, "quick", source="app", destination="quick", conversation_id=rig.service.conversations.quick())
+    result = await ask(rig, "quick", source="app", destination="quick", conversation_id=rig.service.conversations.main(0))
     assert result["status"] == "done"
     assert rig.host.execute.await_count == (1 if runs else 0)
 
@@ -296,7 +296,7 @@ async def test_a_quick_question_offers_the_owners_pc_beside_the_members_own_comp
     await hub.prepare(0)
     client.chats = [chat('{"text":"Done."}')]
     result = await ask(rig, "quick", text="Use your computer to open YouTube", source="app", destination="quick",
-                       conversation_id=rig.service.conversations.quick())
+                       conversation_id=rig.service.conversations.main(0))
     assert result["status"] == "done"
     offered = names(client.chat_calls[0]["tools"])
     assert {"computer__browser_open", "open", *LOCAL} <= offered

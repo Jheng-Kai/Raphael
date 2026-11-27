@@ -162,7 +162,7 @@ class Rig:
         return await self.rpc.call(method, params)
 
     async def ask(self, text, *, session="s1", language="zh-TW", target_app=None):
-        # As the Alt+Space hotkey asks: spoken, to the quick conversation.
+        # As the Alt+Space hotkey asks: spoken, answered the quick way, into Raphael's one conversation.
         return await self.call(
             "agent.ask",
             {"session_id": session, "text": text, "ui_language": language, "target_app": target_app,
@@ -173,11 +173,7 @@ class Rig:
         return await self.call("agent.confirm", {"id": confirm_id, "approved": approved})
 
     async def turns(self, **params):
-        # Voice history now lives in the persistent quick conversation. Typed-only rigs
-        # continue to inspect their formal default unless the test names a conversation.
-        quick = self.conn.execute("SELECT id FROM conversations WHERE kind='quick'").fetchone()
-        if quick and "conversation_id" not in params:
-            params["conversation_id"] = quick[0]
+        # The member's one conversation (Raphael's by default), unless the test names another.
         return (await self.call("agent.history.list", params))["turns"]
 
     def spent(self):
@@ -187,7 +183,7 @@ class Rig:
         return self.history.add(
             session_id="old", question=question, route=route, prefix=prefix, text=text,
             detail=detail, status=status,
-            conversation_id=conversation_id or self.service.conversations.quick(),
+            conversation_id=conversation_id or self.service.conversations.main(0),
         )  # fmt: skip
 
     async def aclose(self):
@@ -301,7 +297,7 @@ async def test_a_command_is_done_at_once_and_answered_with_the_fixed_reply(rig, 
         "cost_usd": 0.00004,
         "model": "typesafe/jev-1.14",
         "member_id": 0,
-        "conversation_id": rig.service.conversations.quick(),
+        "conversation_id": rig.service.conversations.main(0),
         "scope": "private",
         "room_id": None,
         "thread_id": None,
@@ -1572,7 +1568,7 @@ async def test_the_history_pages_by_limit_and_before_id(rig):
 
 async def test_history_changes_return_only_invalidated_turns_and_bounded_forward_pages(rig):
     ids = [rig.seed(f"delta-{index}", "Retained reply") for index in range(160)]
-    conversation = rig.service.conversations.quick()
+    conversation = rig.service.conversations.main(0)
     first = await rig.call("agent.history.list", {"conversation_id": conversation, "after_id": ids[149], "turn_ids": [ids[2], ids[-1]], "limit": 3})
     assert first["delta"] is True and first["has_more"] is True
     assert {turn["id"] for turn in first["turns"]} == {ids[2], ids[-1], *ids[150:153]}
@@ -1612,7 +1608,7 @@ async def test_the_history_search_finds_turns_of_the_whole_history_in_the_shape_
     for n in range(80):
         rig.seed(f"q{n}", "a")
     rig.seed("出差要帶什麼", "護照。")
-    conversation = rig.service.conversations.quick()
+    conversation = rig.service.conversations.main(0)
     found = (await rig.call("agent.history.search", {"query": "出差", "limit": 100, "conversation_id": conversation}))["turns"]
     assert {t["question"] for t in found} == {"下週的出差行程", "出差要帶什麼"}
     assert old in {t["id"] for t in found}
@@ -1626,7 +1622,7 @@ async def test_the_history_search_finds_turns_of_the_whole_history_in_the_shape_
 async def test_history_search_returns_all_matches_unless_the_caller_limits_them(rig):
     for n in range(120):
         rig.seed(f"會議 {n}", "好。")
-    conversation = rig.service.conversations.quick()
+    conversation = rig.service.conversations.main(0)
     assert len((await rig.call("agent.history.search", {"query": "會議", "conversation_id": conversation}))["turns"]) == 120
     assert len((await rig.call("agent.history.search", {"query": "會議", "limit": 110, "conversation_id": conversation}))["turns"]) == 110
     assert len((await rig.call("agent.history.search", {"query": "會議", "limit": 0, "conversation_id": conversation}))["turns"]) == 1
@@ -1791,9 +1787,10 @@ async def test_a_message_from_a_messaging_app_ends_its_own_chats_waiting_questio
     assert own.id not in rig.service._confirmations._pending
 
 
-async def test_a_question_typed_in_a_formal_thread_leaves_the_quick_one_waiting(
+async def test_a_question_typed_in_the_conversation_replaces_the_one_a_quick_ask_left_waiting(
     rig, client, actions
 ):
+    # Raphael has one conversation: what is typed there next replaces the question that waits in it, as in any conversation.
     rig.seed("q", "a")
     asked = await ask_to_copy(rig, client)
     from .test_narration import chat
@@ -1803,10 +1800,10 @@ async def test_a_question_typed_in_a_formal_thread_leaves_the_quick_one_waiting(
         {"session_id": "app-1", "text": "你好", "ui_language": "zh-TW", "source": "app"},
     )
     assert reply["text"] == "好。"
-    assert (await rig.confirm(asked["confirm"]["id"], True))["prefix"] == "了"
-    formal = await rig.turns(conversation_id=rig.service.conversations.main())
-    assert formal[0]["source"] == "app" and formal[0]["question"] == "你好"
-    assert not any(t["status"] == "denied" for t in await rig.turns())
+    assert (await rig.confirm(asked["confirm"]["id"], True))["prefix"] == "否"
+    assert not actions.calls
+    turns = await rig.turns()
+    assert [t["question"] for t in turns][:2] == ["你好", "把答案複製起來"] and turns[1]["status"] == "cancelled"
 
 
 async def test_stopping_a_session_ends_its_request_and_denies_its_question_only(rig, client, actions):

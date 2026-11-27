@@ -9,7 +9,7 @@ import { closeMenu, iconButton, openPopover } from "./ui";
 
 /** A menu of two items per ⋯, the way `openActions` draws one: the item labels name the row. */
 function openFor(button: HTMLElement): void {
-  const row = button.closest(".conversation-row")!.id;
+  const row = button.closest(".mb-item")!.id;
   openPopover(button, ["rename", "move", "delete"].map((id) => `<button type="button" role="menuitem" data-pick="${id}-${row}">${id}</button>`).join(""), { className: "menu", role: "menu" });
 }
 
@@ -55,9 +55,9 @@ let stop: () => void;
 beforeEach(() => {
   closeMenu();
   document.body.innerHTML =
-    ["a", "b"].map((id) => `<div class="conversation-row" id="${id}"><button type="button" class="btn conversation-open" id="open-${id}">${id}</button>` +
-      iconButton("more", "更多", ` data-conversation-more="${id}" aria-haspopup="menu"`, "conversation-more") + `</div>`).join("") +
-    `<div class="conversation-row" id="c"><button type="button" class="btn conversation-open">c</button>${iconButton("more", "更多", ' data-conversation-more="c" disabled')}</div>` +
+    ["a", "b"].map((id) => `<div class="mb-item" id="${id}"><button type="button" class="btn conversation-open" id="open-${id}">${id}</button>` +
+      iconButton("more", "更多", ` data-member-more="${id}" aria-haspopup="menu"`, "member-more") + `</div>`).join("") +
+    `<div class="mb-item" id="c"><button type="button" class="btn conversation-open">c</button>${iconButton("more", "更多", ' data-member-more="c" disabled')}</div>` +
     `<p id="plain">nothing here has a menu</p><input id="field">`;
   document.addEventListener("click", clicked);
   stop = installContextMenus(document);
@@ -68,7 +68,7 @@ afterEach(() => {
   closeMenu();
 });
 function clicked(event: Event): void {
-  const more = (event.target as Element).closest<HTMLElement>("[data-conversation-more]");
+  const more = (event.target as Element).closest<HTMLElement>("[data-member-more]");
   // like the member column's search panel, whose rows draw a ⋯ that nothing listens to
   if (more && !more.closest("#app-popover")) openFor(more);
 }
@@ -82,14 +82,14 @@ describe("a right click is the ⋯ of its row", () => {
     expect(uncoveredOverflows(bar)).toHaveLength(0);
   });
   test("a right click anywhere on a row opens the menu of its ⋯, the same one a click on the ⋯ opens", () => {
-    for (const target of [document.getElementById("open-a")!, document.querySelector("#a [data-conversation-more]")!, document.getElementById("a")!]) {
+    for (const target of [document.getElementById("open-a")!, document.querySelector("#a [data-member-more]")!, document.getElementById("a")!]) {
       closeMenu();
       expect(rightClick(target).defaultPrevented).toBe(true);
       expect(picks()).toEqual(["rename-a", "move-a", "delete-a"]);
     }
     const viaRightClick = picks();
     closeMenu();
-    document.querySelector<HTMLElement>("#a [data-conversation-more]")!.click();
+    document.querySelector<HTMLElement>("#a [data-member-more]")!.click();
     expect(picks()).toEqual(viaRightClick);
     rightClick(document.getElementById("open-b")!);
     expect(picks()).toEqual(["rename-b", "move-b", "delete-b"]);
@@ -101,14 +101,14 @@ describe("a right click is the ⋯ of its row", () => {
     settings.className = "modal-scrim";
     settings.append(document.getElementById("a")!);
     document.body.append(settings);
-    for (const target of [document.getElementById("open-a")!, document.querySelector("#a [data-conversation-more]")!, document.getElementById("a")!]) {
+    for (const target of [document.getElementById("open-a")!, document.querySelector("#a [data-member-more]")!, document.getElementById("a")!]) {
       closeMenu();
       expect(rightClick(target).defaultPrevented).toBe(true); // nor the browser's own menu
       expect(popover()).toBeNull();
       expect(menuKey(target).defaultPrevented).toBe(true);
       expect(popover()).toBeNull();
     }
-    document.querySelector<HTMLElement>("#a [data-conversation-more]")!.click();
+    document.querySelector<HTMLElement>("#a [data-member-more]")!.click();
     expect(picks()).toEqual(["rename-a", "move-a", "delete-a"]);
     // Connect apps, drawn in the same window on its own, is not Settings: its rows keep their right click.
     closeMenu();
@@ -121,7 +121,7 @@ describe("a right click is the ⋯ of its row", () => {
     rightClick(document.getElementById("open-a")!, 300, 200);
     expect([popover()!.style.left, popover()!.style.top]).toEqual(["300px", "204px"]);
     closeMenu();
-    personClick(document.querySelector("#a [data-conversation-more]")!);
+    personClick(document.querySelector("#a [data-member-more]")!);
     expect(popover()!.style.left).not.toBe("300px");
   });
 
@@ -147,7 +147,7 @@ describe("a right click is the ⋯ of its row", () => {
     rightClick(document.getElementById("open-a")!, 260, 180);
     const first = popover()!;
     document.querySelector<HTMLElement>('#app-popover [data-pick="move-a"]')!.addEventListener("click", () => {
-      openPopover(document.querySelector<HTMLElement>("#a [data-conversation-more]")!, '<button type="button" role="menuitemradio" data-value="1">專案</button>', { className: "menu", role: "menu" });
+      openPopover(document.querySelector<HTMLElement>("#a [data-member-more]")!, '<button type="button" role="menuitemradio" data-value="1">專案</button>', { className: "menu", role: "menu" });
     });
     document.querySelector<HTMLElement>('#app-popover [data-pick="move-a"]')!.click();
     expect(popover()).not.toBe(first);
@@ -157,7 +157,7 @@ describe("a right click is the ⋯ of its row", () => {
 
   test("a click of the person's own on the ⋯ places its menu under the button again", () => {
     rightClick(document.getElementById("open-a")!, 300, 200);
-    personClick(document.querySelector("#a [data-conversation-more]")!);
+    personClick(document.querySelector("#a [data-member-more]")!);
     expect(popover()!.style.left).not.toBe("300px");
   });
 
@@ -167,7 +167,7 @@ describe("a right click is the ⋯ of its row", () => {
     expect(popover()).not.toBeNull();
     document.dispatchEvent(new Event("wheel"));
     expect(popover()).toBeNull();
-    personClick(document.querySelector("#a [data-conversation-more]")!);
+    personClick(document.querySelector("#a [data-member-more]")!);
     document.dispatchEvent(new Event("scroll"));
     expect(popover()).not.toBeNull();
     document.dispatchEvent(new Event("wheel"));
@@ -182,7 +182,7 @@ describe("the keys", () => {
     expect(menuKey(row).defaultPrevented).toBe(true);
     expect(picks()).toEqual(["rename-a", "move-a", "delete-a"]);
     expect(popover()!.style.left).not.toBe("4px");
-    expect(document.querySelector("#a [data-conversation-more]")!.getAttribute("aria-expanded")).toBe("true");
+    expect(document.querySelector("#a [data-member-more]")!.getAttribute("aria-expanded")).toBe("true");
   });
 
   test("Escape closes the menu a key opened and gives the focus back to the ⋯", () => {
@@ -192,7 +192,7 @@ describe("the keys", () => {
     expect(popover()).not.toBeNull();
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     expect(popover()).toBeNull();
-    expect(document.activeElement).toBe(document.querySelector("#b [data-conversation-more]"));
+    expect(document.activeElement).toBe(document.querySelector("#b [data-member-more]"));
   });
 });
 
@@ -224,7 +224,7 @@ describe("what is not a click", () => {
   });
 
   test("a row inside an open panel is pressed like a click on it: the panel stays", () => {
-    openPopover(document.getElementById("field")!, '<div class="conversation-row" id="in"><button type="button" class="btn conversation-open" id="open-in">in</button><button type="button" class="btn icon" data-conversation-more="in" data-overflow></button></div>', { className: "menu conversation-search", role: "dialog" });
+    openPopover(document.getElementById("field")!, '<div class="mb-item" id="in"><button type="button" class="btn conversation-open" id="open-in">in</button><button type="button" class="btn icon" data-member-more="in" data-overflow></button></div>', { className: "menu conversation-search", role: "dialog" });
     const panel = popover()!;
     rightClick(document.getElementById("open-in")!);
     expect(popover()).toBe(panel);
@@ -304,15 +304,15 @@ describe("no ⋯ is left without its right click", () => {
     expect(uncoveredOverflows(document).map((button) => button.dataset.nowhere)).toEqual(["1"]);
     stray.remove();
     const twice = document.querySelector("#a")!;
-    twice.insertAdjacentHTML("beforeend", iconButton("more", "更多", ' data-conversation-more="x"'));
+    twice.insertAdjacentHTML("beforeend", iconButton("more", "更多", ' data-member-more="x"'));
     expect(uncoveredOverflows(document)).toHaveLength(2);
-    expect(overflowAt(document.getElementById("open-a"))!.button.dataset.conversationMore).toBe("a");
+    expect(overflowAt(document.getElementById("open-a"))!.button.dataset.memberMore).toBe("a");
   });
 });
 
 test("the row's menu knows what the right click landed on while it opens, and nothing after", () => {
   let seen: Element | null | undefined;
-  const more = document.querySelector<HTMLElement>('[data-conversation-more="a"]')!;
+  const more = document.querySelector<HTMLElement>('[data-member-more="a"]')!;
   more.addEventListener("click", () => { seen = contextMenuTarget(); }, { once: true });
   const word = document.querySelector("#open-a")!;
   rightClick(word);
@@ -323,7 +323,7 @@ test("the row's menu knows what the right click landed on while it opens, and no
 
 test("the menu the key opens knows what has the focus, as a right click knows where it landed", () => {
   let seen: Element | null | undefined;
-  const more = document.querySelector<HTMLElement>('[data-conversation-more="a"]')!;
+  const more = document.querySelector<HTMLElement>('[data-member-more="a"]')!;
   more.addEventListener("click", () => { seen = contextMenuTarget(); }, { once: true });
   const word = document.querySelector("#open-a")!;
   menuKey(word);

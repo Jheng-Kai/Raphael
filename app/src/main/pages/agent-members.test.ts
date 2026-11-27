@@ -422,27 +422,18 @@ test("member drafts follow the composer owner through switching and page return"
   agent.hide();
 });
 
-test("Raphael's conversation and its quick questions keep their own drafts through activity, sending and other members", async () => {
-  const conversations = [
-    {id:1,member_id:0,title:'First sample',kind:'standard',is_default:1,updated_at_ms:1},
-    {id:9,member_id:0,title:'',kind:'quick',is_default:0,updated_at_ms:20},
-  ];
+test("Raphael's conversation keeps its draft through activity, sending and other members", async () => {
+  const conversations = [{id:1,member_id:0,title:'First sample',kind:'standard',is_default:1,updated_at_ms:1}];
   api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:structuredClone(conversations)}:{questions:[]});
   const agent=mount();await flush();
   const input=agent.el.querySelector<HTMLTextAreaElement>('.composer .cmp-input')!;
   input.value='First unfinished';input.dispatchEvent(new Event('input'));
-  conversations[1].updated_at_ms=100;
+  conversations[0]!.updated_at_ms=100;
   window.dispatchEvent(new CustomEvent('conversations-changed',{detail:0}));await flush();
-  expect($<HTMLElement>('.conversation-caption').hidden).toBe(true);
-  if($('.mb-det').hidden)$('.conversation-trigger').click();await flush();
-  $('[data-conversation-open="9"]').click();await flush();
-  expect($('.conversation-caption').textContent).toBe('快速提問');
-  expect(input.value).toBe('');input.value='Send quick';input.dispatchEvent(new Event('input'));
-  agent.el.querySelector<HTMLFormElement>('.composer')!.requestSubmit();await flush();
-  $('[data-conversation-open="1"]').click();await flush();
   expect(input.value).toBe('First unfinished');
   await pick(3);input.value='Other member draft';input.dispatchEvent(new Event('input'));
-  await pick(4);await pick(3);expect(input.value).toBe('Other member draft');agent.hide();
+  await pick(4);await pick(3);expect(input.value).toBe('Other member draft');
+  await pick(0);expect(input.value).toBe('First unfinished');agent.hide();
 });
 
 test("typing defers storage work until the pause and a new page restores the saved words", async () => {
@@ -502,7 +493,7 @@ test('work events refresh the visible preview without rereading skills or comman
 test('hidden thread metadata waits until the thread is shown, and the header names only the member', async () => {
   vi.useFakeTimers();
   let title='Original sample';
-  api.core.mockImplementation(async (method:string)=>method==='conversations.list' ? {conversations:[{id:701,member_id:0,is_default:1,kind:'standard',title,created_at_ms:1,updated_at_ms:1},{id:702,member_id:0,is_default:0,kind:'quick',title:'',created_at_ms:1,updated_at_ms:1}]} : {questions:[]});
+  api.core.mockImplementation(async (method:string)=>method==='conversations.list' ? {conversations:[{id:701,member_id:0,is_default:1,kind:'standard',title,created_at_ms:1,updated_at_ms:1}]} : {questions:[]});
   const agent=mount(); await flush(); agent.hide();
   api.core.mockClear(); title='Updated sample';
   send({type:'AgentTurn',turn_id:1,member_id:0});
@@ -511,14 +502,11 @@ test('hidden thread metadata waits until the thread is shown, and the header nam
   agent.show(); await flush();
   expect(api.core.mock.calls.filter(call=>call[0]==='conversations.list').length).toBeGreaterThan(0);
   expect($('.conversation-trigger').textContent).toBe('拉斐爾');
-  expect($<HTMLElement>('.conversation-caption').hidden).toBe(true);
-  if ($<HTMLElement>('.mb-det').hidden) $('.conversation-trigger').click(); await flush();
-  $('[data-conversation-open="702"]').click(); await flush();
-  expect($('.conversation-caption').textContent).toBe('快速提問');
+  expect(document.querySelector('.conversation-caption')).toBeNull();
   agent.hide();
 });
 
-test("the sidebar opens its member's waiting card without clearing Raphael's quick conversation", async () => {
+test("the sidebar opens its member's waiting card without clearing Raphael's conversation", async () => {
   const conversations = [
     { id: 701, member_id: 0, is_default: 1, kind: "standard" },
     { id: 702, member_id: 0, is_default: 0, kind: "quick" },
@@ -734,15 +722,12 @@ test("a member's menu no longer clears its one conversation (one conversation pe
   agent.hide();
 });
 
-test("a fresh window opens the member's one conversation, never the quick questions", async () => {
-  const conversations = [
-    {id:4,member_id:0,title:"",kind:"quick",is_default:0,updated_at_ms:100},
-    {id:1,member_id:0,title:"Main sample",kind:"standard",is_default:1,updated_at_ms:1},
-  ];
+test("a fresh window opens the member's one conversation", async () => {
+  const conversations = [{id:1,member_id:0,title:"Main sample",kind:"standard",is_default:1,updated_at_ms:1}];
   api.core.mockImplementation(async (method:string) => method === "conversations.list" ? {conversations:structuredClone(conversations)} : {questions:[]});
   const agent=mount();await flush();
   expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:1}));
-  expect($<HTMLElement>(".conversation-caption").hidden).toBe(true);agent.hide();
+  expect(document.querySelector(".conversation-caption")).toBeNull();agent.hide();
 });
 
 test("a member is deleted from its ⋯ menu only after the confirmation, and its open thread moves to the next slime", async () => {
@@ -2322,7 +2307,7 @@ describe("Raphael apart from the slimes", () => {
     members: [member(0, { name: "拉斐爾", raphael: true } as Partial<Member>), ...LIST.members.filter(m => slimes.includes(m.id)).map(m => ({ ...m, chief: m.id === primary }))],
     groups: [], team_context: { primary_id: primary, chief_id: primary, members: slimes.map(id => ({ id, name: `成員${id}`, role: "", blurb: "" })) } as unknown as MembersList["team_context"],
   });
-  const quick = [{ id: 4, member_id: 0, title: "", kind: "quick", is_default: 0, updated_at_ms: 100 }, { id: 1, member_id: 0, title: "Main", kind: "standard", is_default: 1, updated_at_ms: 1 }];
+  const quick = [{ id: 1, member_id: 0, title: "Main", kind: "standard", is_default: 1, updated_at_ms: 1 }];
   const readConversations = (): void => {
     api.core.mockImplementation(async (method: string, params: { member_id?: number }) =>
       method === "conversations.list" ? { conversations: [...quick, { id: 31, member_id: 3, title: "Cobalt", is_default: 1, kind: "standard", updated_at_ms: 1 }].filter(c => c.member_id === (params.member_id ?? 0)) } : { questions: [] });
@@ -2330,7 +2315,7 @@ describe("Raphael apart from the slimes", () => {
   const pillName = (): string => $(".mb-pill-t").textContent!;
   const listed = (): string[] => [...document.querySelectorAll<HTMLElement>(".mb-col [data-member]")].map(row => row.dataset.member!);
 
-  test("with a chief the sidebar lists slimes only and the app opens on the chief, whose panel has no quick questions", async () => {
+  test("with a chief the sidebar lists slimes only and the app opens on the chief, whose panel lists no conversations", async () => {
     api.membersList.mockResolvedValue(roster(3)); readConversations();
     const agent = mount(); await flush();
     expect(listed()).toEqual(["3", "4"]);
@@ -2350,7 +2335,7 @@ describe("Raphael apart from the slimes", () => {
     expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.not.objectContaining({ member_id: expect.anything() }));
     expect($('[data-col="add"]')).not.toBeNull();
     await openDetails();
-    expect(document.querySelector('.mb-det [data-slot="conversations"]')).not.toBeNull();
+    expect(document.querySelector('.mb-det [data-slot="conversations"]')).toBeNull();
     agent.hide();
   });
 
@@ -2363,7 +2348,7 @@ describe("Raphael apart from the slimes", () => {
     agent.hide();
   });
 
-  test("the route to Raphael shows its space in the same chat view, with its quick questions and no share button, and a slime row leaves it", async () => {
+  test("the route to Raphael shows its space in the same chat view, with its ⋯ in place of the share button, and a slime row leaves it", async () => {
     api.membersList.mockResolvedValue(roster(3)); readConversations();
     const agent = mount(); await flush();
     agent.show("raphael"); await flush();
@@ -2372,12 +2357,14 @@ describe("Raphael apart from the slimes", () => {
     expect(document.querySelector('.mb-col [aria-current="true"]')).toBeNull();
     expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.not.objectContaining({ member_id: expect.anything() }));
     expect($('[data-act="share-member"]').hidden).toBe(true);
+    expect($('[data-act="raphael-more"]').hidden).toBe(false);
     await openDetails();
-    expect(document.querySelector('.mb-det [data-slot="conversations"]')).not.toBeNull();
+    expect(document.querySelector('.mb-det [data-slot="conversations"]')).toBeNull();
     expect(document.querySelector(".mb-det .mb-face-edit")).toBeNull();
     await pick(4);
     expect(pillName()).toBe("行程管家");
-    expect(document.querySelector('.mb-det [data-slot="conversations"]')).toBeNull();
+    expect($('[data-act="raphael-more"]').hidden).toBe(true);
+    expect($('[data-act="share-member"]').hidden).toBe(false);
     agent.hide();
   });
 

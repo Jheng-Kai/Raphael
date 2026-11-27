@@ -152,28 +152,20 @@ describe("a member's panel", () => {
     expect([...writes, ...observer.takeRecords()]).toHaveLength(0);
     observer.disconnect();
   });
-  test("a member has no conversation list, and Raphael's panel switches between its conversation and quick questions", async () => {
+  test("no panel lists conversations: a member and Raphael each have the one, which the header opens", async () => {
     const panel = mount();
-    const open = vi.fn();
-    host.openConversation = open;
     const original = api.core.getMockImplementation()!;
     api.core.mockImplementation(async (method, params) => method === "conversations.list"
-      ? { conversations: params.member_id === 0
-        ? [{ id: 1, member_id: 0, title: "Weekly plan", updated_at_ms: Date.now(), is_default: 1, kind: "standard" }, { id: 2, member_id: 0, title: "", updated_at_ms: Date.now(), kind: "quick" }]
-        : [{ id: 91, member_id: params.member_id, title: "Research", updated_at_ms: Date.now(), is_default: 1, kind: "standard" }] }
+      ? { conversations: [{ id: 1, member_id: params.member_id, title: "Weekly plan", updated_at_ms: Date.now(), is_default: 1 }] }
       : original(method, params));
-    panel.draw(); await flush();
-    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
-    expect(panel.el.querySelector('[data-conversation-new]')).toBeNull();
-    expect(panel.el.textContent).not.toContain("Research");
-    current = 0; panel.showMember(); await flush();
-    const rows = [...panel.el.querySelectorAll<HTMLButtonElement>('[data-slot="conversations"] [data-conversation-open]')];
-    expect(rows.map(row => row.querySelector('span')!.textContent)).toEqual([t('conversations.main'), t('conversations.quick')]);
-    expect(panel.el.querySelector('[data-slot="conversations"] input')).toBeNull();
-    rows[1]!.click();
-    expect(open).toHaveBeenCalledWith(0, 2);
-    current = 4; panel.showMember(); await flush();
-    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
+    for (const member of [4, 0]) {
+      current = member; panel.showMember(); await flush();
+      expect(panel.el.querySelector('[data-slot="conversations"]'), `member ${member}`).toBeNull();
+      expect(panel.el.querySelector('[data-conversation-open], [data-conversation-more], [data-conversation-new]')).toBeNull();
+      expect(panel.el.textContent).not.toContain("Weekly plan");
+      expect(panel.el.querySelector('.mb-panel-routines')).not.toBeNull();
+    }
+    expect(api.core).not.toHaveBeenCalledWith("conversations.list", expect.anything());
   });
 
   test("the head is the gear on the left, apart from the × on the right, and share and hide are not here", async () => {
@@ -374,7 +366,7 @@ describe("the computer lives in its own tab only", () => {
     for (const id of [3, 0]) {
       current = id; const panel = mount(); await flush();
       const sections = [...panel.el.querySelectorAll('.mb-tab-body > section')].map(section => section.className);
-      expect(sections).toEqual(id === 0 ? ['mb-panel-routines', '', 'mb-panel-suggest'] : ['mb-panel-routines', 'mb-panel-suggest']);
+      expect(sections).toEqual(['mb-panel-routines', 'mb-panel-suggest']);
       const body = panel.el.querySelector('.mb-tab-body')!;
       expect(body.querySelector('[class*="computer"], [data-det^="computer"], [data-k*="computer"], [data-computer-thumb]')).toBeNull();
       expect([...body.querySelectorAll('.mb-dh')].map(head => head.textContent)).not.toContain(t('members.panelTab.computer'));
@@ -392,13 +384,13 @@ describe("the computer lives in its own tab only", () => {
 describe("Raphael's panel and the chief's", () => {
   const asChief = (): void => { host.list = () => ({ ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, chief: true } : m), team_context: { primary_id: 3 } as MembersList["team_context"] }); };
 
-  test("only Raphael has the conversations list, its quick questions, and the chief is a normal slime's panel without it", async () => {
+  test("neither Raphael's panel nor the chief's lists conversations: each has the one, which the header opens", async () => {
     current = 3;
     const panel = mount(); await flush();
     asChief(); panel.draw(); await flush();
     expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
     current = 0; panel.showMember(); panel.draw(); await flush();
-    expect(panel.el.querySelector('[data-slot="conversations"]')).not.toBeNull();
+    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
   });
 
   test("Raphael's face is only a face: no picture to change, no role, and a slime's panel keeps its picker", async () => {

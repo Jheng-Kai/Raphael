@@ -7,6 +7,7 @@ from raphael_core.agent.actions import action_scope
 from raphael_core.brain import db
 from raphael_core.background.tasks import TaskStore
 from raphael_core.members.store import MemberStore
+from second_conversation import another_conversation
 from .test_service import make_rig  # noqa: F401
 
 
@@ -21,7 +22,7 @@ def exchange(history, **overrides):
 def test_an_exchange_appears_only_in_its_received_conversation(conn):
     history, conversations = AgentHistory(conn), Conversations(conn)
     first = conversations.main()
-    other = conversations.quick()
+    other = another_conversation(conn)
     turn = exchange(history, conversation_id=other)
     assert history.get(turn).conversation_id == other
     assert history.list(conversation_id=first, exchanges=True) == []
@@ -59,12 +60,14 @@ async def test_clearing_a_conversation_removes_its_exchanges_and_cards(make_rig)
     assert (await rig.call("agent.history.list"))["turns"] == []
 
 
-async def test_quick_clear_removes_turns_summary_cards_and_cli_but_preserves_identity(make_rig):
+async def test_clearing_raphaels_conversation_removes_turns_summary_cards_and_cli_but_preserves_identity(make_rig):
     notices = []
     rig = make_rig(notify=lambda method, params: notices.append((method, params)))
-    quick = rig.service.conversations.quick()
-    formal = rig.service.conversations.main()
-    rig.seed("Keep this", "Formal answer", conversation_id=formal)
+    quick = rig.service.conversations.main(0)
+    slime = MemberStore(rig.conn).create_member(name="Writer", role="Writer")
+    formal = rig.service.conversations.main(slime.id)
+    rig.history.add(session_id="slime", question="Keep this", route="answer", prefix="", text="Formal answer", status="done",
+                    member_id=slime.id, conversation_id=formal)
     turn = rig.history.add(session_id="quick", question="Quick question", route="answer", prefix="", text="Answer", status="done", conversation_id=quick)
     rig.history.add_message(turn, "reply", "Saved answer")
     with action_scope(rig.history, turn, "en", "read_file", {"path": "/sample/cleared-note.md"}):
@@ -76,15 +79,15 @@ async def test_quick_clear_removes_turns_summary_cards_and_cli_but_preserves_ide
     rig.conn.commit()
     await rig.call("conversations.clear", {"id": quick})
     assert ("agent.turn", {"turn_id": 0, "member_id": 0}) in notices
-    assert rig.service.conversations.quick() == quick
+    assert rig.service.conversations.main(0) == quick
     assert rig.history.list(conversation_id=quick, exchanges=True) == []
     for table in ("conversation_context_summaries", "agent_conversation_cli_sessions", "connect_cards"):
         assert rig.conn.execute(f"SELECT COUNT(*) FROM {table} WHERE conversation_id=?", (quick,)).fetchone()[0] == 0
     assert rig.history.messages([turn]) == {}
     assert rig.history.get(blank_exchange) is None
-    assert rig.history.list(conversation_id=formal)
+    assert rig.history.list(member_id=slime.id, conversation_id=formal)  # a slime's conversation is another's own
     await rig.call("conversations.clear", {"id": quick})
-    assert rig.service.conversations.quick() == quick
+    assert rig.service.conversations.main(0) == quick
 
 
 def test_member_cleanup_removes_exchanges_with_the_deleted_peer(conn):

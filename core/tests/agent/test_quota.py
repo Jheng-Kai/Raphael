@@ -5,6 +5,7 @@ import pytest
 from .test_service import make_rig  # noqa: F401
 
 from raphael_core.agent.quota import Quotas, parse_quota
+from second_conversation import another_conversation
 
 NOW = int(datetime(2026, 10, 24, 4, tzinfo=timezone.utc).timestamp() * 1000)
 
@@ -235,7 +236,7 @@ def test_native_resume_ids_are_isolated_and_legacy_sessions_go_only_to_main(conn
     with conn:
         conn.execute("INSERT INTO agent_cli_sessions VALUES (?, ?, ?)", (0, "cli:codex", "old-session"))
     sessions = Sessions(conn)
-    other = conversations.quick()
+    other = another_conversation(conn)  # only a database made before schema 102 holds a second one for Raphael
     assert sessions.get(0, "cli:codex", main) == "old-session"
     assert sessions.get(0, "cli:codex", other) is None
     sessions.put(0, "cli:codex", "new-session", other)

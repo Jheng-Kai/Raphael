@@ -238,12 +238,12 @@ export const agentHistorySearch = (query: string, memberId = 0, conversationId?:
  * images and PDFs of the composer go with it as `attachments` (`agent.ask`'s, in base64), and only
  * when there are some: a question with files may have no words. `memberId` asks a member in its
  * own thread instead of Raphael (`agent.ask`'s `member_id`); it goes only when it is not 0.
- * `destination: "quick"` names Raphael's quick conversation, which the core never picks by default.
+ * The page never names a destination: Raphael keeps one conversation, and the quick questions of Alt+Space are the key's own.
  */
 /** What a button pressed on a panel asks of the member, beside the words it sends (core agent/intents.py). */
 /** A press done in the conversation; `connect-app:<slug>` hands Raphael an app that is not one click (connections.ts). */
 export type AskIntent = "setup-telegram" | "setup-slack" | "setup-discord" | "setup-docker" | "share-template" | "settings" | `connect-app:${string}`;
-export const agentAskText = (text: string, attachments: WireAttachment[] = [], memberId = 0, options: { requestId?: string; replaceTurnId?: number; quote?: import("./types").MessageQuote; conversationId?: number; destination?: "quick"; intent?: AskIntent } = {}): Promise<void> =>
+export const agentAskText = (text: string, attachments: WireAttachment[] = [], memberId = 0, options: { requestId?: string; replaceTurnId?: number; quote?: import("./types").MessageQuote; conversationId?: number; intent?: AskIntent } = {}): Promise<void> =>
   invoke("agent_ask_text", {
     text,
     ...(attachments.length > 0 ? { attachments } : {}),
@@ -296,9 +296,9 @@ export const agentQuestionAnswer = (id: string, approved: boolean, always = fals
  */
 export const agentPageShown = (shown: boolean): Promise<void> => invoke("agent_page_shown", { shown });
 /** A thread's voice button uses the key's recording flow, with its recipient fixed at the press. */
-export const agentVoice = (edge: "down" | "up", memberId = 0, conversationId?: number, destination?: "quick"): Promise<void> =>
+export const agentVoice = (edge: "down" | "up", memberId = 0, conversationId?: number): Promise<void> =>
   invoke("window_hotkey", { kind: edge === "down" ? "agent_down" : "agent_up", memberId,
-    ...(conversationId === undefined ? {} : { conversationId }), ...(destination ? { destination } : {}) });
+    ...(conversationId === undefined ? {} : { conversationId }) });
 
 // ---------- members, their groups and their routines (the 拉斐爾 page) ----------
 

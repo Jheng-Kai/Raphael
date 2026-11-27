@@ -1,6 +1,8 @@
 """S16 through production RPC, loops and authenticated MCP, with honest fake brains on both sides: each says only
-the codes it can see, so a quick question that lands in, reads or answers for the formal chat shows in what it says."""
+the codes it can see, so a quick question that lands elsewhere, cannot read Raphael's one conversation or is answered
+by the wrong model shows in what it says."""
 import re
+from dataclasses import replace
 
 import pytest
 
@@ -16,6 +18,7 @@ from raphael_core.evaluate.guardian_scenarios import cells
 from raphael_core.evaluate.guardian_suite import run_cell
 
 from agent.conftest import decision
+from second_conversation import another_conversation
 from test_guardian import FakeBrains
 from test_guardian_scenarios import FakeClient
 
@@ -89,7 +92,7 @@ async def test_s16_passes_on_both_brains_through_the_suite(tmp_path, monkeypatch
     assert result["actual_model"] == (model if brain == "A" else "owner-model")
     assert result["settings"] == {"quick_model": model.partition("?effort=")[0],
                                   "quick_effort": "high" if brain == "C" else "low", "agent_model": contrast}
-    # Quick and formal each resume only their own native session.
+    # Each brain resumes only its own native session of the one conversation.
     assert sessions[0] is None and sessions[-1] is not None
 
 
@@ -116,40 +119,47 @@ async def run_s16(tmp_path, brain="A", *, contrast_override=None):
         await driver.aclose()
 
 
-async def test_a_quick_question_written_to_the_formal_chat_fails(tmp_path, monkeypatch):
+async def test_a_quick_question_written_to_a_conversation_of_its_own_fails(tmp_path, monkeypatch):
     honest_cli(monkeypatch)
-    monkeypatch.setattr(Conversations, "destination", lambda self, member, conversation, *, quick: self.resolve(member, conversation))
-    assert {"quick_destination", "formal_unchanged"} <= set(await run_s16(tmp_path))
+    destination = Conversations.destination
+
+    def apart(self, member, conversation, *, quick):
+        return another_conversation(self.conn) if quick else destination(self, member, conversation, quick=quick)
+    monkeypatch.setattr(Conversations, "destination", apart)
+    assert {"quick_destination", "conversation_unchanged"} <= set(await run_s16(tmp_path))
 
 
-async def test_a_quick_question_answered_by_the_formal_model_fails(tmp_path, monkeypatch):
+async def test_a_quick_question_answered_by_the_answer_model_fails(tmp_path, monkeypatch):
     honest_cli(monkeypatch)
-    formal_settings = AgentService._read_settings
-    monkeypatch.setattr(AgentService, "_read_settings", lambda self, speaker, conversation_id=None: formal_settings(self, speaker))
+    monkeypatch.setattr(AgentService, "_ask_settings", lambda self, ask: self._read_settings(ask.speaker))
     assert "quick_actual_model" in await run_s16(tmp_path)
 
 
-async def test_a_quick_question_that_leaves_a_row_in_the_formal_chat_fails(tmp_path, monkeypatch):
+async def test_a_quick_question_that_leaves_a_second_row_in_the_conversation_fails(tmp_path, monkeypatch):
     honest_cli(monkeypatch)
     add = AgentHistory.add
 
     def mirrored(self, **kwargs):
         turn = add(self, **kwargs)
-        conversations = Conversations(self._conn)
-        if kwargs.get("conversation_id") == conversations.quick():
-            add(self, **{**kwargs, "conversation_id": conversations.main(0)})
+        if str(kwargs.get("session_id", "")).endswith("-quick"):
+            add(self, **kwargs)
         return turn
     monkeypatch.setattr(AgentHistory, "add", mirrored)
     reasons = await run_s16(tmp_path)
-    assert "formal_unchanged" in reasons and "quick_destination" not in reasons
+    assert "conversation_unchanged" in reasons and "quick_destination" not in reasons
 
 
 @pytest.mark.parametrize("brain", ["A", "C"])
-async def test_a_quick_question_that_reads_the_formal_chat_fails(tmp_path, monkeypatch, brain):
+async def test_a_quick_question_that_cannot_read_what_was_typed_fails(tmp_path, monkeypatch, brain):
     honest_cli(monkeypatch)
-    conversation_of = AgentService._conversation_of
-    monkeypatch.setattr(AgentService, "_conversation_of", lambda self, member_id, conversation_id=None: conversation_of(self, member_id))
-    assert "concurrent_scope" in await run_s16(tmp_path, brain)
+    context_of = AgentService._memory_context
+
+    def blind(self, speaker, conversation_id, *, quick=False, omit_cards=()):
+        context = context_of(self, speaker, conversation_id, quick=quick, omit_cards=omit_cards)
+        return replace(context, summary="", turns=[]) if quick else context
+    monkeypatch.setattr(AgentService, "_memory_context", blind)
+    monkeypatch.setattr(AgentService, "_recall", lambda self, ask, context: "")  # nor does the index lend it the typed turn
+    assert "one_conversation" in await run_s16(tmp_path, brain)
 
 
 async def test_quick_and_formal_reusing_one_native_session_fails(tmp_path, monkeypatch):
@@ -159,7 +169,7 @@ async def test_quick_and_formal_reusing_one_native_session_fails(tmp_path, monke
     monkeypatch.setattr(Sessions, "put", lambda self, member, brain, session, conversation_id=None, *, generation=None:
                         put(self, member, brain, "wrong-shared-native-session", conversation_id, generation=generation))
     reasons = await run_s16(tmp_path, "C", contrast_override="cli:codex:formal-model?effort=low")
-    assert "concurrent_scope" in reasons and "quick_destination" not in reasons
+    assert "one_conversation" in reasons and "quick_destination" not in reasons
 
 
 async def test_s16_skips_without_the_other_brain_for_the_formal_chat(tmp_path):

@@ -85,7 +85,6 @@ export async function deletionAudit(context, helpers) {
   const inspect = async (member, conversation, stage) => {
     await select(member); await details(page);
     // A member with one conversation opens it when it is chosen, and its panel lists no conversations to press.
-    if (await page.$(`[data-conversation-open="${conversation}"]`)) await click(page, `[data-conversation-open="${conversation}"]`);
     // Let the real history IPC and its paint finish; never inject a timeline or model response.
     await pause(800);
     const query = await threadQuery(member, conversation);
@@ -115,7 +114,7 @@ export async function deletionAudit(context, helpers) {
   };
 
   for (const member of [0, target]) {
-    const original = (await snapshot()).conversations.find(row => row.member_id === member && row.kind !== "quick" && row.is_default);
+    const original = (await snapshot()).conversations.find(row => row.member_id === member && row.is_default);
     if (!original) throw new Error(`Missing recipient default conversation: ${member}`);
     await inspect(member, original.id, "before-delete");
   }

@@ -356,13 +356,12 @@ async def test_only_a_members_own_reply_is_analysed_never_the_owners_message_or_
     assert len(asks(rig)) == 1 and len(client.chat_calls) == calls and records(rig) == [('turn', f'{turn_id}:reply', '👍')]
 
 
-async def test_a_quick_conversation_is_never_analysed(setup, client):
+async def test_a_reaction_to_a_quick_answer_is_analysed_like_any_other_because_it_is_a_turn_of_raphaels_conversation(setup, client):
     rig, _ = setup
-    quick = rig.service.conversations.quick()
     turn_id = rig.history.add(session_id='quick-1', question='幾點？', route='answer', prefix='答', text='九點。', status='done',
-                              member_id=0, conversation_id=quick)
-    assert rig.service._ask_about_reaction('turn', (turn_id, 'reply'), '👎') is False
-    assert not asks(rig) and not client.chat_calls
+                              source='voice', member_id=0, conversation_id=rig.service.conversations.main(0))
+    client.chats.append(live_said('Noted.'))
+    assert rig.service._ask_about_reaction('turn', (turn_id, 'reply'), '👎') is True
 
 
 async def test_a_failed_reply_is_not_analysed(setup, client):

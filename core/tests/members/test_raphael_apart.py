@@ -96,14 +96,14 @@ async def refused(rig, method, params):
     return (caught.value.data or {}).get("kind")
 
 
-async def test_the_quick_ask_is_raphaels_alone_and_no_slime_has_a_quick_conversation(rig):
+async def test_the_quick_ask_is_raphaels_alone_and_it_has_one_conversation_like_every_slime(rig):
     from raphael_core.agent.conversations import Conversations
 
     alice = await make(rig, "Alice")
     conversations = Conversations(rig.conn)
-    assert [row["kind"] for row in conversations.list(0)] == ["quick", "standard"]
+    assert [row["kind"] for row in conversations.list(0)] == ["standard"]
     assert [row["kind"] for row in conversations.list(alice)] == ["standard"]
-    assert conversations.destination(0, None, quick=True) == conversations.quick()
+    assert conversations.destination(0, None, quick=True) == conversations.main(0)
     with pytest.raises(RpcError):
         conversations.destination(alice, None, quick=True)
     with pytest.raises(sqlite3.IntegrityError):

@@ -1,6 +1,7 @@
 """Schema 101: what the owner made of member 0 becomes a slime, Raphael starts again, quick questions stay with Raphael."""
 
 import json
+from unittest.mock import patch
 
 import pytest
 
@@ -60,7 +61,7 @@ def seed(conn):
     """Both kinds of conversation of member 0, with turns, tasks, a skill, a room, memory and spend."""
     customize(conn)
     main = Conversations(conn).main(0)
-    quick = Conversations(conn).quick()
+    quick = quick_conversation(conn)
     ids = {"main": main, "quick": quick,
            "t_main": turn(conn, 0, main, "planning"), "t_quick": turn(conn, 0, quick, "quick question")}
     ids["task_main"], ids["task_quick"] = task(conn, 0, ids["t_main"]), task(conn, 0, ids["t_quick"])
@@ -85,10 +86,18 @@ def seed(conn):
     return ids
 
 
+def quick_conversation(conn):
+    """The quick conversation an install of schema 100 had (nothing writes one any more)."""
+    conn.execute("INSERT OR IGNORE INTO conversations(member_id,title,created_at_ms,updated_at_ms,is_default,kind) VALUES (0,'',1,1,0,'quick')")
+    return conn.execute("SELECT id FROM conversations WHERE kind = 'quick'").fetchone()[0]
+
+
 def migrate(conn):
+    """Step 101 alone (schema 102 folds the quick conversation, which has its own tests)."""
     conn.execute("PRAGMA user_version = 100")
-    db.migrate(conn)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION >= 101
+    with patch.object(db, "LATEST_VERSION", 101):
+        db.migrate(conn)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 101
 
 
 def slime_of(conn):
@@ -121,7 +130,7 @@ def test_the_slime_gets_the_normal_conversations_and_raphael_keeps_the_quick_one
     # Raphael opens its own empty conversation next to the quick one
     fresh = Conversations(old).main(0)
     assert fresh != ids["main"]
-    assert [row["kind"] for row in Conversations(old).list(0)] == ["quick", "standard"]
+    assert sorted(row["kind"] for row in Conversations(old).list(0)) == ["quick", "standard"]
 
 
 def test_a_database_with_no_quick_conversation_still_moves_every_row_of_the_standard_one(old):
