@@ -24,7 +24,7 @@ async def test_explicit_skill_reaches_first_api_cli_and_background_prompt(tmp_pa
         result = await owner.driver.ask("/field-notes:review quarter two", member=member, session="slash")
         assert result["status"] == "done"
         assert "FIELD-6732" in owner.prompts[-1] and "quarter two" in owner.prompts[-1]
-        assert "REFERENCE-7821" in owner.prompts[-1]
+        assert "references/check.md" in owner.prompts[-1] and "REFERENCE-7821" not in owner.prompts[-1]  # named, read when needed (R-SKILL-31)
         assert "TEMPLATE" not in owner.prompts[-1]
         imported = app.members.capabilities
         imported.keep_skill(member, "https://github.com/example/notes/blob/main/SKILL.md",
@@ -36,7 +36,7 @@ async def test_explicit_skill_reaches_first_api_cli_and_background_prompt(tmp_pa
         task_id = app.members._run(app.members.store.routine(routine["id"]))
         await until(lambda: app.background.task(task_id).state in ("done", "failed", "cancelled"))
         assert app.background.task(task_id).state == "done"
-        assert any("FIELD-6732" in prompt and "REFERENCE-7821" in prompt and "quarter three" in prompt for prompt in owner.prompts)
+        assert any("FIELD-6732" in prompt and "references/check.md" in prompt and "quarter three" in prompt for prompt in owner.prompts)
         app.members.capabilities.update_skill(member, skill["id"], False)
         await owner.driver.ask("/field-notes:review disabled input", member=member, session="disabled")
         assert "FIELD-6732" not in owner.prompts[-1]
@@ -54,7 +54,7 @@ async def test_namespaces_keep_plugin_collisions_and_member_scope_distinct(tmp_p
         cap.homes.keep(0, f"skills/{first['id']}/references/check.md", "REFERENCE-7821")
         skills = cap.skills(0)
         assert [skill["slash_name"] for skill in skills] == ["field-notes:review", "desk-notes:review"]
-        assert "REFERENCE-7821" in cap.expand(0, "/field-notes:review current input")
+        assert "references/check.md" in cap.expand(0, "/field-notes:review current input")
         assert "FIELD-6732" not in cap.expand(0, "/desk-notes:review current input")
         assert "DESK-9104" in cap.read_skill(0, "desk-notes:review")
         assert cap.read_skill(0, "review") is None
