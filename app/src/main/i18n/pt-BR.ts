@@ -840,8 +840,6 @@ export const ptBR = {
   "chooser.downloadUse": "Baixar e usar",
   "chooser.selection": "Selecionado:",
   "chooser.effort": "Esforço de raciocínio",
-  "conversations.clear": "Limpar conversa",
-  "conversations.clearConfirm": "Limpar o histórico de “{p0}”?",
   "chooser.favorites": "Favoritos",
   "chooser.all": "Todos os modelos",
   "chooser.rail": "Provedores",

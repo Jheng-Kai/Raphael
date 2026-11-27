@@ -7,6 +7,10 @@ import subprocess
 from ctypes import wintypes as w
 
 
+CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+ERROR_ACCESS_DENIED = 5
+
+
 class StartupInfo(c.Structure):
     _fields_ = [
         ("cb", w.DWORD), ("reserved", w.LPWSTR), ("desktop", w.LPWSTR), ("title", w.LPWSTR),
@@ -23,7 +27,10 @@ class ProcessInformation(c.Structure):
 
 class DesktopChrome:
     def __init__(self, argv, visible=False):
-        """`visible`: Chrome starts on the owner's own desktop instead, for the one step where they choose a certificate."""
+        """`visible`: Chrome starts on the owner's own desktop instead, for the one step where they choose a certificate. That
+        Chrome is meant to outlive the app (the certificate lives in its memory), so it also breaks away from the app's job,
+        which would otherwise end it with the app (the job allows breakaway, `core_process.rs`); where the job does not
+        allow it, Chrome starts in the job as any other and ends with the app."""
         import _winapi as win
 
         self.win = win
@@ -49,11 +56,18 @@ class DesktopChrome:
         command = c.create_unicode_buffer(subprocess.list2cmdline(argv))
         # Join the job before Chrome can spawn any children.
         flags = 0x00000004 | subprocess.CREATE_NO_WINDOW  # CREATE_SUSPENDED
-        if not self.kernel.CreateProcessW(argv[0], command, None, None, False, flags,
-                                         None, None, c.byref(startup), c.byref(self.info)):
+        created = self._create(argv[0], command, flags | CREATE_BREAKAWAY_FROM_JOB if visible else flags, startup)
+        # A job that does not allow breakaway refuses the flag with "access denied": start without it.
+        if not created and visible and c.get_last_error() == ERROR_ACCESS_DENIED:
+            created = self._create(argv[0], command, flags, startup)
+        if not created:
             error = c.WinError(c.get_last_error())
             self.close()
             raise error
+
+    def _create(self, executable, command, flags, startup):
+        return self.kernel.CreateProcessW(executable, command, None, None, False, flags,
+                                          None, None, c.byref(startup), c.byref(self.info))
 
     @property
     def pid(self):

@@ -840,8 +840,6 @@ export const th = {
   "chooser.downloadUse": "ดาวน์โหลดและใช้",
   "chooser.selection": "เลือกแล้ว:",
   "chooser.effort": "ระดับการให้เหตุผล",
-  "conversations.clear": "ล้างการสนทนา",
-  "conversations.clearConfirm": "ล้างประวัติของ “{p0}” หรือไม่",
   "chooser.favorites": "รายการโปรด",
   "chooser.all": "โมเดลทั้งหมด",
   "chooser.rail": "ผู้ให้บริการ",

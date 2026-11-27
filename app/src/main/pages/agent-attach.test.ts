@@ -166,7 +166,7 @@ describe("files dropped onto the thread", () => {
     expect(drag(stage, "dragenter").defaultPrevented).toBe(true);
     expect(overlay.hidden).toBe(false);
     expect(overlay.textContent).toBe("放開以加入檔案");
-    const child = stage.querySelector(".ra-empty")!;
+    const child = stage.querySelector(".ra-scroll")!;
     drag(child, "dragenter"); drag(stage, "dragleave", [], child);
     expect(overlay.hidden).toBe(false);
     drag(child, "dragleave");

@@ -1883,6 +1883,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "members.greet": {
         // As the core: only while the owner has written nothing to the member and no greeting runs.
         const member = data.members.find(item => item.id === p.id);
+        // `greetRefused`: the core did not write a greeting, so the conversation stays empty.
+        if (variant.greetRefused) throw new Error("Invalid params: greeting refused");
         // Raphael's tour (`tour`): its model is the fake brain here; without it the core refuses as it does for a conversation that has words.
         if (!member || (p.id === 0 && !variant.tour)) throw new Error("Invalid params: no such member");
         const own = data.turns.filter(turn => turn.member_id === p.id);

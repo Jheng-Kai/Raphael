@@ -373,13 +373,15 @@ async def test_the_launch_a_mac_makes_to_be_seen_is_a_windowed_chrome_with_its_b
     executable.parent.mkdir(parents=True)
     executable.write_bytes(b"")
     monkeypatch.setattr(host_browser, "chrome_executable", lambda: executable)
-    started, spawn = [], asyncio.create_subprocess_exec
+    started, launched = [], host_browser.LaunchedChrome
 
-    async def chrome(*argv, **options):
-        started.append(argv)
-        return await spawn(sys.executable, "-c", "raise SystemExit(13)", **options)
+    class Chrome(launched):
+        # The Chrome made to be seen outlives the app, so it is a plain subprocess (`LaunchedChrome`), never an asyncio one.
+        def __init__(self, argv):
+            started.append(argv)
+            super().__init__([sys.executable, "-c", "raise SystemExit(13)"])
 
-    monkeypatch.setattr(host_browser.asyncio, "create_subprocess_exec", chrome)
+    monkeypatch.setattr(host_browser, "LaunchedChrome", Chrome)
     browser = HostBrowser(tmp_path / "profile")
     browser.shown = True
     with pytest.raises(BrowserError, match="chrome_start_failed"):

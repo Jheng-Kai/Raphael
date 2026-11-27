@@ -16,6 +16,7 @@ import stat
 import subprocess
 import sys
 import threading
+import time
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -96,6 +97,122 @@ class ChromeProcessTree:
         with suppress(TimeoutError):
             await asyncio.wait_for(self.process.wait(), 2)
 
+    def detach(self):
+        """Let Chrome go on running without this tree: the job no longer ends it with its last handle (Windows). A Chrome
+        whose job cannot be released is not left running (OSError)."""
+        if self.job:
+            self.job.release()
+
+
+def process_alive(pid):
+    """Whether the process `pid` is running."""
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        try:
+            code = wintypes.DWORD()
+            return bool(kernel.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+async def kill_process_tree(pid):
+    """End Chrome and everything it started, by its process id."""
+    if os.name == "nt":
+        with suppress(OSError):
+            killer = await asyncio.create_subprocess_exec(
+                "taskkill.exe", "/PID", str(pid), "/T", "/F",
+                creationflags=subprocess.CREATE_NO_WINDOW, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                await asyncio.wait_for(killer.wait(), 2)
+            except TimeoutError:
+                with suppress(ProcessLookupError):
+                    killer.kill()
+        return
+    try:
+        os.killpg(pid, signal.SIGKILL)  # Chrome leads a process group of its own
+    except (ProcessLookupError, PermissionError):
+        with suppress(ProcessLookupError, PermissionError):
+            os.kill(pid, signal.SIGKILL)
+
+
+class LaunchedChrome:
+    """A Chrome started to outlive the core (the one shown for a certificate, off Windows): a plain subprocess, which an
+    event loop closing its transport never kills, unlike an asyncio one."""
+
+    # Chrome left running when the core lets go of it, kept referenced so that no finalizer reports a running process.
+    DETACHED = []
+
+    def __init__(self, argv):
+        self.popen = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.DEVNULL, start_new_session=True)
+
+    @property
+    def pid(self):
+        return self.popen.pid
+
+    @property
+    def returncode(self):
+        return self.popen.poll()
+
+    async def wait(self):
+        while (code := self.popen.poll()) is None:
+            await asyncio.sleep(0.05)
+        return code
+
+    def kill(self):
+        self.popen.kill()
+
+    def detach(self):
+        self.DETACHED.append(self.popen)
+
+
+class AdoptedChrome:
+    """A Chrome that an earlier run of the core left running (`HostBrowser._adopt_shown`): this run has no handle on its
+    process, only its process id."""
+
+    CLOSE_WAIT_S = 3
+
+    def __init__(self, pid):
+        self.pid = pid
+
+    @property
+    def returncode(self):
+        return None if process_alive(self.pid) else 0
+
+    async def wait(self):
+        while process_alive(self.pid):
+            await asyncio.sleep(0.05)
+        return 0
+
+    def kill(self):
+        pass
+
+    async def close(self):
+        """Once Chrome was asked to close: wait for it to end, and end it and what it started when it does not."""
+        try:
+            async with asyncio.timeout(self.CLOSE_WAIT_S):
+                await self.wait()
+        except TimeoutError:
+            await kill_process_tree(self.pid)
+
 
 def chrome_executable():
     if sys.platform == "win32":
@@ -141,6 +258,9 @@ AUTH_WAIT_S = 300
 # What of a cookie Chrome is given again (`Storage.setCookies`) when it carries a session's over to another Chrome.
 COOKIE_FIELDS = ("name", "value", "domain", "path", "secure", "httpOnly", "sameSite", "priority", "sourceScheme",
                  "sourcePort", "partitionKey")
+# Where the profile says which Chrome is the one shown for a certificate and still running (`_write_shown_record`): a file of
+# its own in the profile's folder, which Chrome neither reads nor writes.
+SHOWN_RECORD = "raphael-shown-chrome.json"
 DOWNLOADS = Path(".raphael") / "downloads"  # where a page's download is placed in the member's work folder (#331)
 IGNORE = "# Raphael's own files, such as members' downloads.\n*\n"
 # Where a folder can be opened relative to another, each folder of `.raphael/downloads` is opened from the one before it
@@ -576,9 +696,11 @@ class HostBrowser:
         self.owned_targets = {}
         self.startup_url = None
         self.mac_version = ""  # the installed Chrome's version where it runs headless (`headless_chrome`)
-        # Chrome was started to be seen, for a certificate the owner chooses in its own window (`show_for_owner`). Only until
-        # it stops: the next start is the background one again.
+        # Chrome was started to be seen, for a certificate the owner chooses in its own window (`show_for_owner`). It outlives
+        # the app (`_detach`, `_adopt_shown`) and is the background Chrome again only once it is gone: the next start is
+        # the background one again then.
         self.shown = False
+        self.shown_since = 0.0  # when that Chrome started, as the record in the profile says it
         self.current = {}
         self.owner_closed = {}
         self.owner_closed_current = {}
@@ -728,8 +850,8 @@ class HostBrowser:
         """Called under lock. Returns whether a new Chrome process was started."""
         if self.cdp is not None and not self.cdp.reader.done():
             return False
-        if self.cdp is not None:
-            await self._stop()
+        if self.cdp is not None and not await self._detach():
+            await self._stop()  # a shown Chrome that is still running is connected to again below (`_adopt_shown`)
         executable = chrome_executable()
         if executable is None:
             raise BrowserError("chrome_missing")
@@ -745,6 +867,8 @@ class HostBrowser:
             preferences.parent.mkdir()
             preferences.write_text(json.dumps({"download": {"default_directory": str(self.staging),
                                                               "prompt_for_download": False}}), encoding="utf-8")
+        if not self.shown and await self._adopt_shown():
+            return False
         # An earlier Raphael release could leave a headed Chrome on this profile.
         # Close that process before launching so startup cannot reuse its desktop UI.
         if (previous := await self._connect()) is not None:
@@ -774,6 +898,9 @@ class HostBrowser:
             self.mac_version = mac_chrome_version(executable) if headless else ""
             if os.name == "nt":
                 self.process = DesktopChrome([*argv, *pages], visible=self.shown)
+            elif self.shown:
+                # It outlives the app: no event loop closes its transport with a kill (`LaunchedChrome`).
+                self.process = LaunchedChrome([*argv, *window_arguments(self.mac_version, None, True), *pages])
             else:
                 screen = mac_screen() if headless else None
                 self.process = await asyncio.create_subprocess_exec(
@@ -789,12 +916,11 @@ class HostBrowser:
                     self.cdp = await self._connect_started(client, port)
                     if self.cdp is None:
                         await asyncio.sleep(0.15)
-            await self.cdp.call("Browser.setDownloadBehavior",
-                                {"behavior": "allowAndName", "downloadPath": str(self.staging), "eventsEnabled": True})
-            # A Chrome that does not know a permission keeps its own default for it.
-            await asyncio.gather(*(self.cdp.call("Browser.setPermission", {"permission": permission, "setting": setting})
-                                   for permission, setting in PERMISSIONS), return_exceptions=True)
+            await self._configure_chrome()
             await self.cdp.call("Target.setDiscoverTargets", {"discover": True, "filter": [{"type": "page"}]})
+            if self.shown:
+                self.shown_since = time.time()
+                self._write_shown_record()
             return True
         except BaseException:
             await self._stop()
@@ -802,6 +928,140 @@ class HostBrowser:
         finally:
             marker.close()
             await marker.wait_closed()
+
+    async def _configure_chrome(self):
+        """What a Chrome is given once its connection is made, a Chrome started now or one found running (`_adopt_shown`)."""
+        await self.cdp.call("Browser.setDownloadBehavior",
+                            {"behavior": "allowAndName", "downloadPath": str(self.staging), "eventsEnabled": True})
+        # A Chrome that does not know a permission keeps its own default for it.
+        await asyncio.gather(*(self.cdp.call("Browser.setPermission", {"permission": permission, "setting": setting})
+                               for permission, setting in PERMISSIONS), return_exceptions=True)
+
+    def _write_shown_record(self):
+        """Say in the profile that the Chrome now running is the one shown for a certificate: its process, how to connect to
+        it and when it started. A later run takes it over (`_adopt_shown`) instead of stopping it. Whether it was written."""
+        socket = getattr(self.cdp, "socket", None)
+        record = {"version": 1, "pid": getattr(self.process, "pid", None), "port": getattr(socket, "port", None),
+                  "path": getattr(socket, "path", ""), "started": self.shown_since or time.time()}
+        if not isinstance(record["pid"], int) or not isinstance(record["port"], int):
+            return False
+        file = self.profile / SHOWN_RECORD
+        temporary = file.with_name(file.name + ".tmp")
+        try:
+            temporary.write_text(json.dumps(record), encoding="ascii")
+            os.replace(temporary, file)
+        except OSError:
+            logger.warning("Raphael's Chrome could not note that it is shown", exc_info=True)
+            with suppress(OSError):
+                temporary.unlink()
+            return False
+        return True
+
+    def _shown_record(self):
+        """What the profile says of a shown Chrome left running, or None when it says nothing that can be used."""
+        try:
+            record = json.loads((self.profile / SHOWN_RECORD).read_text(encoding="ascii"))
+        except (OSError, ValueError):
+            return None
+        if (not isinstance(record, dict) or record.get("version") != 1
+                or not all(isinstance(record.get(key), int) and not isinstance(record.get(key), bool)
+                           for key in ("pid", "port")) or not 0 < record["port"] < 65536
+                or not isinstance(record.get("path"), str) or not isinstance(record.get("started"), (int, float))):
+            return None
+        return record
+
+    def _forget_shown_record(self):
+        with suppress(OSError):
+            (self.profile / SHOWN_RECORD).unlink()
+
+    async def _adopt_shown(self):
+        """Take over the Chrome shown for a certificate that an earlier run left running (`_detach`), called under lock: it
+        holds the certificate the owner chose, which a Chrome stopped and started again would not. Only a Chrome the profile
+        says is the shown one, whose process still runs and answers where the record says, is taken over; any other Chrome on
+        the profile is stopped by `start`, and a record of a Chrome that is gone is removed. The pages it still has were its
+        earlier run's members' (their identities did not survive): all are closed but one blank one, which keeps the windowed
+        Chrome running, so that nothing stale is worked and no tab of this run meets one. Whether Chrome was taken over."""
+        record = self._shown_record()
+        cdp = None
+        if record is not None and process_alive(record["pid"]):
+            valid = re.fullmatch(r"/devtools/browser/[0-9a-f-]{36}", record["path"])
+            cdp = await self._connect((record["port"], record["path"]) if valid else None)
+        if cdp is None:
+            self._forget_shown_record()
+            return False
+        self.cdp, self.process, self.process_tree = cdp, AdoptedChrome(record["pid"]), None
+        self.shown, self.shown_since = True, float(record["started"])
+        try:
+            await self._configure_chrome()
+            await self._keep_one_blank_page(cdp)
+            await cdp.call("Target.setDiscoverTargets", {"discover": True, "filter": [{"type": "page"}]})
+        except (BrowserError, OSError, TimeoutError):
+            await self._stop()  # a Chrome that cannot be worked with is stopped, and a new one starts
+            return False
+        except BaseException:
+            self.cdp = self.process = None
+            self.shown = False
+            with suppress(TimeoutError):
+                async with asyncio.timeout(0.5):
+                    await cdp.close()
+            raise  # Chrome is left as it was, and the record with it
+        return True
+
+    async def _keep_one_blank_page(self, cdp):
+        """Close every page of Chrome but one blank one, out of the way: the last window of a windowed Chrome closing ends
+        it. A page that does not close in a second is left, unowned."""
+        listing = await cdp.call("Target.getTargets")
+        pages = {info["targetId"]: info for info in listing["targetInfos"] if info["type"] == "page"}
+        keep = next((target for target, info in pages.items() if info["url"] == "about:blank"), None)
+        if keep is None:
+            keep = (await cdp.call("Target.createTarget", {"url": "about:blank", "newWindow": True, "background": True,
+                                                           "left": -32000, "top": -32000}))["targetId"]
+        stale = set(pages) - {keep}
+        for _ in range(10):
+            if not stale:
+                break
+            for target in stale:
+                with suppress(BrowserError):
+                    await cdp.call("Target.closeTarget", {"targetId": target})
+            await asyncio.sleep(0.1)
+            listing = await cdp.call("Target.getTargets")
+            stale &= {info["targetId"] for info in listing["targetInfos"]}
+        with suppress(BrowserError):
+            await self._window_of(cdp, keep, self._tucked_bounds())
+
+    async def _detach(self):
+        """Let go of the Chrome shown for a certificate without stopping it, called under lock: when the app quits, the
+        certificate the owner chose lives in that Chrome's memory only, and the next run takes it over (`_adopt_shown`). The
+        profile is told which Chrome it is, nothing of this run's tabs is left bound to it, and its pages are closed but one
+        blank one. Whether Chrome was left running: not a Chrome that is not shown, nor one that is gone, nor one that
+        could not be noted or let go of (Windows keeps a Chrome in the job that ends it with the app until it is released)."""
+        cdp, process, tree = self.cdp, self.process, self.process_tree
+        if not (self.shown and cdp is not None and process is not None and process.returncode is None
+                and self._write_shown_record()):
+            return False
+        try:
+            if tree is not None:
+                tree.detach()
+        except OSError:
+            return False
+        if isinstance(process, LaunchedChrome):
+            process.detach()
+        elif isinstance(process, DesktopChrome):
+            process.close()  # only its handles: the Chrome runs on
+        self.cdp = self.process = self.process_tree = None
+        await self._drop_state(keep_tabs=False)
+        try:
+            if not cdp.reader.done():
+                with suppress(BrowserError, OSError, TimeoutError):
+                    async with asyncio.timeout(4):
+                        await self._keep_one_blank_page(cdp)
+            with suppress(TimeoutError):
+                async with asyncio.timeout(0.5):
+                    await cdp.close()
+        finally:
+            await asyncio.gather(*self.transfers, return_exceptions=True)
+            await asyncio.gather(*self.acknowledgements, return_exceptions=True)
+        return True
 
     def _event(self, method, params, session):
         if method == "Browser.disconnected":
@@ -1057,8 +1317,9 @@ class HostBrowser:
         """A page asked for a client certificate (#345). Chrome draws its chooser in a window, which a Chrome no one sees
         has none, so Chrome is started once more where the owner sees it, with every member's tab bound to it again
         (`_start_shown`), and the tab's window comes to the front. It stays so, the window out of the way once the owner is
-        done (`tuck_away`): the certificate they chose is kept in the memory of that Chrome only. It is the background
-        Chrome again only when Chrome starts anew (`_stop`), whether it idled out, quit or crashed."""
+        done (`tuck_away`): the certificate they chose is kept in the memory of that Chrome only. It outlives the app
+        (`_detach`, taken over by the next run, `_adopt_shown`), and is the background Chrome again only when Chrome starts
+        anew (`_stop`), whether it was quit or crashed."""
         async with self.lock:
             if not self.live(tab):
                 raise BrowserError("browser_tab_changed")
@@ -1159,8 +1420,17 @@ class HostBrowser:
         await tab.cast.restart()
 
     async def _window(self, tab, bounds):
-        window = (await self.cdp.call("Browser.getWindowForTarget", {"targetId": tab.target}))["windowId"]
-        await self.cdp.call("Browser.setWindowBounds", {"windowId": window, "bounds": bounds})
+        await self._window_of(self.cdp, tab.target, bounds)
+
+    @staticmethod
+    async def _window_of(cdp, target, bounds):
+        window = (await cdp.call("Browser.getWindowForTarget", {"targetId": target}))["windowId"]
+        await cdp.call("Browser.setWindowBounds", {"windowId": window, "bounds": bounds})
+
+    @staticmethod
+    def _tucked_bounds():
+        """A window out of the way: minimized on a Mac, far off the screen elsewhere."""
+        return {"windowState": "minimized"} if sys.platform == "darwin" else {"left": -32000, "top": -32000}
 
     async def _present(self, tab, fresh):
         """The tab's window on the owner's screen, in front. A Chrome shown before may have it out of the way, and the page
@@ -1175,8 +1445,7 @@ class HostBrowser:
         """The owner is done choosing: Chrome keeps running, and its window goes out of the way (minimized on a Mac, far off
         the screen on Windows). Only a Chrome shown for a certificate has anything to tuck away."""
         if self.shown and self.live(tab):
-            await self._window(tab, {"windowState": "minimized"} if sys.platform == "darwin"
-                               else {"left": -32000, "top": -32000})
+            await self._window(tab, self._tucked_bounds())
 
     async def _create_target(self):
         # Each tab has its own compositor surface even while a peer's tab is shown.
@@ -1471,14 +1740,9 @@ class HostBrowser:
             if self.cdp is cdp and cdp.reader.done():
                 self.owned_targets.clear()
 
-    async def _stop(self, *, keep_tabs=False):
-        """Stop Chrome. With `keep_tabs` the tabs, and what refers to them, stay for `show_for_owner` to bind them to the
-        next Chrome; nothing else may use them meanwhile."""
-        cdp, process, tree = self.cdp, self.process, self.process_tree
-        self.cdp = self.process = None
-        self.process_tree = None
-        if keep_tabs and cdp is not None:
-            cdp.event = lambda *args: None  # the old Chrome's targets going away forget no tab
+    async def _drop_state(self, *, keep_tabs):
+        """What this run keeps of the Chrome it lets go of: its background work, and its tabs unless they are to be bound to the
+        next Chrome (`keep_tabs`)."""
         background = [*self.popups.values(), *self.icons.values(), *self.background]
         for task in background:
             task.cancel()
@@ -1493,6 +1757,18 @@ class HostBrowser:
         self.owned_targets.clear()
         self.startup_url = None
         self.downloads.clear()
+
+    async def _stop(self, *, keep_tabs=False):
+        """Stop Chrome. With `keep_tabs` the tabs, and what refers to them, stay for `show_for_owner` to bind them to the
+        next Chrome; nothing else may use them meanwhile."""
+        cdp, process, tree = self.cdp, self.process, self.process_tree
+        self.cdp = self.process = None
+        self.process_tree = None
+        if self.shown:
+            self._forget_shown_record()  # this Chrome ends: no later run takes it over
+        if keep_tabs and cdp is not None:
+            cdp.event = lambda *args: None  # the old Chrome's targets going away forget no tab
+        await self._drop_state(keep_tabs=keep_tabs)
         try:
             if cdp is not None:
                 try:
@@ -1519,6 +1795,8 @@ class HostBrowser:
                         await asyncio.wait_for(process.wait(), 2)
                 finally:
                     process.close()
+            elif isinstance(process, AdoptedChrome):
+                await process.close()
             elif process is not None and process.returncode is None:
                 # A failed job assignment must not leave an unowned Chrome tree.
                 if os.name == "nt":
@@ -1540,5 +1818,7 @@ class HostBrowser:
             await asyncio.gather(*self.acknowledgements, return_exceptions=True)
 
     async def aclose(self):
+        """The app quits: Raphael's Chrome ends with it, except the one shown for a certificate, which keeps running."""
         async with self.lock:
-            await self._stop()
+            if not await self._detach():
+                await self._stop()

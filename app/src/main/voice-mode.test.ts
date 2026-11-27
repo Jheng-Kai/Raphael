@@ -12,16 +12,11 @@ describe("the voice mode's flight", () => {
   const composer = box(220, 620, 760, 50);
   const button = box(940, 628, 34, 34);
 
-  test("from the voice button at its size to just above the composer, in the middle, at the empty page's size", () => {
+  test("from the voice button at its size to just above the composer, in the middle, at its full size", () => {
     const { from, to } = flightPath(stage, button, composer);
     expect(from).toEqual({ x: 957 - 200, y: 645 - 100, s: 34 / FLYER_PX });
     expect(to).toEqual({ x: 400, y: 620 - 100 - FLYER_PX / 2 - FLYER_GAP_PX, s: 1 });
     expect(FLYER_PX).toBe(132);
-  });
-
-  test("on the empty page it lands on the emblem in the middle, at its size", () => {
-    const { to } = flightPath(stage, button, composer, box(534, 200, 132, 132));
-    expect(to).toEqual({ x: 534 + 66 - 200, y: 266 - 100, s: 1 });
   });
 
   test("a place is a translation of the flyer's box and a scale", () => {
@@ -48,7 +43,7 @@ describe("the voice button while the picture is up", () => {
     const stage = document.createElement("div"), composer = document.createElement("form"), button = document.createElement("button");
     composer.append(button); stage.append(composer); document.body.append(stage);
     button.getClientRects = () => [{}] as unknown as DOMRectList;
-    const voice = new VoiceMode({ stage, button: () => button, composer: () => composer, target: () => null, face: () => '<span class="av"><svg></svg></span>', onClick() {} });
+    const voice = new VoiceMode({ stage, button: () => button, composer: () => composer, face: () => '<span class="av"><svg></svg></span>', onClick() {} });
     try {
       voice.up(); const face = stage.querySelector(".av");
       expect(face).not.toBeNull(); voice.redraw(); expect(stage.querySelector(".av")).toBe(face);
@@ -66,7 +61,7 @@ describe("the voice button while the picture is up", () => {
     document.body.append(stage);
     button.getClientRects = () => [{}] as unknown as DOMRectList;
     button.focus();
-    const voice = new VoiceMode({ stage, button: () => button, composer: () => composer, target: () => null, face: () => "", onClick: () => {} });
+    const voice = new VoiceMode({ stage, button: () => button, composer: () => composer, face: () => "", onClick: () => {} });
     voice.up();
     expect(voice.isUp).toBe(true);
     expect(button.style.visibility).toBe("");
@@ -89,7 +84,7 @@ describe("the flyer in front of a page", () => {
     composer.append(button); stage.append(composer); document.body.append(stage);
     button.getClientRects = () => [{}] as unknown as DOMRectList;
     if (page) stage.classList.add("is-page");
-    const voice = new VoiceMode({ stage, button: () => button, composer: () => composer, target: () => null, face: () => '<span class="av"></span>', onClick() {} });
+    const voice = new VoiceMode({ stage, button: () => button, composer: () => composer, face: () => '<span class="av"></span>', onClick() {} });
     return { stage, button, voice };
   }
   const css = (name: string): string => readFileSync(path.resolve(import.meta.dirname, name), "utf8").replace(/\r\n/g, "\n");

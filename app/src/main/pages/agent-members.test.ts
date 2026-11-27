@@ -709,7 +709,10 @@ test("an unconfigured Raphael is immediately usable, and so is an empty member",
     await pick(id);
     expect(document.querySelector('.first-bot')).toBeNull();
     expect($('.composer').hidden).toBe(false);
-    expect($('.ra-hi').hidden).toBe(false);
+    // An empty conversation is the ordinary layout: the thread (empty) and the composer in the dock, no empty page.
+    expect(document.querySelector('.ra-empty')).toBeNull();
+    expect($('.ra-dock .composer')).toBe($('.composer'));
+    expect($('.ra-scroll').hidden).toBe(false);
   }
   agent.hide();
 });
@@ -1156,6 +1159,8 @@ test("a selected member reply travels separately, renders on the pending bubble,
   const message = $('[data-id="31"] .ra .message-text');
   const range = document.createRange(); range.selectNodeContents(message);
   range.getClientRects = () => [{ left: 100, right: 200, top: 100, bottom: 120, width: 100, height: 20 }] as unknown as DOMRectList;
+  // Selecting words in a message takes the focus out of the field (the composer stays in the dock, so nothing else moves it).
+  (document.activeElement as HTMLElement | null)?.blur();
   const selection = document.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
   document.dispatchEvent(new Event("selectionchange"));
   $(".quote-pill").click();
@@ -1220,6 +1225,28 @@ test("a member whose conversation is empty is asked once to greet; Raphael and a
   expect(api.membersGreet).toHaveBeenCalledTimes(1);
   api.agentHistoryList.mockResolvedValue({ turns: [turn(35, { member_id: 4 })] });
   await pick(4);
+  expect(api.membersGreet).toHaveBeenCalledTimes(1);
+  agent.hide();
+});
+
+test("a member whose messages are all deleted is the ordinary layout, and is greeted again instead of leaving a blank page", async () => {
+  vi.useFakeTimers();
+  let rows = [turn(35, { member_id: 3 })];
+  api.agentHistoryList.mockImplementation(async (q: { member_id?: number; after_id?: number; turn_ids?: number[] }) => q.member_id !== 3 ? { turns: THREADS[q.member_id ?? 0] }
+    : q.after_id === undefined ? { turns: rows } : { turns: rows.filter(row => row.id > q.after_id!), delta: true, removed_ids: (q.turn_ids ?? []).filter(id => !rows.some(row => row.id === id)), next_after_id: q.after_id });
+  const agent = mount(); await flush(); await pick(3);
+  expect(document.querySelector('.tn[data-id="35"]')).not.toBeNull();
+  expect(api.membersGreet).not.toHaveBeenCalled();
+  rows = [];
+  send({ type: "AgentTurn", turn_id: 35, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(600); await flush();
+  expect(document.querySelector('.tn[data-id="35"]')).toBeNull();
+  expect(document.querySelector(".ra-empty")).toBeNull();
+  expect($(".ra-scroll").hidden).toBe(false);
+  expect($(".ra-dock").contains($(".composer"))).toBe(true);
+  expect(api.membersGreet).toHaveBeenCalledExactlyOnceWith(3);
+  send({ type: "AgentTurn", turn_id: 0, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(600); await flush();
   expect(api.membersGreet).toHaveBeenCalledTimes(1);
   agent.hide();
 });
@@ -1873,12 +1900,12 @@ test("a core without the members: Raphael's conversation alone, and the page wor
   expect($(".thread").textContent).toContain("回答 2");
 });
 
-test("a changed roster preview retains the prompt and empty-page faces", async () => {
+test("a changed roster preview retains the prompt face", async () => {
   mount(); await flush();
-  const prompt = $(".ask-face .av"), hero = $(".ra-hero .av");
+  const prompt = $(".ask-face .av");
   api.membersList.mockResolvedValue({ ...LIST, members: LIST.members.map(member => member.id === 3 ? { ...member, preview: "A new preview" } : member) });
   send({ type: "MembersChanged" }); await flush();
-  expect($(".ask-face .av")).toBe(prompt); expect($(".ra-hero .av")).toBe(hero);
+  expect($(".ask-face .av")).toBe(prompt);
   expect(document.querySelector('[data-member="3"] .mb-row-p')?.textContent).toContain("A new preview");
 });
 
@@ -1937,20 +1964,27 @@ test("a burst of turn events while typing makes one history request and preserve
   agent.hide();
 });
 
-test("an empty conversation keeps its empty state while an event refreshes it", async () => {
+test("an empty conversation keeps its ordinary layout while an event refreshes it", async () => {
   vi.useFakeTimers();
   api.agentHistoryList.mockImplementation(async () => ({ turns: [] }));
   const agent = mount(); await flush(); await pick(3);
-  const empty = $(".ra-empty");
-  expect(empty.hidden).toBe(false);
+  const scroll = $(".ra-scroll"), dock = $(".ra-dock");
+  const ordinary = (): void => {
+    expect(document.querySelector(".ra-empty")).toBeNull();
+    expect(scroll.hidden).toBe(false);
+    expect(dock.hidden).toBe(false);
+    expect(dock.contains($(".composer"))).toBe(true);
+    expect(scroll.querySelector(".thread")!.children).toHaveLength(0);
+  };
+  ordinary();
   let answer!: (value: { turns: never[] }) => void;
   api.agentHistoryList.mockImplementation(() => new Promise(resolve => { answer = resolve; }));
   send({ type: "AgentTurn", turn_id: 0, member_id: 3 });
   await vi.advanceTimersByTimeAsync(500); await flush();
   expect(api.agentHistoryList).toHaveBeenCalled();
-  expect(empty.hidden).toBe(false);
+  ordinary();
   answer({ turns: [] }); await flush();
-  expect(empty.hidden).toBe(false);
+  ordinary();
   agent.hide();
 });
 
@@ -2348,7 +2382,7 @@ describe("Raphael apart from the slimes", () => {
     agent.hide();
   });
 
-  test("the route to Raphael shows its space in the same chat view, with its ⋯ in place of the share button, and a slime row leaves it", async () => {
+  test("the route to Raphael shows its space in the same chat view, with no share button and no ⋯, and a slime row leaves it", async () => {
     api.membersList.mockResolvedValue(roster(3)); readConversations();
     const agent = mount(); await flush();
     agent.show("raphael"); await flush();
@@ -2357,13 +2391,12 @@ describe("Raphael apart from the slimes", () => {
     expect(document.querySelector('.mb-col [aria-current="true"]')).toBeNull();
     expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.not.objectContaining({ member_id: expect.anything() }));
     expect($('[data-act="share-member"]').hidden).toBe(true);
-    expect($('[data-act="raphael-more"]').hidden).toBe(false);
+    expect(document.querySelector('[data-act="raphael-more"]')).toBeNull();
     await openDetails();
     expect(document.querySelector('.mb-det [data-slot="conversations"]')).toBeNull();
     expect(document.querySelector(".mb-det .mb-face-edit")).toBeNull();
     await pick(4);
     expect(pillName()).toBe("行程管家");
-    expect($('[data-act="raphael-more"]').hidden).toBe(true);
     expect($('[data-act="share-member"]').hidden).toBe(false);
     agent.hide();
   });

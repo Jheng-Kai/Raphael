@@ -1,10 +1,7 @@
 // The voice mode of the 拉斐爾 page. The emblem of the composer (or the person's own picture) flies
-// up to just above the composer, in the middle, and grows to the size it has on the empty page; it
-// turns there (the loop picture) while Raphael listens, over the conversation, which stays as it is
-// behind it: nothing fades, dims, glows or bobs, and no words are written (the line of the empty page
-// steps aside while the stage is `is-voice`). When the recording ends
-// it flies back into the composer. On the empty page it flies into the emblem in the middle, which
-// is the same picture at the same size.
+// up to just above the composer, in the middle, and grows to its full size; it turns there (the loop
+// picture) while Raphael listens, over the conversation, which stays as it is behind it: nothing
+// fades, dims, glows or bobs, and no words are written. When the recording ends it flies back into the composer.
 //
 // The movement is the design page's: 520 ms out with cubic-bezier(.2,.8,.2,1), 380 ms back with
 // cubic-bezier(.4,0,.2,1). With reduced motion the flyer is simply there, and simply gone.
@@ -17,7 +14,7 @@
 import { Emblem } from "../overlay/emblem";
 import { patchHTML } from "./ui";
 
-/** The flyer's diameter when it has landed: the emblem of the empty page. */
+/** The flyer's diameter when it has landed. */
 export const FLYER_PX = 132;
 /** The gap between the flyer and the top of the composer, in px. */
 export const FLYER_GAP_PX = 10;
@@ -35,14 +32,11 @@ type Box = Pick<DOMRect, "left" | "top" | "width" | "height">;
 
 /**
  * Where the flyer starts and where it lands, from the boxes on screen: it starts over the voice
- * button (`button`) at the button's size, and lands centred over `target` when there is one (the
- * emblem of the empty page), else centred across the stage just above the composer (`composer`).
+ * button (`button`) at the button's size, and lands centred across the stage just above the composer (`composer`).
  */
-export function flightPath(stage: Box, button: Box, composer: Box, target?: Box | null): { from: FlyerSpot; to: FlyerSpot } {
+export function flightPath(stage: Box, button: Box, composer: Box): { from: FlyerSpot; to: FlyerSpot } {
   const from = { x: button.left - stage.left + button.width / 2, y: button.top - stage.top + button.height / 2, s: button.width / FLYER_PX };
-  const to = target
-    ? { x: target.left - stage.left + target.width / 2, y: target.top - stage.top + target.height / 2, s: target.width / FLYER_PX }
-    : { x: stage.width / 2, y: composer.top - stage.top - FLYER_PX / 2 - FLYER_GAP_PX, s: 1 };
+  const to = { x: stage.width / 2, y: composer.top - stage.top - FLYER_PX / 2 - FLYER_GAP_PX, s: 1 };
   return { from, to };
 }
 
@@ -66,8 +60,6 @@ export interface VoiceModeParts {
   button: () => HTMLElement | null;
   /** The composer, whose top the flyer lands above. */
   composer: () => HTMLElement | null;
-  /** The emblem of the empty page, when it is on screen: the flyer lands on it and it hides meanwhile. */
-  target: () => HTMLElement | null;
   /** The flyer's picture: the person's picture in a circle (used when `live` says no). */
   face: () => string;
   /**
@@ -89,8 +81,6 @@ export class VoiceMode {
   private flyer: HTMLElement | null = null;
   /** The corner's renderer while the flyer is the emblem. */
   private emblem: Emblem | null = null;
-  /** The emblem of the empty page while the flyer is over it. */
-  private hidden: HTMLElement[] = [];
   /** The voice button whose picture is hidden while the flyer is up. */
   private button: HTMLElement | null = null;
 
@@ -106,8 +96,7 @@ export class VoiceMode {
     const button = this.parts.button();
     const composer = this.parts.composer();
     if (this.flyer || !button || !composer || button.getClientRects().length === 0) return;
-    const target = this.parts.target();
-    const { from, to } = flightPath(this.parts.stage.getBoundingClientRect(), button.getBoundingClientRect(), composer.getBoundingClientRect(), target?.getBoundingClientRect());
+    const { from, to } = flightPath(this.parts.stage.getBoundingClientRect(), button.getBoundingClientRect(), composer.getBoundingClientRect());
     const flyer = document.createElement("div");
     flyer.className = "ra-flyer";
     this.emblem?.dispose();
@@ -128,8 +117,6 @@ export class VoiceMode {
     // lose the focus, and with it the release of a key held on it, which ends a recording in hold mode.
     this.button = button;
     button.classList.add(AWAY);
-    this.hidden = target ? [target] : [];
-    for (const el of this.hidden) el.style.visibility = "hidden";
     // Landed, the flyer moves by less than a pixel so that what it shows starts on a whole screen pixel.
     const land = (): void => {
       if (this.flyer !== flyer) return;
@@ -145,16 +132,13 @@ export class VoiceMode {
     const flyer = this.flyer;
     if (!flyer) return;
     this.flyer = null;
-    const hidden = this.hidden;
     const away = this.button;
-    this.hidden = [];
     this.button = null;
     const emblem = this.emblem;
     this.emblem = null;
     const done = (): void => {
       emblem?.dispose();
       flyer.remove();
-      for (const el of hidden) el.style.visibility = "";
       // A picture sent up again meanwhile keeps the button's picture hidden.
       if (!this.flyer) {
         away?.classList.remove(AWAY);
@@ -167,12 +151,7 @@ export class VoiceMode {
       done();
       return;
     }
-    const { from } = flightPath(this.parts.stage.getBoundingClientRect(), button.getBoundingClientRect(), composer.getBoundingClientRect(), null);
-    // Back on the empty page it lands where it was (the emblem it hid); elsewhere it goes into the button.
-    if (hidden.length > 0) {
-      done();
-      return;
-    }
+    const { from } = flightPath(this.parts.stage.getBoundingClientRect(), button.getBoundingClientRect(), composer.getBoundingClientRect());
     const anim = flyer.animate([{ transform: flyer.style.transform }, { transform: spotTransform(from) }], { ...BACK, fill: "forwards" });
     anim.finished.then(done, done);
   }
@@ -184,8 +163,6 @@ export class VoiceMode {
     this.emblem?.dispose();
     this.emblem = null;
     flyer?.remove();
-    for (const el of this.hidden) el.style.visibility = "";
-    this.hidden = [];
     this.button?.classList.remove(AWAY);
     this.button = null;
     this.parts.stage.classList.remove("is-voice");

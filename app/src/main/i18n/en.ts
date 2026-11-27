@@ -550,8 +550,6 @@ export const en = {
   "chooser.downloadUse": "Download and use",
   "chooser.selection": "Selected:",
   "chooser.effort": "Reasoning effort",
-  "conversations.clear": "Clear conversation",
-  "conversations.clearConfirm": "Clear the history of “{p0}”?",
   "chooser.favorites": "Favorites",
   "chooser.all": "All models",
   "chooser.rail": "Providers",

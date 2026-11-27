@@ -52,6 +52,47 @@ async def test_a_member_on_docker_is_told_the_path_in_its_own_computer(rig, tmp_
     assert str(root).replace("\\", "/") in rig.service.skill_read(0, "ship")
 
 
+async def test_a_member_on_docker_reads_a_skill_though_its_files_are_read_in_a_thread(rig, tmp_path):
+    """The guest path reads the database, whose connection SQLite lets only its own thread use: asked from the thread that
+    reads the files, it failed every skill_read of a member on a Docker computer (ProgrammingError)."""
+    import sqlite3
+    import threading
+
+    package, root = await plugin_skill(rig, tmp_path)
+    main = threading.get_ident()
+
+    def guest(member):
+        if threading.get_ident() != main:
+            raise sqlite3.ProgrammingError("SQLite objects created in a thread can only be used in that same thread")
+        return "/home/cua/skills"
+
+    rig.service.capabilities.guest_library = guest
+    text = await rig.service.skill_read_async(0, "ship")
+    assert f"Do `/home/cua/skills/{root.name}/actions/ship.md`." in text and "vm_exec" in text
+
+
+async def test_a_slash_skill_sent_on_a_pc_with_docker_computers_loads_instead_of_failing_the_send(rig, tmp_path):
+    """A message calling a skill (/ship …) was loaded in a thread that asked the database for the member's computer:
+    SQLite refused the thread, the error passed every handler and the send failed, so the owner's message vanished from
+    the thread. It loads, and the request goes on with the skill in it."""
+    import sqlite3
+    import threading
+
+    package, root = await plugin_skill(rig, tmp_path)
+    main = threading.get_ident()
+
+    def guest(member):
+        if threading.get_ident() != main:
+            raise sqlite3.ProgrammingError("SQLite objects created in a thread can only be used in that same thread")
+        return "/home/cua/skills"
+
+    rig.service.capabilities.guest_library = guest
+    failures = []
+    text, loaded = await rig.service.capabilities.resolve_slash_async(0, "/ship the release", on_failure=lambda *args: failures.append(args))
+    assert loaded and not failures
+    assert f"/home/cua/skills/{root.name}/actions/ship.md" in text and "the release" in text
+
+
 async def test_a_skill_with_scripts_and_references_lists_them_and_knows_its_own_folder(rig, tmp_path):
     folder = write(tmp_path / "report", {
         "SKILL.md": b"---\nname: report\ndescription: Write the report\n---\nRun ${CLAUDE_SKILL_DIR}/scripts/make.sh then read references/style.md.\n",

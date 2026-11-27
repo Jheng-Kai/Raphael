@@ -6,7 +6,7 @@ const recording = '.composer[data-task-state="recording"]';
 const quick = [wait('.tn[data-id="90"]')];
 
 export default [
-  scene("empty-conversation-recording", "Speaking into an empty conversation keeps the empty page steady", [listening, wait(recording)], { turns: [] }),
+  scene("empty-conversation-recording", "Speaking into an empty conversation keeps the empty thread and the docked composer steady", [listening, wait(recording)], { turns: [] }),
   scene("empty-conversation-hearing", "What was said into an empty conversation waits where its message will land", [click(".cmp-voice"), wait('[data-key="hearing"]'), check("thread-clear-of-fade")], { ownerVoice: "pending", turns: [] }),
   scene("composer-voice-recording", "While the owner speaks the composer's one button is the send glyph, and Stop is not there yet",
     [check("composer-voice-idle"), listening, wait(recording), check("composer-voice-recording")]),

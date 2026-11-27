@@ -72,7 +72,7 @@ face edit with the panel's. The old scene names are kept and now drive the page:
 details-commands, details-notify, raphael-skills, member-edit, speaker-draft-member,
 speaker-draft-chief, member-draft-switch and primary-contact-set.
 
-## Raphael is apart from the slimes; the chief of staff is a slime (R-CHIEF-01, R-RAPHAEL-UI-01 to R-RAPHAEL-UI-07)
+## Raphael is apart from the slimes; the chief of staff is a slime (R-CHIEF-01, R-RAPHAEL-UI-01 to R-RAPHAEL-UI-06)
 
 Member 0 is Raphael only: the app's guide and keeper. Its name is the language's own (`agent.title`, raphael.ts `raphaelName`) and
 its look the first blue slime (`RAPHAEL_SLIME`), never a picture and never the owner's own photo; the roster flags it `raphael: true`
@@ -81,7 +81,7 @@ choice of any picker (the narrow dropdown, the command palette's numbers, the se
 replacement, the calendar's members, a group chat's) and not a room member. It has an entry of its own in the account menu
 ([navigation](navigation.md#the-account-menu)) that opens its conversation space in the same chat view (`go("agent", "raphael")`): the
 details panel lists no conversations (it has the one, like every slime; its Alt+Space questions are turns of it), the
-share button is hidden and its header has a ⋯ with 清除對話 in its place (R-RAPHAEL-UI-07), and its face and name in the panel and on its settings page are shown, not edited. Its settings page keeps
+share button is hidden and nothing stands in its place in the header (R-UI-183), and its face and name in the panel and on its settings page are shown, not edited. Its settings page keeps
 tools, skills and commands, personality and instructions, notifications and the cover. Raphael stays the app's and the voice's name
 (dictation, the bottom-right voice and quick question, hotkeys, the app's own messages), and its names still reach it by @ (last
 among the people the menu offers).
@@ -91,8 +91,8 @@ or nobody when there is no slime (`team_context.primary_id` null). Its row leads
 every slime's, except that its role is labelled 幕僚長 (`rooms.chief`) where the owner's text would stand. The app opens on the chief's
 conversation, and on Raphael's when there is none; the conversation of a slime that goes (hidden, deleted) is replaced by the chief's, else
 the next slime's, else Raphael's.
-Scenes: `raphael-entry` (the menu entry), `raphael-space` (Raphael's space: its one conversation, its ⋯ and nothing to change),
-`chief-space` and `raphael-route-back` (the chief's view without Raphael's ⋯, the crown, the share button), `no-slimes` (the empty
+Scenes: `raphael-entry` (the menu entry), `raphael-space` (Raphael's space: its one conversation, no ⋯ and nothing to change),
+`chief-space` and `raphael-route-back` (the chief's view, the crown, the share button), `no-slimes` (the empty
 boot: Raphael's conversation, an empty list with its plus, no crown) and `no-chief` (slimes without a chief: none leads); the checks
 `raphael-not-in-sidebar`, `raphael-entry`, `raphael-space`, `chief-space`, `no-slimes` and `no-chief`. The fixture lists Raphael as
 member 0 with `raphael: true`, the slimes from id 1, the chief in `team_context` (the first slime unless a scene's `primaryMember` says
@@ -388,9 +388,8 @@ member greets the same way: the
 `member_create` tool Raphael or a member uses starts the greeting (core tests
 members/test_model_greeting.py, test_management.py; look admin-approved), and a member's conversation that is
 still empty when it opens (one made before) asks `members.greet` once (agent.ts `greetIfSilent`;
-agent-members.test.ts), so a member never shows the empty page; Raphael's empty page is its guided tour (R-RAPHAEL-05). Conversations are
-never deleted; only Raphael's can be cleared, from its header ⋯ (`raphael-clear-confirm`,
-`raphael-cleared`).
+agent-members.test.ts), so a member's empty conversation is only the ordinary layout until it comes (R-UI-183); Raphael's empty conversation begins its guided
+tour (R-RAPHAEL-05). Conversations are never deleted and no menu clears one; messages are deleted one at a time.
 
 Keep details/resource-pane/avatar-menu/edit-dialog PNGs; check layering, focus and
 scroll access. Current scenes open editing but do not save. For creation work extend
