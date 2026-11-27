@@ -82,6 +82,8 @@
 .skl-access-menu { max-height: none; overflow: visible; min-width: 220px; }
 .skl-access-list { max-height: calc(6 * var(--h-menu)); overflow-x: hidden; overflow-y: auto; }
 .skl-access-menu .lang-none { padding-inline: var(--sp-2); }
+/* The browser's own clear mark of a search field is blue: the menu closes with Esc and the field is emptied by editing it. */
+.skl-access-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 .skl-access-foot [aria-disabled="true"] { color: var(--text-3); cursor: default; }
 .skl-access-foot [aria-disabled="true"]:hover { background: transparent; }
 

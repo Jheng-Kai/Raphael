@@ -913,7 +913,6 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
       const text = event.clipboardData?.getData("text/plain") ?? "";
       if (!/\n/.test(text.trim())) return;
       event.preventDefault();
-      state.draft = text;
       void bring({ text }, { text });
     });
     // The whole box is lit while something is dragged over it (the row's hover fill), and not a moment after.

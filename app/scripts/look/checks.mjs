@@ -1027,7 +1027,8 @@ export function checkRendered(name, context = {}) {
         'git-network': ['gitlab.example.com', '公司 VPN'], 'git-missing': ['沒有安裝 Git', '安裝'],
       }[name.slice('skill-library-failed-'.length)];
       require(visible(said) && expected.every(part => words.includes(part)), `the cause is said with what it names (${words})`);
-      require(visible(document.querySelector('.skl-import #skl-input')) && document.querySelector('#skl-input').value && !document.querySelector('.toast'), 'the importer stays open with what was put in it, and nothing else is said');
+      require(visible(document.querySelector('.skl-import #skl-input')) && (!!document.querySelector('#skl-input').value || name.endsWith('needs-files')) && !document.querySelector('.toast'), 'the importer stays open with what was put in it, and nothing else is said');
+      if (name.endsWith('needs-files')) require(document.querySelector('#skl-input').value === '' && visible(document.querySelector('[data-skl="import-alone"]')), 'a pasted text is not poured into the line: it waits, and the way to import it alone stands under the cause');
       const box = document.querySelector('.skl-import').getBoundingClientRect(), r = said.getBoundingClientRect();
       require(r.left >= box.left - 1 && r.right <= box.right + 1, 'the words stay inside the card');
     }

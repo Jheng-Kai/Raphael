@@ -752,6 +752,8 @@ test("a skill pasted as text that names other files says so, asks for its folder
   await settle(); await settle();
   expect(document.querySelector(".skl-error")?.textContent).toContain("這份技能提到了別的檔案（actions/how.md），只貼文字帶不進來。請改選技能所在的資料夾。");
   expect(document.querySelector(".skl-zone")).not.toBeNull();
+  // The pasted text is not poured into the one-line field; it waits for the owner's word.
+  expect(line().value).toBe("");
   press(root, '[data-skl="import-alone"]');
   await settle(); await settle();
   expect(again).toBe(true);
