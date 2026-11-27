@@ -13429,7 +13429,7 @@ export function checkFrame(name) {
     return { check: name, dark, width: innerWidth, table: table.display, tracks };
   }
   // R-PAGE-10, R-PAGE-11: what the driver's `page-band` needs of the page itself, read inside its frame: where the page's body and its content stand, how
-  // far it is scrolled, and the colour the page paints (its body's, else its root's: the one the canvas shows), never a colour of the window's.
+  // far it is scrolled, and the colour the page paints (its root's, else its body's: the one the canvas shows), never a colour of the window's.
   if (name === "page-band-measure") {
     const painted = element => { const color = getComputedStyle(element).backgroundColor; return /^rgba?\(/.test(color) && !/^rgba\(\d+, \d+, \d+, 0\)$/.test(color) ? color : null; };
     const flow = [...document.body.querySelectorAll("*")].filter(element => {
@@ -13437,7 +13437,7 @@ export function checkFrame(name) {
       return box.width > 0 && box.height > 0 && style.display !== "none" && style.visibility !== "hidden" && !/^(fixed|sticky)$/.test(style.position) && !/^(SCRIPT|STYLE)$/.test(element.tagName);
     });
     const body = document.body.getBoundingClientRect();
-    return { check: name, canvas: painted(document.body) ?? painted(document.documentElement), bodyLeft: body.left, bodyRight: body.right,
+    return { check: name, canvas: painted(document.documentElement) ?? painted(document.body), bodyLeft: body.left, bodyRight: body.right,
       firstTop: Math.min(...flow.map(element => element.getBoundingClientRect().top)), lastBottom: Math.max(...flow.map(element => element.getBoundingClientRect().bottom)),
       innerHeight, scrollY: Math.round(scrollY), scrollMax: Math.max(0, document.documentElement.scrollHeight - innerHeight), foot: parseFloat(getComputedStyle(document.documentElement).paddingBottom) || 0 };
   }
