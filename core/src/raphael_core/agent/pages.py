@@ -139,8 +139,9 @@ THEME = {
 FONT = '"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei UI","Microsoft JhengHei",system-ui,sans-serif'
 
 
-# A page open in the whole area is shown as a browser shows it (R-PAGE-10): its frame is the page's window and the page scrolls in it.
-# The height it says only sizes its card in the thread; the background it says is what the window paints behind the composer's row.
+# A page open in the whole area is shown as a browser shows it (R-PAGE-10): its frame is the page's window, to the window's foot
+# (R-PAGE-11), and the page scrolls in it. The height it says only sizes its card in the thread. The window tells it how much of its
+# foot the composer floats over (`foot`), so its last line scrolls clear of it.
 _HELPER = "<script>" + FRAME_NAVIGATION + """
 (() => {
   const post = (type, data) => parent.postMessage({raphaelPage: 1, type, ...data}, '*');
@@ -211,36 +212,15 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
   // Where the owner is reading: the window keeps it, so a page changed while open comes back to the same place.
   let scrolling = 0;
   addEventListener('scroll', () => { if (!scrolling) scrolling = requestAnimationFrame(() => { scrolling = 0; post('scroll', {y: Math.round(scrollY)}); }); }, {passive: true});
-  // The page's own background (R-PAGE-10): the window paints it behind the composer's row, so the page still reads as running to the
-  // window's foot. The first computed background colour of the body that is not transparent, then of the root, as a plain rgb() or
-  // rgba() (nothing else is ever sent; a colour in another notation is converted), or an empty one when the page has none.
-  const plain = value => {
-    // (This text is a Python string: no backslash may stand in it.)
-    let parts = /^rgba?[(][^)]*[)]$/.test(value) ? value.slice(value.indexOf('(') + 1, -1).split(/[ ,/]+/).filter(Boolean).map(Number) : null;
-    if (!parts || parts.length < 3 || parts.some(Number.isNaN)) {
-      try { const paint = document.createElement('canvas').getContext('2d'); paint.fillStyle = value; paint.fillRect(0, 0, 1, 1);
-        const [r, g, b, a] = paint.getImageData(0, 0, 1, 1).data; parts = [r, g, b, a / 255]; } catch { return ''; }
-    }
-    const [r, g, b, a = 1] = parts, byte = n => Math.max(0, Math.min(255, Math.round(n)));
-    if (!(a > 0)) return '';
-    return a >= 1 ? 'rgb(' + byte(r) + ', ' + byte(g) + ', ' + byte(b) + ')' : 'rgba(' + byte(r) + ', ' + byte(g) + ', ' + byte(b) + ', ' + Math.round(a * 1000) / 1000 + ')';
-  };
-  const background = () => {
-    for (const root of [document.body, document.documentElement]) {
-      const color = root ? plain(getComputedStyle(root).backgroundColor) : '';
-      if (color) return color;
-    }
-    return '';
-  };
-  const tell = () => post('background', {color: background()});
-  addEventListener('DOMContentLoaded', tell, {once: true});
-  addEventListener('load', tell, {once: true});
   // The page has the keys once the owner pressed in it: Escape there goes back to the conversation as it does outside,
   // unless it only drops an input method's candidate (WebKit, on macOS, marks that Escape with keyCode 229 alone).
   addEventListener('keydown', event => { if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing && event.keyCode !== 229) post('escape', {}); });
   addEventListener('message', event => {
-    const data = event.data;
-    if (event.source === parent && data && data.raphaelPage === 1 && data.type === 'scroll-to' && Number.isFinite(data.y)) scrollTo(0, Math.max(0, data.y));
+    const data = event.data, own = event.source === parent && data && data.raphaelPage === 1;
+    if (own && data.type === 'scroll-to' && Number.isFinite(data.y)) scrollTo(0, Math.max(0, data.y));
+    // The room the composer takes at the window's foot (R-PAGE-11): the root's own foot, which is page and canvas alike, so the page
+    // scrolls its last line clear of the composer and nothing but the page's own background shows there.
+    if (own && data.type === 'foot' && Number.isFinite(data.y)) document.documentElement.style.paddingBottom = Math.max(0, Math.min(2000, Math.round(data.y))) + 'px';
   });
   // A style sheet the page loads from another host holds all of it back while it comes: nothing is drawn and the page's own
   // script waits. One still on its way after a few seconds stops holding the page, which draws in the fonts and styles it
@@ -335,7 +315,7 @@ def document(page, theme, state=None):
     base = BASE if page["source"] == "html" else ""
     return ('<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
             f"<title>{html_lib.escape(page['title'])}</title><style>:root{{{variables};color-scheme:{theme}}}"
-            f"body{{background:var(--bg);color:var(--fg);font-family:var(--font)}}{base}</style>" + state_script(state)
+            f"body{{color:var(--fg);font-family:var(--font)}}{base}</style>" + state_script(state)
             + theme_script(theme) + _HELPER + content)
 
 
