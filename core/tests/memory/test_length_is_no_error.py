@@ -113,7 +113,8 @@ def test_what_one_pass_reads_follows_the_models_window():
 
 def test_a_window_is_the_catalogs_then_the_clis_then_the_default():
     assert window_of("cli:claude:opus") == 200_000
-    assert window_of("cli:codex:gpt-6") == 64_000
+    assert window_of("cli:codex:gpt-6") == 200_000  # Codex's models start from 200K too (R-SKILL-36)
+    assert window_of("cli:gemini:no-such-model") == 64_000  # a CLI with no known window takes the default
     assert window_of("no/such-model-anywhere") == 64_000
 
 
