@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   agentHistorySearch: vi.fn(),
   agentAskText: vi.fn(),
   agentRetract: vi.fn(),
+  agentStop: vi.fn(),
   agentQuestionOpen: vi.fn(),
   agentQuestionAnswer: vi.fn(),
   agentVoice: vi.fn(),
@@ -815,6 +816,7 @@ beforeEach(() => { localStorage.clear();
   api.modelsCatalog.mockResolvedValue(null);
   api.agentAskText.mockResolvedValue(undefined);
   api.agentRetract.mockResolvedValue(undefined);
+  api.agentStop.mockResolvedValue(undefined);
   api.agentVoice.mockResolvedValue(undefined);
   api.cancelSession.mockResolvedValue(undefined);
   api.core.mockResolvedValue({});
@@ -1058,20 +1060,38 @@ test("message actions show an app tooltip on keyboard focus, with no native titl
   agent.hide();
 });
 
-test("Escape cancels only from an empty composer and restores a running turn", async () => {
+test("Escape twice is Stop and a turn that showed a reply stays, the core takes back one that showed nothing (R-CHAT-STOP-02)", async () => {
   api.agentHistoryList.mockResolvedValue({ turns: [turn(8, { session_id: "running", status: "running", text: "Partial" })] });
+  api.agentStop.mockResolvedValue({ stopped: true });
   const agent = mount(); await flush();
   const input = $<HTMLTextAreaElement>(".cmp-input");
   input.value = "new draft";
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await flush();
-  expect(api.agentRetract).not.toHaveBeenCalled();
+  expect(api.agentStop).not.toHaveBeenCalled();
   input.value = "";
   input.dispatchEvent(new Event("input", {bubbles:true}));
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await flush();
-  expect(api.agentRetract).not.toHaveBeenCalled();
+  expect(api.agentStop).not.toHaveBeenCalled();
   expect($(".cmp-voice").dataset.cancelArmed).toBe("true");
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await flush();
-  expect(api.agentRetract).toHaveBeenCalledWith("running", 0, 8);
+  // It only stops: never the message's own take-back (`agentRetract` removed a message its member had answered), and nothing is put in the composer.
+  expect(api.agentStop).toHaveBeenCalledExactlyOnceWith("running", 0);
+  expect(api.agentRetract).not.toHaveBeenCalled();
+  expect(input.value).toBe("");
+  expect(document.querySelector('[data-id="8"]')).not.toBeNull();
+  agent.hide();
+});
+
+test("Escape twice on a turn that showed nothing yet gives its words back to the composer, as the core answers", async () => {
+  let rows = [turn(8, { session_id: "running", status: "running", text: "" })];
+  api.agentHistoryList.mockImplementation(async () => ({ turns: rows }));
+  api.agentStop.mockImplementation(async () => { rows = []; return { stopped: true, returned: [{ session_id: "running", text: "問題 8", attachments: [] }] }; });
+  const agent = mount(); await flush();
+  const input = $<HTMLTextAreaElement>(".cmp-input");
+  for (let press = 0; press < 2; press++) input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await flush();
+  expect(api.agentStop).toHaveBeenCalledExactlyOnceWith("running", 0);
+  expect(api.agentRetract).not.toHaveBeenCalled();
   expect(input.value).toBe("問題 8");
   expect(document.querySelector('[data-id="8"]')).toBeNull();
   agent.hide();

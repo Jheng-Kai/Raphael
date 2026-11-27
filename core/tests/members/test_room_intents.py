@@ -179,6 +179,30 @@ async def test_a_reply_cut_off_by_the_owners_stop_is_not_called_an_error(rig, ex
     assert text.split('\n')[:2] == ['已停止本次工作，已完成的動作保留。', '沒有已驗證的交付成果。']
 
 
+@pytest.mark.parametrize('shown', ['thinking', 'progress', 'step', None])
+async def test_the_owners_stop_writes_no_wrapup_once_a_member_showed_anything_of_its_reply(rig, exchange, shown):
+    # R-CHAT-STOP-02: after a line, a thinking line or a step was shown, Stop only stops; before anything, the room says it was stopped.
+    from raphael_core.agent.steps import Step
+    room, ids = await team(rig)
+    await send(rig, room, '@Alice and @Bob answer')
+    store = AgentHistory(rig.conn)
+    [(task_id, turn), *_] = rig.background.attached
+    if shown == 'step':
+        store.add_steps(turn, [Step(kind='tool', tool='web_search', server='Raphael', outcome='ok', ms=10)])
+    elif shown:
+        store.add_message(turn, shown, 'Looking at it now.')
+    await rig.call('rooms.stop', {'room_id':room['id']})
+    for task_id, turn in rig.background.attached:
+        store.resolve(turn, prefix='', text='', status='cancelled')
+        rig.background.store.finish(task_id, 'cancelled', prefix='', text='', detail=None, reason='cancelled')
+        exchange.turn_arrived(turn)
+    await exchange.wait_idle()
+    result = await history(rig, room)
+    assert result['exchange']['state'] == 'stopped'
+    assert bool(wrapups(result)) is (shown is None)
+    assert 'cancel' not in json.dumps(wrapups(result), ensure_ascii=False).lower()
+
+
 async def test_a_failed_exchange_names_a_rate_limit_without_claiming_an_owner_stop(rig, exchange):
     room, ids = await team(rig)
     await send(rig, room, '@Alice and @Bob answer')

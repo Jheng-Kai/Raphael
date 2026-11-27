@@ -431,7 +431,9 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     }
     const faceOf=(id:number,name:string)=>faceHTML(person(id)??{id,name},20);
     // A reply that never came stands where its exchange stopped: after its last message, before its wrap-up.
-    const blocked=(exchange?.reply_intents??[]).filter(intent=>intent.state==="blocked").flatMap(intent=>{
+    // After a member showed anything of its reply, the owner's Stop only stops: it says nothing of the members that had not spoken yet (R-CHAT-STOP-02).
+    const spoke=(origin:number)=>messages.some(m=>(m.origin_message_id??m.id)===origin&&m.member_id!==null&&m.kind!=="wrapup"&&m.text.trim()!=="");
+    const blocked=(exchange?.reply_intents??[]).filter(intent=>intent.state==="blocked"&&!(intent.reason==="owner"&&spoke(intent.origin_message_id))).flatMap(intent=>{
       const anchor=messages.filter(m=>(m.origin_message_id??m.id)===intent.origin_message_id&&m.kind!=="wrapup").pop();
       return anchor?[{created:anchor.created,order:1,intent}]:[];
     });

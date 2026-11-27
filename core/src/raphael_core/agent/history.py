@@ -848,6 +848,23 @@ class AgentHistory:
 
     # --- the versions of an edited message ------------------------------------------------------------
 
+    # What the thread shows of a step: every one but a model call that went well (the thinking between the calls), the looking
+    # a background task does through its tools, a look at the owner's windows or screen, and a call a stop cut off
+    # (`shownSteps`, timeline.ts).
+    SHOWN_STEP = ("NOT (kind='model' AND outcome='ok') AND outcome<>'cancelled' AND NOT (outcome='ok' AND ((server='Raphael' AND tool='find_tools')"
+                  " OR (kind='computer' AND tool IN ('apps','look'))))")
+
+    def shown(self, turn_id: int, before: tuple[int, int] | None = None) -> bool:
+        """Whether the owner has been shown anything of the turn's reply: a line (words, a thinking line, a note, a picture) or
+        a step the thread draws. `before` is the last line and the last step written at a moment (`AgentService._marks`): only
+        what was written up to it counts, so what a stop writes afterwards is no reply."""
+        line, step = before if before is not None else (None, None)
+        if self._conn.execute(f"SELECT 1 FROM agent_steps WHERE turn_id=? AND (? IS NULL OR rowid<=?) AND {self.SHOWN_STEP} LIMIT 1",
+                              (turn_id, step, step)).fetchone():
+            return True
+        return self._conn.execute("SELECT 1 FROM agent_messages WHERE turn_id=? AND kind IN ('reply','media','progress','thinking','event')"
+                                  " AND trim(text)<>'' AND (? IS NULL OR rowid<=?) LIMIT 1", (turn_id, line, line)).fetchone() is not None
+
     def answered(self, turn_id: int) -> bool:
         """Whether the member answered the turn with a message the owner reads: a reply or something it showed (a picture,
         a card of a link), or the answer of a turn that has no reply lines. The app draws the same messages (timeline.ts),

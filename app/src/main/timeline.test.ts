@@ -705,11 +705,24 @@ describe("what a turn did", () => {
     expect(visible(host.innerHTML)).toBe("進行中 42 秒 停止 查天氣 0.4 秒 思考中… 42 秒");
   });
 
-  test("a task that waits is queued, and one that was stopped says so with what it did", () => {
+  test("a task that waits is queued, and one that was stopped keeps what it did and says nothing of the stop (R-CHAT-STOP-02)", () => {
     expect(stepsHTML(turn(3, { task: running({ state: "queued", started_at_ms: null }) }), emptyTimelineState())).toContain("排隊中");
     const stopped = turn(3, { task: running({ state: "cancelled", finished_at_ms: T0 + 5_000 }), steps: [step()] });
-    expect(summaryText(stopped, T0).lead).toBe("已中止 · 1 個動作");
+    expect(summaryText(stopped, T0).lead).toBe("1 個動作");
+    const html = stepsHTML(stopped, emptyTimelineState());
+    expect(visible(html)).not.toMatch(/中止|停止了|已取消/);
+    expect(html).not.toContain('data-act="stop"'); // nothing to stop any more, and a run again stays
+    expect(html).toContain('data-act="rerun"');
     expect(workMs(stopped, T0 + 99_000)).toBe(5_000); // an ended task's time does not grow
+    // A task that ran into its limit or lost its worker still says so: only the owner's own stop is quiet.
+    expect(summaryText(turn(3, { task: running({ state: "limit" }), steps: [step()] }), T0).lead).toBe("達到上限 · 1 個動作");
+  });
+
+  test("a call the owner's Stop cut off is not drawn as a step, and the calls that finished stay (R-CHAT-STOP-02)", () => {
+    const cut = step({ tool: "web_search", outcome: "cancelled", reason: "cancelled" });
+    const kept = turn(3, { steps: [step(), cut] });
+    expect(shownSteps(kept)).toEqual([step()]);
+    expect(stepsHTML(turn(3, { steps: [cut] }), emptyTimelineState())).toBe("");
   });
 
   test("a task that waits for the owner's yes says so, with a clock and 停止, and does not tick", () => {

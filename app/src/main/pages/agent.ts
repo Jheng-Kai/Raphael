@@ -2753,12 +2753,13 @@ export function createAgent(app: AppContext, places?: {
     if (visible) void load(false);
   }
 
-  async function cancelMessage(control?: HTMLElement): Promise<void> {
-    const source = control ? messageSource(control) : null;
-    const cardTurnId = control?.dataset.act === "cancel-secret-turn" ? Number(control.closest<HTMLElement>(".tn[data-id]")?.dataset.id) : undefined;
+  /** 取消 in the ⋯ of a message the owner chose to take back (one on its way or waiting its turn); Stop is `stopComposerTask`. */
+  async function cancelMessage(control: HTMLElement): Promise<void> {
+    const source = messageSource(control);
+    const cardTurnId = control.dataset.act === "cancel-secret-turn" ? Number(control.closest<HTMLElement>(".tn[data-id]")?.dataset.id) : undefined;
     const cardTurn = cardTurnId === undefined ? undefined : turns.find(item => item.id === cardTurnId);
-    const pending = control ? outgoing.find(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session) : [...outgoing].reverse().find(item => item.member === memberId());
-    const turn = pending ? turns.find(turn => turn.session_id === pending.requestId) : source?.turn ?? cardTurn ?? (!control ? own().find(turn => sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && !delegatedTurn(turn) && (turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting")) : undefined);
+    const pending = outgoing.find(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session);
+    const turn = pending ? turns.find(turn => turn.session_id === pending.requestId) : source?.turn ?? cardTurn;
     const session = pending?.requestId ?? turn?.session_id;
     if (!session || retracting.has(session)) return;
     const member = memberId(), sentConversation = conversationId();
@@ -3174,7 +3175,9 @@ export function createAgent(app: AppContext, places?: {
     const task = composerTask();
     return visible && !roomPane.active && task ? {
       key: task.key, immediate: task.key.startsWith("listening:") || task.key.startsWith("voice:"), button: voiceButton, hint: t("common.cancelAgain"),
-      cancel: () => { void (listening ? api.cancelSession() : input.value.trim() || files.length || !task.key.startsWith("request:") ? stopComposerTask() : cancelMessage()).catch(error => toaster.info(describeError(error))); },
+      // Escape twice is the Stop button: the core decides whether anything of the reply was shown (R-CHAT-STOP-02). It never takes the
+      // message back on its own, which once removed a message its member had already answered.
+      cancel: () => { void (listening ? api.cancelSession() : stopComposerTask()).catch(error => toaster.info(describeError(error))); },
     } : null;
   });
   // Escape in the composer that holds a message taken back for editing gives the edit up: at once while the composer still holds what 編輯

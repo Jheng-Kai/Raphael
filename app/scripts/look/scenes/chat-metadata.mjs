@@ -1,4 +1,4 @@
-import { scene, member, room, wait, waitGone, hover, click, check, type, key, lookCall, paste, dropFile } from "./steps.mjs";
+import { scene, member, room, wait, waitCall, waitGone, hover, click, check, type, key, lookCall, paste, dropFile } from "./steps.mjs";
 const reply = '.tn[data-id="8201"] .chat-message[data-reply]';
 const thinking = '.tn[data-id="8202"] .live-presence';
 const reactButton = `${reply} [data-act="react-message"]`;
@@ -13,6 +13,14 @@ const ownerMenu = `${owner} [data-act="more-message"]`, composerField = '.cmp-in
 // The owner's last message, its member still thinking about it with no bubble for it yet: 編輯 takes it into the composer (R-UI-158, R-UI-163).
 const thinkingOpen = [member(1), wait(owner), wait('.tn[data-id="8201"] .live-presence')];
 const stillThinking = { ownerThinking: true };
+// R-CHAT-STOP-02: the composer's Stop (a press) and Escape twice only stop a reply of which anything was shown, so the message and what was shown stay
+// with no word of the stop; before anything was shown, the core takes the message back and its words are in the composer again.
+const stopOwn = shown => ({ chatMetadata: 'reaction', ownerThinking: true, stopShown: shown });
+const stopPress = [hover('.composer .cmp-voice'), click('.composer .cmp-voice')];
+const stopKeys = [hover('.composer .cmp-voice'), key('Escape'), key('Escape')];
+const stopped = [waitCall('agent.history.stop'), wait('.composer[data-task-state="idle"]')];
+const takenBack = [waitCall('agent.history.stop'), waitGone('.tn[data-id="8201"]')];
+const stopSees = selector => [member(1), wait(owner), wait(selector), check('stop-before')];
 // 編輯 takes the message into the composer (R-UI-158): its words and, as chips, its pictures; its bubble leaves the thread.
 const takeBack = [check('message-edit-before'), hover(owner), click(ownerMenu), wait('#app-popover [data-pick="edit"]'), click('#app-popover [data-pick="edit"]'), wait(replacing)];
 // 編輯 on a message its member answered (R-UI-163): the message's own bubble becomes the editor, where it stands.
@@ -58,6 +66,16 @@ export default [
     ...Array.from({ length: 12 }, (_, i) => dropFile('.composer', `畫面-${i + 1}.png`, { fill: `hsl(${i * 30}, 50%, 42%)`, label: String(i + 1) })),
     wait('.composer .cmp-chip:nth-child(12) img.cmp-thumb[src]'), check('composer-pictures-start'),
     { action: 'wheel', selector: '.composer .cmp-file', deltaY: 2400 }, check('composer-pictures-end'), hover('.ra-scroll')]),
+  scene('stop-after-thinking', "Stop after the member showed a thinking line only stops it: the message and the line stay as they were, nothing says it was cancelled, and the composer stays empty", [
+    ...stopSees('.tn[data-id="8201"] .live-presence'), ...stopPress, ...stopped, check('stop-keeps-reply'), hover('.ra-scroll')], stopOwn('thinking')),
+  scene('stop-after-words-esc', "Escape twice after the member said something is the same Stop: the words and the message stay, no cancel word, and nothing is taken back", [
+    ...stopSees('.tn[data-id="8201"] [data-reply] .message-text'), ...stopKeys, ...stopped, check('stop-keeps-reply'), hover('.ra-scroll')], stopOwn('words')),
+  scene('stop-after-step', "Stop after the member took a step only stops it: the step line and the message stay, and no word of the stop follows", [
+    ...stopSees('.tn[data-id="8201"] .live-presence'), ...stopPress, ...stopped, check('stop-keeps-reply'), hover('.ra-scroll')], stopOwn('step')),
+  scene('stop-before-anything', "Stop before the member showed anything takes the message back: its bubble leaves the thread and its words are in the composer", [
+    ...stopSees('.tn[data-id="8201"] .live-presence'), ...stopPress, ...takenBack, check('stop-takes-back'), hover('.ra-scroll')], stopOwn('nothing')),
+  scene('stop-before-anything-esc', "Escape twice before the member showed anything takes the message back the same way", [
+    ...stopSees('.tn[data-id="8201"] .live-presence'), ...stopKeys, ...takenBack, check('stop-takes-back'), hover('.ra-scroll')], stopOwn('nothing')),
   scene('message-edit-picture', "A message with a picture, taken back with 編輯: the picture is a chip with its thumbnail in the composer beside the words, and bubble and picture leave the thread; before it, the message's actions stand beside its bubble", [...thinkingOpen, wait(`${owner} .attachment-picture img`), check('owner-picture-actions'), ...takeBack, wait('.composer .cmp-chip img.cmp-thumb[src]'), check('message-edit-open'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'short', ownerPicture:true, ...stillThinking}),
   scene('reaction-picker', 'One reaction control opens the compact five-reaction pill', [...privateOpen, hover(reply), click(`${reply} [data-act="react-message"]`), check('reaction-picker')], {chatMetadata:'reaction'}),
   scene('message-hugs-bubble', 'A long reply is only as wide as its bubble and actions: the room beside it answers neither the pointer nor a right click', [...privateOpen, hover(reply), check('message-hugs-bubble'), hover('.composer')], {chatMetadata:'long'}),

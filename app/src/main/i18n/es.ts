@@ -1451,7 +1451,6 @@ export const es = {
   "chat.regenerate": "Regenerar",
   "chat.showAll": "Mostrar todo",
   "chat.latest": "Ir al último",
-  "agent.taskCancelled": "Detenido",
   "agent.reason.cancelled": "Detenido",
   "agent.taskLimit": "Límite alcanzado",
   "agent.taskFailed": "No terminó",

@@ -13149,6 +13149,46 @@ export function checkRendered(name, context = {}) {
     return { check: name, bubble: Math.round(b.width * 10) / 10, without: Math.round(bare * 10) / 10, picture: Math.round(p.width), pending: line.classList.contains('is-pending') };
     })();
   }
+  if (name === "stop-before") {
+    // The thread before Stop: the owner's message as it is and what the member has shown of its reply, to tell what Stop does to them.
+    const turn = document.querySelector('.tn[data-id="8201"]'), bubble = turn.querySelector('.owner-message .bubble'), r = bubble.getBoundingClientRect();
+    const shown = ['.think-box', '[data-reply] .message-text', '.steps-sum'].filter(selector => turn.querySelector(selector)).map(selector => [selector, turn.querySelector(selector).textContent.replace(/\s+/g, ' ').trim()]);
+    window.__look.beforeStop = { question: bubble.querySelector('.message-text').textContent, rect: { left: r.left, right: r.right, width: r.width, height: r.height }, shown };
+    return { check: name, shown: shown.map(([selector]) => selector) };
+  }
+  if (name === "stop-keeps-reply" || name === "stop-takes-back") {
+    // R-CHAT-STOP-02 and R-CHAT-STOP-01: one Stop call (never the message's own take-back); then either everything stays and the stop says nothing,
+    // or, when nothing was shown, the message is back in the composer.
+    const before = window.__look.beforeStop, calls = window.__look.calls, thread = document.querySelector('.thread');
+    const field = document.querySelector('.cmp-input'), composer = field.closest('.composer'), turn = document.querySelector('.tn[data-id="8201"]');
+    require(before, 'the thread was measured before Stop');
+    require(calls.filter(call => call.method === 'agent.history.stop').length === 1, 'Stop was asked once');
+    require(!calls.some(call => call.command === 'agent_retract'), 'the message was not taken back by its own call');
+    require(!document.querySelector('.toast, .composer-failure'), 'no toast and no failure card says anything');
+    require(!composer.hasAttribute('data-replacing'), 'the composer replaces nothing');
+    if (name === "stop-takes-back") {
+      require(!['running', 'ack', 'waiting'].includes(composer.dataset.taskState), `the composer no longer shows Stop (${composer.dataset.taskState})`);
+      require(!turn, "the message's turn is no longer in the thread");
+      require(field.value === before.question, `the composer holds its words (${field.value})`);
+      require(!/已取消|已中止|已停止/.test(thread.textContent), 'no word of the stop is left in the thread');
+      return { check: name, words: field.value.length };
+    }
+    const bubble = turn?.querySelector('.owner-message .bubble');
+    require(composer.dataset.taskState === 'idle', 'the composer is idle');
+    require(bubble && visible(bubble), 'the owner message stays in the thread');
+    require(bubble.querySelector('.message-text').textContent === before.question, 'with its own words');
+    const r = bubble.getBoundingClientRect();
+    require(['left', 'right', 'width', 'height'].every(side => Math.abs(r[side] - before.rect[side]) <= 1), `as large and as far left and right as it was (${Math.round(r.width)}x${Math.round(r.height)})`);
+    for (const [selector, words] of before.shown) {
+      const now = turn.querySelector(selector);
+      require(now && now.textContent.replace(/\s+/g, ' ').trim() === words, `what was shown (${selector}) stays as it was`);
+    }
+    require(field.value === '', 'nothing was put in the composer');
+    require(!/已取消|已中止|已停止|被取消|取消了|cancel|stopped/i.test(thread.textContent), `no word of the stop is in the thread (${thread.textContent.replace(/\s+/g, ' ').slice(0, 160)})`);
+    require(!turn.querySelector('.live-presence'), 'the member no longer shows itself at work');
+    require(!turn.matches('.is-latest-failure') && !turn.querySelector('[data-act="regenerate"], [data-act="rerun"]'), 'the turn is not drawn as a failure');
+    return { check: name, kept: before.shown.map(([selector]) => selector) };
+  }
   if (name === "message-edit-before") {
     // The sent message as it is, so that what 編輯 does to it (takes it into the composer, gives it back) can be told from what it was.
     const turn = document.querySelector('.tn[data-id="8201"]'), bubble = turn.querySelector('.owner-message .bubble'), r = bubble.getBoundingClientRect();

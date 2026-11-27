@@ -1451,7 +1451,6 @@ export const tr = {
   "chat.regenerate": "Yeniden oluştur",
   "chat.showAll": "Tümünü göster",
   "chat.latest": "En yeniye git",
-  "agent.taskCancelled": "Durduruldu",
   "agent.reason.cancelled": "Durduruldu",
   "agent.taskLimit": "Sınıra ulaşıldı",
   "agent.taskFailed": "Tamamlanmadı",
