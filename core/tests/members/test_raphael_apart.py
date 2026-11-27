@@ -82,6 +82,18 @@ def test_raphaels_persona_is_the_guides_and_never_takes_a_name_from_a_profile():
     assert "Warm" not in _raphael_persona(Speaker())
 
 
+def test_raphael_is_a_slime_who_names_itself_in_the_first_person_never_as_a_place():
+    """The tour opened with 「主人，這裡是拉斐爾」: the persona called Raphael an analytical intelligence and never said how it names
+    itself, so the model spoke like a voice on a line. Raphael is a slime, the app's own, and says 「我是拉斐爾」."""
+    from raphael_core.agent.persona import TOUR, _raphael_persona
+
+    prompt = _raphael_persona()
+    assert "You are Raphael, a slime" in prompt and "not one of your master's team of slimes" in prompt
+    assert "analytical intelligence" not in prompt
+    assert "「我是拉斐爾」" in prompt and "never as a place" in prompt and "「這裡是拉斐爾」" in prompt
+    assert "naming yourself in the first person" in TOUR
+
+
 # --- the service ---------------------------------------------------------------------------------------------------
 
 
