@@ -29,7 +29,7 @@ import { cleanName, isMemberNameTaken, primaryIdOf } from "../members";
 import { pickSlime } from "../slime";
 import { selectSlimeTab, slimeKeys } from "../slime-tabs";
 import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
-import { actionRow, closeMenu, esc, backButton, iconButton, openMenuOnArrow, toaster } from "../ui";
+import { actionRow, closeMenu, esc, backButton, iconButton, openMenuOnArrow, swapHTML, toaster } from "../ui";
 import { SERVICES_WAIT_MS, mergeServices, within } from "./helpers";
 import { type FlowState, initialState, isLast, reduce } from "./flow";
 import {
@@ -186,9 +186,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       case "services":
         return servicesHTML(servicesView());
       case "abilities":
-        return abilitiesHTML(abilityRowsHTML(abilities.view(), modelPickerHTML(visionLook()), brain));
+        return abilitiesHTML(abilitiesInnerHTML());
     }
   }
+
+  /** What the abilities step holds under its title: the same rows and dialog as Settings › 工具. */
+  const abilitiesInnerHTML = (): string => abilityRowsHTML(abilities.view(), modelPickerHTML(visionLook()), brain);
 
   /** What stopped the last ChatGPT sign-in, in the owner's words (the account controller keeps it). */
   const accountsError = (): string => accounts.view().chatgptError;
@@ -290,7 +293,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     const typed = Array.from(col.querySelectorAll<HTMLInputElement>("input")).map((input) => [input.id, input.value] as const);
     const focus = focusSelector(col);
     closeMenu();
-    col.innerHTML = bodyHTML();
+    // The abilities' dialog opens and closes over a page that stays as it is: only what the abilities hold is drawn again, by
+    // the swap that Settings uses (a list already shown does not come in again, a switch slides), never the title, the slimes
+    // and the rest, which redrawn whole made the page flash at the open and the close.
+    const abilitiesHost = flow.step === "abilities" ? col.querySelector<HTMLElement>("[data-ob-abilities]") : null;
+    if (abilitiesHost) swapHTML(abilitiesHost, abilitiesInnerHTML());
+    else col.innerHTML = bodyHTML();
     bindEditors();
     for (const [id, value] of typed) {
       const input = id ? col.querySelector<HTMLInputElement>(`#${CSS.escape(id)}`) : null;

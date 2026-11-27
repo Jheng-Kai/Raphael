@@ -629,6 +629,11 @@ export async function perform(page, step, evidenceDirectory) {
       }
       return { check: "slime-press", evidence };
     }
+    // Waits until nothing that has an end is still moving (a row coming in, a dialog growing), so that what follows is the page at rest.
+    case "wait-still": {
+      await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running" || animation.effect?.getComputedTiming().iterations === Infinity), { timeout: 6000 });
+      break;
+    }
     case "composer-measure-start": {
       await page.evaluate(() => {
         const tasks=[];

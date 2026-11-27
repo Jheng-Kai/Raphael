@@ -93,6 +93,13 @@ welcome on, so the services step opens on its tiles and never on a lone spinner 
 Composio's key field is on this step already (`onboarding-services-composio`, `onboarding-composio-key`,
 `onboarding-composio-saved`); a saved key reads the store again behind the tiles already shown.
 
+R-GUIDE-03: an ability's dialog opens and closes over a page that does not move. The guide drew the abilities step again whole
+at each change, so its rows played their entrance again under the dimmed page and after it (a flash); only what the abilities
+hold is drawn again now (`swapHTML`, as Settings does), and the title, the floating slimes, the column and the foot stay the same
+elements. Scene `onboarding-abilities-still` (motion on) opens 看圖片, closes it with × and again with Esc, and checks that every
+part is the same element at the same place, the page is not scrolled, and no row, title or slime is coming in (checks
+`onboarding-abilities-still-before`, `-open` and `-closed`; it fails on the old drawing).
+
 Every choice can be gone past without choosing; the first slime asks only for its name. The last step's primary button finishes; a first
 run then saves the device setting `onboarded`, a rerun from Settings does not.
 
@@ -105,7 +112,7 @@ state.
 ## Driving it with look
 
 ```powershell
-npm run look -- onboarding onboarding-slime onboarding-tools onboarding-back-hover onboarding-back-focus settings-owner onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice onboarding-slime-press after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- onboarding onboarding-slime onboarding-tools onboarding-back-hover onboarding-back-focus settings-owner onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice onboarding-abilities-still onboarding-slime-press after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 Keep the welcome and each step's PNGs, the contact sheet and the report. Each scene presses the

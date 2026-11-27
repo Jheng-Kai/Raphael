@@ -278,6 +278,13 @@ export default [
     click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'),
     { action: "slime-press", selectors: [1, 2, 3].map(n => `.ob-floaters .ob-fl:nth-child(${n})`) },
   ], { onboarding: true }), motion: true },
+  // Opening an ability's dialog and closing it (× , Esc and the dimmed part) leaves the page as still as it was.
+  { ...scene("onboarding-abilities-still", "First-run step 4: an ability's dialog opens and closes (×, then Esc) over a page that does not move, flash or draw again", [
+    ...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), { action: "wait-still" }, check("onboarding-abilities-still-before"),
+    click('[data-svc="open"][data-id="vision"]'), wait('.ob-card #svc-dialog'), check("onboarding-abilities-still-open"),
+    click('#svc-dialog [data-svc="close"]'), waitGone('.cs-scrim'), check("onboarding-abilities-still-closed"),
+    click('[data-svc="open"][data-id="vision"]'), wait('.ob-card #svc-dialog'), { action: "wait-still" }, key("Escape"), waitGone('.cs-scrim'), check("onboarding-abilities-still-closed"),
+  ], { onboarding: true }), motion: true },
   scene("onboarding-slime-crown", "First-run step 1: the first slime in a brown headband slime wears one crown on its head, large", [click('[data-ob="next"]'), wait('#ob-first-name'), type('#ob-first-name', '小藍'), click('.ob-first-picker [data-slime-tab="brown"]'), click('.ob-first-picker [data-slime-character="headband-brown"]'), wait('.ob-first-face .slime-surface[style*="#8E7254"]'), check('chief-crown')], { onboarding: true }),
   scene("after-onboarding", "Finishing the guide opens the conversation of the slime the owner named, the app's start", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-ob="next"]'), wait(".page-agent:not([hidden]) .conversation-trigger"), wait('.mb-col .mb-chief[aria-current="true"]'), check("sidebar-shell"), check("first-slime-named")], { onboarding: true }),
 ];

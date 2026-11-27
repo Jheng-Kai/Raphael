@@ -618,6 +618,29 @@ describe("step 3: the abilities", () => {
     expect(root.querySelector(".ob-card #svc-dialog")).not.toBeNull();
   });
 
+  test("an ability's dialog opens and closes over a page that stays as it is: its title, slimes and list are the same elements, the list not coming in again", async () => {
+    await toAbilities();
+    const page = ["h2", ".ob-floaters", "[data-ob-abilities]", ".ob-col", ".ob-foot"].map((selector) => [selector, root.querySelector(selector)] as const);
+    expect(page.every(([, node]) => node)).toBe(true);
+    const same = (): void => { for (const [selector, node] of page) expect(root.querySelector(selector), selector).toBe(node); };
+    await press('[data-svc="open"][data-id="vision"]');
+    expect(root.querySelector(".ob-card #svc-dialog")).not.toBeNull();
+    same();
+    // A list that was already shown stands still, as in Settings: it is not marked to come in a second time.
+    expect(root.querySelector(".cs-list[data-stagger]")!.classList.contains("again")).toBe(true);
+    vi.useFakeTimers();
+    try {
+      root.querySelector<HTMLElement>('#svc-dialog [data-svc="close"]')!.click();
+      await vi.advanceTimersByTimeAsync(400);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(root.querySelector(".cs-scrim")).toBeNull();
+    same();
+    expect(root.querySelector(".cs-list[data-stagger]")!.classList.contains("again")).toBe(true);
+    expect(root.querySelector<HTMLElement>('[data-svc="open"][data-id="vision"]')).not.toBeNull();
+  });
+
   test("the guide can be finished even when the abilities could not be read", async () => {
     api.servicesStatus.mockRejectedValue(new Error("down"));
     await toAbilities();
