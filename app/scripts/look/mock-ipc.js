@@ -293,7 +293,7 @@ export function installMock(fixture, config = {}, target = window) {
   }
   if (variant.presence) {
     const sample = data.presenceSample;
-    const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id !== 4));
+    const base = structuredClone(data.turns.find(turn => turn.member_id === 1));
     const working = ["working", "action-long", "action-group"].includes(variant.presence);
     const turn = {...base, id: 651, question: sample.question, text: working ? "" : sample.answer, status: working ? "running" : "done", task: null, steps: [], handoffs: [],
       model: "sample/model", cost_usd: .001, messages: [{seq: 1, kind: "progress", text: sample.progress, at_ms: base.created_at_ms + 1000}, ...working ? [] : [{seq: 2, kind: "reply", text: sample.answer, at_ms: base.created_at_ms + 3000}]]};
@@ -342,7 +342,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.menuMoveFlip) data.groups[1].name = data.handoffGroupSample.menuGroup;
   if (variant.polishData) data.history = Array.from({length:25}, (_,i)=>({...data.history[0], id:i+1, created_at_ms:data.now+i*1000, text:`Synthetic dictation ${i+1}` + (i===24 ? " Example text for checking the two-line preview. ".repeat(30) : "")})).reverse();
   if (variant.polishSearch) {
-    data.turns = [0,1].flatMap(member=>Array.from({length:205},(_,i)=>({...structuredClone(data.turns.find(t=>(t.member_id??0)===member && t.conversation_id!==4)), id:1000+member*1000+i, question:`Synthetic ${i} needle`, text:'needle and needle', messages:[], attachments:[], steps:[], session_id:`polish-${member}-${i}`, status:'done', member_id:member})));
+    data.turns = [0,1].flatMap(member=>Array.from({length:205},(_,i)=>({...structuredClone(data.turns.find(t=>(t.member_id??0)===member)), id:1000+member*1000+i, question:`Synthetic ${i} needle`, text:'needle and needle', messages:[], attachments:[], steps:[], session_id:`polish-${member}-${i}`, status:'done', member_id:member})));
     data.messages = Array.from({length:105},(_,i)=>({...structuredClone(data.messages[0]), id:3000+i, room_id:1, text:`Synthetic ${i} needle and needle`, status:'done'}));
   }
   if (variant.polishVoice) {
@@ -355,7 +355,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.missingModelList) data.clis = data.clis.map(cli => cli.id === "codex" ? {...cli, installed: true, available: true, models: []} : cli);
   if (variant.richReply) {
     const source = data.richContent[variant.richReply === true ? "reply" : variant.richReply];
-    data.turns = [0, 1].map((member, index) => ({ ...structuredClone(data.turns.find(turn => (turn.member_id ?? 0) === member && turn.conversation_id !== 4)), id: 701 + index,
+    data.turns = [0, 1].map((member, index) => ({ ...structuredClone(data.turns.find(turn => (turn.member_id ?? 0) === member)), id: 701 + index,
       member_id: member, text: source, question: "請整理研究資料，並提供表格與流程。", status: variant.richRunning ? "running" : "done", route: "answer", steps: [],
       messages: [{ seq: 1, kind: "reply", text: source, at_ms: data.now }], attachments: [] }));
     data.messages = [{ ...structuredClone(data.messages.find(message => message.member_id !== null)), id: 701, member_id: 1, text: source, kind: "message", status: "done", attachments: [] }];
@@ -525,8 +525,9 @@ export function installMock(fixture, config = {}, target = window) {
     adminTurn.text = "";
   }
   if (variant.running || variant.quickRunning) {
-    const conversation = data.conversations.find(item => item.member_id === (variant.runningMember ?? 0) && (variant.quickRunning ? item.kind === "quick" : item.is_default));
-    const runningTurn = data.turns.find(turn => turn.member_id === conversation?.member_id && turn.conversation_id === conversation?.id);
+    // `quickRunning`: the Alt+Space turn of Raphael's one conversation (90) is the one that runs.
+    const conversation = data.conversations.find(item => item.member_id === (variant.runningMember ?? 0) && item.is_default);
+    const runningTurn = variant.quickRunning ? data.turns.find(turn => turn.id === 90) : data.turns.find(turn => turn.member_id === conversation?.member_id && turn.conversation_id === conversation?.id);
     runningTurn.status = "running";
     // "fresh": the reply has only just started, before any step or progress line.
     runningTurn.messages = variant.running === "fresh" ? [] : runningTurn.messages.filter(message => message.kind !== "reply");
@@ -973,7 +974,7 @@ export function installMock(fixture, config = {}, target = window) {
     if (event) data.home.calendar.push({ ...event, id: "event:all-day", title: "素材整理日", all_day: true });
   }
   if (variant.longOwner || variant.longReply || variant.rawReplyEnvelope) {
-    const turn = data.turns.find(turn => turn.member_id === (variant.longReply ? 1 : 0) && turn.conversation_id !== 4);
+    const turn = data.turns.find(turn => turn.member_id === (variant.longReply ? 1 : 0));
     const text = Array.from({ length: 12 }, (_, index) => `${index + 1}. 整理每日新聞素材：先閱讀來源與發表日期，再核對事件發生時間。保留原始連結、重點摘要與尚待確認的資訊。\n\n將已確認的素材依主題整理，為下一次編輯保留完整脈絡。`).join("\n\n");
     if (variant.longOwner) turn.question = text;
     if (variant.longReply || variant.rawReplyEnvelope) {
@@ -982,7 +983,7 @@ export function installMock(fixture, config = {}, target = window) {
     }
   }
   if (variant.splitReplies) {
-    const turn = data.turns.find(turn => turn.member_id === 1 && turn.conversation_id !== 4);
+    const turn = data.turns.find(turn => turn.member_id === 1);
     const parts = ["我先核對了來源與時間。", "接著確認資料：\n\n- 第一個來源已更新\n- 第二個來源日期一致", "最後一步保留完整範例：\n\n```ts\nconst ready = true;\n```"];
     turn.text = parts.at(-1);
     turn.messages = parts.map((text, index) => ({ seq: index + 1, kind: "reply", text, at_ms: turn.created_at_ms + index }));
@@ -1286,6 +1287,7 @@ export function installMock(fixture, config = {}, target = window) {
     else data.conversations.push({ id: nextId(data.conversations), member_id: member, title: "", is_default: true, kind: "standard", created_at_ms: data.now, updated_at_ms: data.now });
   };
   // As the core does: the member types while its own model writes the greeting; it comes as its line and one question card.
+  // Raphael's empty conversation begins its guided tour the same way: its welcome and the card of what to do first.
   const greet = member => {
     mainConversation(member.id);
     const conversation = data.conversations.find(item => item.member_id === member.id && item.is_default);
@@ -1293,11 +1295,14 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns.push(greeting);
     if (!variant.greetingPending) setTimeout(() => {
       // The member's own line with the one question card (the core's greeting), asked after the line.
-      const line = `嗨，我是${member.name} 👋 很高興加入你的團隊。`;
+      const tour = member.id === 0;
+      const line = tour ? "歡迎。史萊姆是你的團隊，負責日常工作；我是嚮導與管家，替你設定、連接應用程式，並在你同意的規則下操作這台電腦。" : `嗨，我是${member.name} 👋 很高興加入你的團隊。`;
       Object.assign(greeting, { status: "done", text: line, messages: [{ seq: 1, kind: "reply", text: line, at_ms: data.now }],
         task: { id: 9900 + greeting.id, state: "waiting", waiting_owner: 1, started_at_ms: data.now, created_at_ms: data.now + 1, finished_at_ms: null },
-        owner_questions: [{ id: `greeting-card-${greeting.id}`, task_id: 9900 + greeting.id, turn_id: greeting.id, member_id: member.id, kind: "ask_owner", card_id: "", question: "你想先讓我接手哪一件事？",
-          options: ["整理 Gmail 信件", "安排行程與提醒", "查資料、做研究", "寫文件與報告"], free_text: true, state: "asked", result: null, created_at_ms: data.now + 1 }] });
+        owner_questions: [{ id: `greeting-card-${greeting.id}`, task_id: 9900 + greeting.id, turn_id: greeting.id, member_id: member.id, kind: "ask_owner", card_id: "",
+          question: tour ? "你想先做什麼？" : "你想先讓我接手哪一件事？",
+          options: tour ? ["建立第一隻史萊姆", "連結應用程式", "認識聽寫、行事曆和用量", "看看設定"] : ["整理 Gmail 信件", "安排行程與提醒", "查資料、做研究", "寫文件與報告"],
+          free_text: true, state: "asked", result: null, created_at_ms: data.now + 1 }] });
       notify("AgentTurn", { turn_id: greeting.id, member_id: member.id });
     }, 600);
     return greeting;
@@ -1878,7 +1883,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "members.greet": {
         // As the core: only while the owner has written nothing to the member and no greeting runs.
         const member = data.members.find(item => item.id === p.id);
-        if (!member || p.id === 0) throw new Error("Invalid params: no such member");
+        // Raphael's tour (`tour`): its model is the fake brain here; without it the core refuses as it does for a conversation that has words.
+        if (!member || (p.id === 0 && !variant.tour)) throw new Error("Invalid params: no such member");
         const own = data.turns.filter(turn => turn.member_id === p.id);
         if (own.some(turn => turn.route === "greeting" && turn.status === "running") || own.some(turn => (turn.question ?? "").trim() && !["greeting", "member", "routine", "resumed"].includes(turn.source)))
           throw new Error("Invalid params: greeting requires a conversation without an owner message or running greeting");
@@ -2126,6 +2132,15 @@ export function installMock(fixture, config = {}, target = window) {
           // The job is saved and the first-task card is asked, in a turn of its own.
           data.turns = data.turns.filter(item => item.member_id !== 1).concat(setupStage("job"));
           notify("AgentTurn", { turn_id: 9820, member_id: 1 });
+        }
+        if (turn.route === "greeting" && turn.member_id === 0 && question.state === "answered") {
+          // The tour goes on in a turn of Raphael's own, on what was picked: the part explained, and the offer to do it.
+          const picked = String(p.answer);
+          const step = { ...structuredClone(turn), id: nextId(data.turns), session_id: `setup-${turn.id}-look`, question: picked, setup: true, source: "app", route: "answer", prefix: "", status: "done",
+            created_at_ms: data.now + 2, text: `${picked}：我可以現在替你做，會先說明要做什麼，經你同意才會動手。要開始嗎？`, task: undefined, owner_questions: [],
+            messages: [{ seq: 1, kind: "reply", text: `${picked}：我可以現在替你做，會先說明要做什麼，經你同意才會動手。要開始嗎？`, at_ms: data.now + 2 }] };
+          data.turns.push(step);
+          notify("AgentTurn", { turn_id: step.id, member_id: 0 });
         }
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         return { status: question.state };

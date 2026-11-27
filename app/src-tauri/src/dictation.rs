@@ -19,7 +19,7 @@
 //! not lost to the recording: it is held, and shown for its ordinary time when the overlay is free
 //! (the dictation's words are typed), unless a newer question was asked meanwhile, when only the
 //! newest answer shows ([`DictationController::speak`], [`DictationController::wait_for_overlay`]).
-//! Every answer is in the quick conversation of the core as ever; only its showing waits.
+//! Every answer is in Raphael's one conversation of the core as ever; only its showing waits.
 //!
 //! There are two kinds of voice session:
 //!
@@ -312,7 +312,7 @@ pub type QuestionReport = Arc<dyn Fn(QuestionNews) + Send + Sync>;
 pub struct Busy;
 
 /// A question from the composer, including its attachments and conversation context. `quick` is
-/// one typed in Raphael's quick conversation.
+/// one asked the quick way.
 pub struct TypedQuestion<'a> {
     pub intent: Option<String>,
     pub text: &'a str,
@@ -414,9 +414,8 @@ const FRONT_POLL: Duration = Duration::from_millis(250);
 /// The source of a question typed in the main window (`agent.ask {source}`).
 pub const TYPED_SOURCE: &str = "app";
 
-/// The destination an Alt+Space question names (`agent.ask {destination}`): Raphael's quick
-/// conversation, answered by the quick model. The core refuses a spoken question to Raphael that
-/// names none, so nothing reaches quick or formal by default.
+/// The destination an Alt+Space question names (`agent.ask {destination}`): written to Raphael's
+/// one conversation like any turn and answered the quick way, by the quick model.
 pub const QUICK_DESTINATION: &str = "quick";
 
 struct State {
@@ -2426,7 +2425,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     /// A question said to the overlay (no conversation: Alt+Space) keeps what the overlay shows of
     /// it, Raphael thinking, until a recording or another overlay takes it, and its turn is the
     /// newest quick question from now on: the answer of an older one that waits for the overlay is
-    /// dropped (it stays in the quick conversation).
+    /// dropped (it stays in Raphael's conversation).
     fn hand_over(&self, id: &str) -> Option<Self> {
         let _transition = lock(&self.transitions);
         let (session, shown) = {
@@ -3003,7 +3002,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     /// The answer of a question said to the overlay (Alt+Space) is never lost to a recording:
     /// while the voice slot has the overlay, it is held and shown when the overlay is free
     /// ([`Self::wait_for_overlay`]); and an answer of an older question is not shown once a newer
-    /// one was asked. Either way it is in the quick conversation.
+    /// one was asked. Either way it is in Raphael's conversation.
     fn speak(&self, id: &str, prefix: &str, text: &str) -> bool {
         let (order, round) = {
             let mut state = lock(&self.state);

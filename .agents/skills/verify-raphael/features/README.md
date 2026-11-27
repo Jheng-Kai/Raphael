@@ -54,7 +54,7 @@ See [Member computer](member-computer.md#deleting-a-member-removes-its-computer)
 question is the small box (name, one sentence, Cancel and Delete) and asks nothing about a computer; the core
 removes the computer afterwards in the background and never starts Docker for it. Selected scenes:
 member-delete-ask, member-delete-ask-computer, member-delete, press-through-delete-dialog, room-delete and
-quick-clear-confirm, both themes at 1120,720,1920x1080.
+raphael-clear-confirm, both themes at 1120,720,1920x1080.
 
 ## Subscription quota warning
 
@@ -89,7 +89,7 @@ journey is `start-newer-data` under [Member computer](member-computer.md#where-t
 ## Toast feedback
 
 R-UI-177 uses the visible result as feedback for local changes. `member-delete`, `room-delete`,
-`quick-cleared`, `automations-delete-own` and `skill-library-imported` exercise deletion, clearing and import.
+`raphael-cleared`, `automations-delete-own` and `skill-library-imported` exercise deletion, clearing and import.
 The window's toast allowlist covers unseen results, failures and recovery actions, including Undo.
 
 ## Settings by purpose
@@ -421,7 +421,7 @@ from format.ts, with explicit zh-TW, ja and en expectations.
 
 The existing details-alignment, conversation-scroll-edge,
 dictation-overview, dictation-layout, skill-learned-notice and growing-skills checks
-cover these contracts. toast-clearance covers quick-cleared, composer-learn
+cover these contracts. toast-clearance covers raphael-cleared, composer-learn
 and member-delete. Native deletion audit uses the same
 rendered clearance check at every member checkpoint. Native skill-growth rejects a
 notice before its producing reply and checks the learned skill's Chinese date.
@@ -429,8 +429,8 @@ No brain, tool, core or Rust behavior changed.
 
 ```powershell
 npm run verify
-npm run look -- details member-conversation-sections connector-reconnected dictation-overview quick-cleared member-text details-skills raphael-skills centred-system-events composer-learn conversation-delete-main member-delete --theme both --width 1120,720,1920x1080
-npm run look -- quick-cleared --theme both --width 1280x800
+npm run look -- details member-conversation-sections connector-reconnected dictation-overview raphael-cleared member-text details-skills raphael-skills centred-system-events composer-learn conversation-delete-main member-delete --theme both --width 1120,720,1920x1080
+npm run look -- raphael-cleared --theme both --width 1280x800
 $env:RAPHAEL_MODELS_DIR = '<a folder holding the local speech models>'
 npm run native -- skill-growth readable-layout locale-sweep voice-conversation delete-conversation
 ```
@@ -622,7 +622,7 @@ checks turn-one recall on turn 25 and an entry in only that member's MEMORY.md. 
 
 ## Calendar chips, the sidebar shell and onboarding abilities
 
-The affected journeys include onboarding-abilities (beside onboarding-tools and onboarding-services), details-quick-once and conversation-scroll-edge. The sidebar is covered by the sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
+The affected journeys include onboarding-abilities (beside onboarding-tools and onboarding-services) and conversation-scroll-edge. The sidebar is covered by the sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
 
 ## Connect and Docker acceptance
 

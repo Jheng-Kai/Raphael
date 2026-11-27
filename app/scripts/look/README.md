@@ -110,9 +110,9 @@ Non-speech journeys copy only the installed VAD into their model directory.
 The native model manager refuses all downloads. Only initialization
 writes fixture prerequisites to SQLite; assertions reopen that run's DB with `mode=ro`.
 Conversation deletion reports all tables with `conversation_id`, including turns,
-summaries, CLI sessions and cards. Quick history is cleared through its real sidebar
-menu and confirmation; its permanent conversation must remain with no dependent
-records or timeline rows.
+summaries, CLI sessions and cards. Raphael's one conversation is cleared through its
+header's ⋯ and the confirmation; its permanent conversation must remain with what was
+typed there gone.
 `delete-conversation` also creates two members and a room through the UI. One member
 consults Raphael and the other member; explicit room mentions generate real reports
 for both recipients. It deletes their private conversations and the source member,

@@ -39,14 +39,13 @@ const mailField = field => `${mailCard} [data-mail-field="${field}"]`;
 // The owner's chief of staff: the chief's own menu (the first slime's until another is chosen), 換成其他角色, and 選擇主要聯絡對象.
 const primaryMenu = (id = 1) => [{ action: "member-column", collapsed: false }, click(`.mb-col [data-member-more="${id}"]`), click('#app-popover [data-pick="primary"]'), wait(".mb-dialog.mb-primary-picker")];
 const adminDraftEdits = [wait('.draft-panel:not([hidden])'), type('[data-draft-group="group-1"]', "工作室"), click('[data-draft-id="draft-1"] [data-draft-act="more"]'), type('[data-draft-id="draft-1"] [data-draft-field="role"]', "首席營運長"), click('[data-draft-id="draft-3"] [data-draft-act="remove"]'), check("member-draft-edit")];
-// Pick the quick conversation, then close the details panel, which covers the composer at compact width.
-const quickOpen = [{ action: "open-details" }, click('[data-conversation-open="4"]'), wait('.tn[data-id="90"]'),
-  click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]')];
+// Raphael's one conversation holds the Alt+Space question too: it is already the open one.
+const quickOpen = [wait('.tn[data-id="90"]')];
 // An Alt+Space answer as the core writes it: its public step, then the answer as the turn's text.
-const quickAnswer = { id: 91, session_id: "look-quick-umbrella", member_id: 0, conversation_id: 4, created_at_ms: 1792807160000,
+const quickAnswer = { id: 91, session_id: "look-quick-umbrella", member_id: 0, conversation_id: 1, created_at_ms: 1792807188000,
   question: "明天早上要帶傘嗎？", route: "answer", source: "voice", prefix: "答", text: "明天早上降雨機率七成，出門記得帶傘。",
   detail: null, status: "done", cost_usd: 0.0008, model: "openai/gpt-6-luna", steps: [], attachments: [],
-  messages: [{ seq: 1, kind: "progress", text: "《告。正在查看明天早上的天氣。》", at_ms: 1792807161000 }] };
+  messages: [{ seq: 1, kind: "progress", text: "《告。正在查看明天早上的天氣。》", at_ms: 1792807189000 }] };
 // A member's turn as the core keeps it: the member's own built-in tools (server "Raphael" for all of them), a connected
 // service and a step that is no step to the reader. Nothing in its steps may read as Raphael's doing.
 const memberWork = { id: 502, session_id: "look-member-work", member_id: 1, conversation_id: 11, created_at_ms: 1792807154000,
@@ -65,7 +64,7 @@ const endingTurn = { ...memberWork, id: 503, status: "cancelled", question: "核
     outcome: "blocked", reason, ms: 20, at_ms: 1792807155000 + index * 800 })) };
 const stopSlot = [wait('.composer[data-task-state]:not([data-task-state="idle"]) .cmp-voice svg'), check("composer-stop-slot")];
 const pendingReply = [type('.cmp-input', "請整理這週的研究重點。"), key("Enter"), rosterRefresh, ...stopSlot, check("pending-work")];
-// The key starts in a formal conversation; only quick owns the processing placeholder.
+// The key says what it records into Raphael's one conversation, where the processing placeholder stands.
 const voiceReply = [{ action: "main-event", event: { type: "Dictation", phase: "listening", agent: true, member_id: 0 } },
   { action: "main-event", event: { type: "Dictation", phase: "processing", agent: true, member_id: 0 } }, ...quickOpen, rosterRefresh, ...stopSlot, check("pending-work")];
 export default [
@@ -110,15 +109,14 @@ export default [
   scene("admin-draft-cancel", "Cancel discards every proposal without changing the roster", [wait('.draft-panel:not([hidden])'), click('[data-draft-act="cancel"]'), wait('.composer:not([hidden])'), check("admin-draft-cancel")], { adminApproval: "draft" }),
   scene("admin-draft-apply-result", "Apply settles once and updates the member column", [...adminDraftEdits, click('[data-draft-act="confirm"]'), wait('.draft-done'), click('[data-act="draft-done"]'), check("admin-edited-result")], { adminApproval: "draft" }),
   scene("live-scenario-owner-view", "Guardian S17 owner-visible failure and separate public work", [check("conversation-design"), check("live-scenario-owner-view")], { liveScenarioOwnerView: true }),
-  scene("quick-conversation-list", "Raphael's main conversation first, with its persistent quick questions in the row below it", [{ action: "open-details" }, check("quick-conversation-list")]),
-  scene("quick-conversation", "Open and continue the persistent quick conversation", [{ action: "open-details" }, click('[data-conversation-open="4"]'), wait('.ra .chat-message[data-reply]'), check("quick-conversation")]),
-  scene("quick-question-result", "An Alt+Space answer arrives in the open quick conversation, answered by the quick model",
+  scene("raphael-one-conversation", "Raphael's one conversation holds what was typed to it and what was said at the key together; its panel lists no conversation", [{ action: "open-details" }, wait('.mb-det:not([hidden]) .mb-panel-routines'), wait('.tn[data-id="90"]'), check("raphael-one-conversation")]),
+  scene("quick-question-result", "An Alt+Space answer arrives in Raphael's one conversation, answered by the quick model",
     [...quickOpen, { action: "main-event", event: { type: "AgentTurn", turn_id: 91, member_id: 0 } }, wait('.tn[data-id="91"] .ra .chat-message[data-reply]'), check("quick-question-result")],
     { arrivals: [quickAnswer] }),
-  scene("quick-formal-isolation", "A formal question names its thread, a quick follow-up names the quick destination, and neither thread shows the other",
-    [check("quick-formal-isolation-formal"), type(".composer textarea", "整理這週的研究重點"), click(".cmp-send"),
-      ...quickOpen, type(".composer textarea", "那明天呢？"), click(".cmp-send"), check("quick-formal-isolation")]),
-  scene("quick-stop", "Stop in the gold slot ends a running quick question and leaves the formal thread alone",
+  scene("raphael-typed-asks", "Typed questions name Raphael's one conversation and no quick destination, and the thread holds them with the Alt+Space question",
+    [type(".composer textarea", "整理這週的研究重點"), click(".cmp-send"),
+      ...quickOpen, type(".composer textarea", "那明天呢？"), click(".cmp-send"), check("raphael-typed-asks")]),
+  scene("quick-stop", "Stop in the gold slot ends a running quick question and leaves what was typed before it alone",
     [...quickOpen, wait('.composer[data-task-state="running"] .cmp-voice'), click('.composer[data-task-state="running"] .cmp-voice'),
       wait('.tn[data-id="90"][data-status="denied"]'), check("quick-stop")], { quickRunning: true }),
   scene("chat-connect-gmail", "A task in Raphael's chat that needs Gmail shows Gmail's connector card below its reply",
@@ -372,7 +370,6 @@ export default [
   scene("composer-model-none", "With nothing connected the card says so and its one button leads to 新增供應商", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-none'), check("composer-model-none")], { noSources: true }),
   scene("composer-model-none-add", "新增供應商 on the empty card opens the list of every way to connect, subscriptions first", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-none'), click('.cb-menu .cb-add-first'), wait('#pv-dialog'), check("provider-directory")], { noSources: true }),
   scene("composer-model-off", "A model whose provider was turned off stays shown and says the provider is not connected", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now .is-off'), check("composer-model-off")], { openrouterOff: true }),
-  scene("composer-quick-model", "A quick conversation shows and chooses 快速提問's model, and leaves the answer model alone", [{ action: "open-details" }, click('.mb-det [data-conversation-open="4"]'), { action: "close-details" }, click('.composer .cmp-model .mp-trigger'), wait('.cb-now .mc-range'), check("composer-quick-read"), click('.cb-src'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("composer-quick-saved")]),
   scene("composer-model-menu", "Choosing a model turns the card back to it, with the depth of thought to drag", [member(1), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-src'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-menu .mc-range'), check("composer-model-menu"), { action: "slider-stop", selector: ".cb-menu .mc-range", level: "last" }, { action: "wait-text", selector: ".cb-menu .cb-now .cb-effort", text: "極高" }, check("composer-model-depth")]),
   scene("composer-opened-calm", "Opening a conversation puts the caret in the composer, and its line stays quiet: a jump lights nothing", [member(1), wait(".composer .cmp-input"), check("composer-line-calm")]),
   scene("composer-engaged", "Pressed into, the empty composer's line brightens while the owner is in it", [member(1), click(".composer .cmp-input"), wait(".composer[data-engaged]"), check("composer-line-engaged")]),

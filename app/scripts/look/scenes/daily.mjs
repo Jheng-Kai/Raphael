@@ -42,7 +42,6 @@ export default [
   scene('daily-newest','A new window opens recent activity rather than the stable default',[page('agent'),check('daily-newest')],{conversations:[
     {id:1,member_id:0,title:'Older sample',kind:'standard',is_default:1,created_at_ms:1,updated_at_ms:1},
     {id:77,member_id:0,title:'Newest sample',kind:'standard',is_default:0,created_at_ms:2,updated_at_ms:20},
-    {id:4,member_id:0,title:'Quick sample',kind:'quick',is_default:0,created_at_ms:3,updated_at_ms:100},
   ]}),
   scene('daily-folder-heading','Pressing the group name folds its existing body',[{action:'member-column',collapsed:false},wide(click('[data-group="1"] .mb-gname')),check('sidebar-folded')]),
   ...['chief','member','room'].map(kind=>scene(`daily-copy-${kind}`,'Copy answers in the same control with a tick',[

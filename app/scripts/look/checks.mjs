@@ -1121,7 +1121,7 @@ export function checkRendered(name, context = {}) {
       if (live) require(!visible(word) && !word.textContent.trim(), 'the live header has no running word');
       if (!runs) requireBareScreen(panel.querySelector('.desktop-screen'));
     }
-    if (tab === 'details') require([...panel.querySelectorAll('.mb-dh')].filter(node => visible(node) && node.textContent === '對話').length === (panel.querySelector('[data-slot="conversations"]') ? 1 : 0), 'Details names the conversation section once, and only for Raphael');
+    if (tab === 'details') require(!panel.querySelector('[data-slot="conversations"]') && ![...panel.querySelectorAll('.mb-dh')].some(node => node.textContent === '對話'), 'Details lists no conversations: each member has the one, Raphael included');
     if (name === 'member-panel-details') {
       // The list of what the member did was removed: Details begins with the routines.
       require(!panel.querySelector('.mb-panel-tasks, .mb-task-list, [data-panel-task]'), 'Details has no work list');
@@ -1141,8 +1141,8 @@ export function checkRendered(name, context = {}) {
       // The computer lives in the third tab only, whatever its state and whoever the member: Details has its routines, for Raphael
       // its conversations, and the chat platforms, and nothing else. The tab itself stays.
       const raphael = name.endsWith('-raphael'), body = panel.querySelector('.mb-tab-body');
-      require([...body.querySelectorAll(':scope > section')].map(section => section.className).join() === (raphael ? 'mb-panel-routines,,mb-panel-suggest' : 'mb-panel-routines,mb-panel-suggest'), `Details holds the routines${raphael ? ', the conversations' : ''} and the chat platforms (${[...body.querySelectorAll(':scope > section')].map(section => section.className)})`);
-      require(!!panel.querySelector('[data-slot="conversations"]') === raphael, 'only Raphael has the conversation section');
+      require([...body.querySelectorAll(':scope > section')].map(section => section.className).join() === 'mb-panel-routines,mb-panel-suggest', `Details holds the routines and the chat platforms (${[...body.querySelectorAll(':scope > section')].map(section => section.className)})`);
+      require(!panel.querySelector('[data-slot="conversations"]'), 'no member, Raphael included, has a conversation section');
       require(!!panel.querySelector('.mb-tabs [data-tab="computer"]'), 'the third tab, the computer, is still there');
     } else if (/^member-panel-library(?:-pages|-media|-files|-long)?$/.test(name)) {
       // The Library: chips for the kinds there are, a quiet label per recency group and each
@@ -2113,7 +2113,7 @@ export function checkRendered(name, context = {}) {
     if (!panel.hasAttribute('data-expanded') && name !== 'desktop-boot-inline') require(Math.abs(box.width / box.height - 1280 / 900) < .02, 'boot retains the running desktop aspect ratio');
     if (name.startsWith('desktop-period-')) require(wallpaper.getAttribute('src') === `/wallpapers/${name.slice('desktop-period-'.length)}.jpg`, 'the fixed fixture hour selects its expected picture');
     return {check:name};
-  }  if(name === "daily-newest") {const reads=window.__look.calls.filter(call=>call.method==='agent.history.list'&&!call.params?.member_id&&call.params?.conversation_id!==undefined);require(reads.length>0&&reads.every(call=>call.params.conversation_id===77),'the newest standard conversation (not the default one, not the quick questions) is the one read');require(document.querySelector('.conversation-caption').hidden,'the header names only the member while a standard conversation is open (R-UI-103)');return {check:name,reads:reads.map(call=>call.params.conversation_id)};}
+  }  if(name === "daily-newest") {const reads=window.__look.calls.filter(call=>call.method==='agent.history.list'&&!call.params?.member_id&&call.params?.conversation_id!==undefined);require(reads.length>0&&reads.every(call=>call.params.conversation_id===77),'the newest standard conversation (not the default one) is the one read');require(!document.querySelector('.conversation-caption'),'the header names only the member while a standard conversation is open (R-UI-103)');return {check:name,reads:reads.map(call=>call.params.conversation_id)};}
   if(name === "daily-copy") {const copied={"zh-TW":"已複製",en:"Copied",ja:"コピーしました"}[document.documentElement.lang];const tick=[...document.querySelectorAll('.thread button, .cn-setup-dialog button, .au-routine-dialog button')].find(el=>el.getAttribute('aria-label')===copied);require(tick&&tick.querySelector('svg'),'the pressed copy control displays its tick and copied name');require(tick.scrollWidth<=tick.clientWidth,'copied words fit in the fixed button width');return {check:name};}
   if(name === "daily-footer-hover") {
     // The pointer is on the Connections button: nothing more shows under it, in the list (it says its own words) or on the rail
@@ -4374,13 +4374,15 @@ export function checkRendered(name, context = {}) {
     require(!panel.querySelector('.mb-face-edit, .mb-face-pencil, [data-det="avatar"]') && !panel.querySelector('.mb-panel-identity small'), "its face and name are shown, with nothing to change and no role");
     const face = panel.querySelector('.mb-panel-identity > .av .slime-surface');
     require(face && face.style.getPropertyValue('--slime-color').toLowerCase() === '#3db5ff' && !panel.querySelector('.mb-panel-identity img'), "its face is the first blue slime");
-    const slot = panel.querySelector('[data-slot="conversations"]');
-    require(visible(slot), "its panel lists its conversations");
-    const quick = data.conversations.filter(item => item.member_id === 0 && item.kind === 'quick');
-    require(quick.length > 0 && quick.every(item => visible(slot.querySelector(`[data-conversation-open="${item.id}"]`))), "its quick questions are in that list");
-    require(data.conversations.filter(item => item.kind === 'quick').every(item => item.member_id === 0), "and only Raphael's");
+    require(!panel.querySelector('[data-slot="conversations"]'), "its panel lists no conversations: it has the one, like every slime");
+    require(data.conversations.filter(item => item.member_id === 0).length === 1 && !data.conversations.some(item => item.kind === 'quick'), "the fixture holds the one conversation, and no quick one");
+    const more = document.querySelector('[data-act="raphael-more"]'), share = document.querySelector('[data-act="share-member"]');
+    require(more && !more.hidden && visible(more) && more.getAttribute('aria-label') === '更多', "its ⋯ stands where a slime's share button does");
+    require(share.hidden && more.getBoundingClientRect().right > document.querySelector('.mb-head-c').getBoundingClientRect().right, "and the ⋯ is at the right of the header");
+    require(document.querySelector('.tn[data-id="1"]') && document.querySelector('.tn[data-id="90"]'), "its typed work and its Alt+Space question are one thread");
+    require(!document.querySelector('.conversation-caption') && !document.body.textContent.includes('請下達指示'), "the header names only Raphael and no greeting line stands in the page");
     require(!document.querySelector('.mb-pill .slime-crown'), "it wears no crown");
-    return { check: name, quick: quick.length };
+    return { check: name };
   }
   if (name === "chief-space") {
     const data = window.__look.data, id = data.primaryId, column = document.querySelector('.mb-col');
@@ -4392,8 +4394,8 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('[data-act="share-member"]').hidden, "it can be shared as a template, like every slime");
     const panel = document.querySelector('.mb-det');
     require(visible(panel) && panel.querySelector('.mb-face-edit'), "its panel has a face to change, like every slime's");
-    require(!panel.querySelector('[data-slot="conversations"]'), "and no list of quick questions: the quick ask is Raphael's");
-    require(!document.querySelector('.conversation-caption:not([hidden])'), "its conversation is the one conversation");
+    require(!panel.querySelector('[data-slot="conversations"]'), "and no list of conversations: it has the one");
+    require(document.querySelector('[data-act="raphael-more"]').hidden, "and no ⋯ of Raphael's: that is Raphael's header alone");
     return { check: name, chief: id };
   }
   if (name === "no-slimes" || name === "no-chief") {
@@ -6027,11 +6029,6 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, entering: !!field };
   }
-  if (name === "details-quick-once") {
-    const quick = [...document.querySelectorAll('.mb-det [data-conversation-open]')].filter(row => visible(row) && row.textContent.includes('快速提問'));
-    require(quick.length === 1, "quick questions appear once as the accessible conversation item");
-    return { check: name };
-  }
   if (name === "conversation-scroll-edge") {
     const scroller = document.querySelector('.mb-chat .ra-scroll');
     require(getComputedStyle(scroller).maskImage !== 'none', "conversation top fades partially scrolled message fragments");
@@ -6369,15 +6366,16 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "conversation-header") {
     const header=document.querySelector('.mb-chat > .mb-head'), trigger=header.querySelector('.conversation-trigger');
-    const caption=trigger.querySelector('.conversation-caption'), identity=trigger.querySelector('.mb-pill');
+    require(!trigger.querySelector('.conversation-caption'), "nothing hangs under the pill: the header names only the member");
+    const identity=trigger.querySelector('.mb-pill');
     const picker=header.querySelector('.mb-pick');
     if (visible(picker)) require(!visible(identity),"compact header shows identity once in the picker");
-    for (const line of [caption,identity.querySelector('.mb-pill-t')].filter(visible)) {
+    for (const line of [identity.querySelector('.mb-pill-t')].filter(visible)) {
       const range=document.createRange();range.selectNodeContents(line);
       const text=range.getBoundingClientRect(), box=line.getBoundingClientRect();
       require(text.top>=box.top-1 && text.bottom<=box.bottom+1 && line.scrollHeight<=line.clientHeight+1,`header text has a complete unclipped line (${line.className}: text=${text.height}, box=${box.height}, scroll=${line.scrollHeight}, client=${line.clientHeight})`);
     }
-    return {check:name,captionHeight:caption.getBoundingClientRect().height,identity:visible(identity)};
+    return {check:name,identity:visible(identity)};
   }
   if (name === "failure-owner-copy") {
     const replies = [...document.querySelectorAll('.tn .ra .chat-message')].filter(visible);
@@ -6663,18 +6661,14 @@ export function checkRendered(name, context = {}) {
     const tab = document.querySelector('.page-dictation:not([hidden]) [data-dictation-tab][aria-selected="true"]')?.dataset.dictationTab;
     return { check: name, locale, surface: pane ? `settings:${pane}` : tab ? `dictation:${tab}` : page, stale };
   })();
-  if (name === "conversation-sections") {
-    // One conversation per member: Raphael's panel has its conversation and its quick questions, nothing to add.
-    const host = document.querySelector('.mb-det .conversation-list');
-    require(visible(host), "the conversation list is visible");
-    const heading = host.closest('section')?.querySelector(':scope > .mb-dh');
-    require(heading?.textContent === "對話" && !heading.querySelector('button'), "one small heading names the rows, with no button beside it");
-    const rows = [...host.querySelectorAll('[data-conversation-open]')];
-    require(rows.map(row => row.querySelector('span')?.textContent).join("|") === "主要對話|快速提問", "the rows are its conversation and its quick questions");
-    require(rows.filter(row => row.getAttribute('aria-current') === 'true').length === 1, "the open one is marked");
-    require(!rows[0].closest('.conversation-row').querySelector('[data-conversation-more]') && !!rows[1].closest('.conversation-row').querySelector('[data-conversation-more]'), "only quick questions have a menu, to clear them");
-    require(!document.querySelector('.mb-det [data-conversation-new], .mb-det .conversation-tools'), "nothing makes or searches conversations");
-    return { check: name, rows: rows.length };
+  if (name === "raphael-details-no-list") {
+    // One conversation per member: Raphael's panel lists none, as a slime's does not; the conversation is opened by the header.
+    const panel = document.querySelector('.mb-det:not([hidden])');
+    require(visible(panel), "the details are open");
+    require(!document.querySelector('.mb-det .conversation-list, .mb-det [data-slot="conversations"], .mb-det [data-conversation-open], .mb-det [data-conversation-new], .mb-det .conversation-tools'), "the panel lists, makes and searches no conversation");
+    require(![...panel.querySelectorAll('.mb-dh')].some(heading => heading.textContent === "對話"), "and no heading names a section of conversations");
+    require(panel.querySelector('.mb-tab-body > section')?.matches('.mb-panel-routines'), "the routines come first, as in a slime's panel");
+    return { check: name };
   }
   if (name === "message-menu") {
     const menu = document.querySelector('#app-popover');
@@ -6731,23 +6725,69 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.mb-det [data-slot="conversations"], .mb-det [data-conversation-new]'), "a member has no conversation list and nothing to add one");
     return { check: name };
   }
-  if (name === "quick-clear-confirm") {
+  if (name === "raphael-clear-menu") {
+    const menu = document.querySelector('#app-popover'), more = document.querySelector('[data-act="raphael-more"]');
+    require(visible(menu) && visible(more) && menu.getBoundingClientRect().top >= more.getBoundingClientRect().bottom - 1, "the ⋯ opened its one menu under itself");
+    const items = [...menu.querySelectorAll('[data-pick]')];
+    require(items.length === 1 && items[0].dataset.pick === "clear" && items[0].textContent === "清除對話", "its one item is 清除對話");
+    require(items[0].classList.contains("danger") && getComputedStyle(items[0]).color !== getComputedStyle(menu).color, "and it is the red one");
+    require(!window.__look.calls.some(call => call.method === "conversations.clear"), "nothing clears from the menu alone");
+    return { check: name };
+  }
+  if (name === "raphael-clear-confirm") {
     const dialog = document.querySelector('.mb-confirm');
-    require(visible(dialog) && dialog.querySelector('h2').textContent === '清除「快速提問」的紀錄？', "the shared confirmation names the history");
-    require(dialog.querySelector('[data-dlg="delete"]').textContent === "清除紀錄", "the primary action clears history");
+    require(visible(dialog) && dialog.querySelector('h2').textContent === '清除「拉斐爾」的紀錄？', "the shared red confirmation names Raphael's history");
+    require(dialog.querySelector('[data-dlg="delete"]').textContent === "清除對話", "the primary action clears the conversation");
     require(!window.__look.calls.some(call => call.method === "conversations.clear"), "nothing clears before confirmation");
     return { check: name, title: dialog.querySelector('h2').textContent };
   }
-  if (["quick-cleared", "conversation-empty"].includes(name)) {
+  if (name === "raphael-cleared") {
+    require(window.__look.calls.filter(call => call.method === "conversations.clear" && call.params.id === 1).length === 1, "the conversation is cleared exactly once");
+    require(window.__look.data.conversations.some(c => c.id === 1 && c.member_id === 0), "its identity remains");
+    require(!document.querySelector('.ra-col .tn[data-id="1"], .ra-col .tn[data-id="90"]'), "what was said is gone");
+    require(!document.body.textContent.includes('請下達指示'), "no greeting line stands in the page");
+    return { check: name };
+  }
+  if (name === "conversation-empty") {
     // The first .ra-empty in the document can be another conversation view's hidden one; any shown one counts.
     const empties = [...document.querySelectorAll('.ra-empty')];
-    require(empties.some(visible), `the conversation shows its empty state (${empties.map(node => `${node.closest('[class*="page-"]')?.className ?? '?'} hidden=${node.hidden} shown=${node.checkVisibility()} ${Math.round(node.getBoundingClientRect().width)}x${Math.round(node.getBoundingClientRect().height)}`).join('; ')})`);
+    require(empties.some(visible), "the conversation shows its empty state");
     require(!document.querySelector('.ra-col .tn, .ra-col .day, .ra-col .exchange-row'), "there are no turns, empty event lines or date separators");
-    if (name === "quick-cleared") {
-      require(window.__look.calls.filter(call => call.method === "conversations.clear" && call.params.id === 4).length === 1, "history is cleared exactly once");
-      require(window.__look.data.conversations.some(c => c.id === 4 && c.kind === "quick"), "the quick identity remains");
-      require(!document.querySelector(".toast"), "the empty conversation is the success feedback");
-    }
+    return { check: name };
+  }
+  if (name === "raphael-tour") {
+    // The empty conversation of Raphael's begins its guided tour: its welcome and the one card, one message, never the old greeting.
+    const body = [...document.querySelectorAll(".page-agent .ra-body")].filter(visible);
+    require(body.length === 1, `the welcome and its card are one message: ${body.length} bodies`);
+    const card = body[0].querySelector('[data-owner-question^="greeting-card-"][data-card-state="asked"]');
+    require(visible(card), "the question card stands in the same message");
+    const line = [...body[0].querySelectorAll("[data-seq]")].find(item => item.textContent.includes("嚮導與管家"));
+    require(visible(line) && line.getBoundingClientRect().bottom <= card.getBoundingClientRect().top + 1, "Raphael's welcome stands above the card");
+    const options = [...card.querySelectorAll("[data-owner-option]")].filter(visible);
+    require(options.length === 4 && options.map(item => item.querySelector("[data-choice-letter]").textContent).join("") === "ABCD", "four options with their letters");
+    require(options.map(item => item.textContent).join("|").includes("建立第一隻史萊姆") && options.map(item => item.textContent).join("|").includes("看看設定"), "they are the first things to do");
+    require(visible(card.querySelector("[data-owner-answer-input]")), "the owner's own answer is there");
+    require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "nothing is put in the owner's mouth");
+    require(!document.body.textContent.includes('請下達指示') && !document.querySelector('.ra-empty:not([hidden])'), "neither the old greeting nor the empty page stands there");
+    require(window.__look.calls.filter(call => call.method === "members.greet" && call.params.id === 0).length === 1, "the tour was asked for once");
+    require(card.getBoundingClientRect().right <= document.querySelector(".page-agent .ra-scroll, .page-agent").getBoundingClientRect().right + 1, "the card stays inside the conversation");
+    return { check: name, options: options.length };
+  }
+  if (name === "raphael-tour-answer") {
+    const first = document.querySelector('[data-owner-question^="greeting-card-"]');
+    require(first && first.dataset.cardState === "answered" && first.textContent.includes("建立第一隻史萊姆"), "the card stands answered, with the owner's pick in it");
+    require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "the pick is the card's, not said again as a message");
+    const next = [...document.querySelectorAll("[data-seq]")].find(item => item.textContent.includes("經你同意才會動手"));
+    require(visible(next) && first.getBoundingClientRect().bottom <= next.getBoundingClientRect().top + 1, "Raphael goes on below it: what it can do, and the offer that waits for the owner's yes");
+    return { check: name };
+  }
+  if (name === "raphael-no-model") {
+    const notice = document.querySelector('.ra-notice');
+    require(visible(notice) && notice.textContent.includes("回答還沒選模型"), "the empty page says answers have no model yet");
+    const button = notice.querySelector('[data-model-missing="answer"]');
+    require(visible(button) && button.textContent === "選擇模型", "with the one button that chooses it");
+    require(!document.body.textContent.includes('請下達指示') && !window.__look.calls.some(call => call.method === "members.greet" && call.params.id === 0), "no greeting stands there and the tour waits for a model");
+    require(visible(document.querySelector('.ra-hi')) && document.querySelector('.ra-hi').textContent === "拉斐爾" && visible(document.querySelector('.ra-hero .av, .ra-hero svg')), "Raphael's face and name stand above it");
     return { check: name };
   }
   if (["composer-voice-destination", "composer-voice-answer"].includes(name)) {
@@ -7139,52 +7179,37 @@ export function checkRendered(name, context = {}) {
     require(!row.querySelector('[data-k="quick-effort"]') && !row.querySelector('.sel:not(.mp-trigger)'), "quick questions' effort is chosen inside the model list, as the answer model's is, not beside it");
     return { check: name };
   }
-  if (name === "quick-conversation-list") {
-    // Each member has one conversation: Raphael's main one is the first row and the one a window opens,
-    // and its quick questions wait in the second, named only when the owner picks it.
-    const rows = [...document.querySelectorAll('.mb-det [data-conversation-open]')];
-    require(rows.length === 2, `Raphael's details list its main conversation and its quick questions: ${rows.length}`);
-    const [main, quick] = rows;
-    require(main.dataset.conversationOpen !== "4" && main.textContent.includes("主要對話"), "the main conversation is the first row");
-    require(main.getAttribute('aria-current') === "true" && quick.getAttribute('aria-current') === "false", "the window has the main conversation open, never the quick questions");
-    require(quick.dataset.conversationOpen === "4" && quick.textContent.includes("快速提問"), "the quick questions follow, with the window-language title");
-    return { check: name, conversation: 4 };
-  }
-  if (name === "quick-conversation") {
-    require(document.querySelector('.conversation-trigger')?.textContent.includes("快速提問"), "the opened conversation keeps its kind title");
-    require(document.querySelector('.tn[data-id="90"] .me')?.textContent.includes("今天下午有哪些會議"), "the saved quick question is visible");
-    require(!document.querySelector('.tn[data-id="1"]'), "formal history stays out of quick questions");
-    return { check: name, conversation: 4 };
+  if (name === "raphael-one-conversation") {
+    // Each member has one conversation: Raphael's holds what was typed to it and what was said at the key, and its panel lists none.
+    require(!document.querySelector('.mb-det [data-conversation-open], .mb-det [data-slot="conversations"]'), "its panel lists no conversations");
+    require(document.querySelector('.tn[data-id="90"] .me')?.textContent.includes("今天下午有哪些會議"), "the Alt+Space question is in the thread");
+    require(document.querySelector('.tn[data-id="1"]'), "and so is what was typed before it");
+    require(!document.querySelector('.conversation-caption'), "nothing under the header says which conversation it is");
+    return { check: name };
   }
   if (name === "quick-question-transcript") {
     const turn = document.querySelector('.tn[data-id="91"]');
     require(turn?.querySelector(".me")?.textContent.includes("明天早上要帶傘嗎"), "the recognized words replace the placeholder");
     require(visible(turn.querySelector(".live-presence")), "live presence follows the recognized words");
     require(!turn.querySelector("[data-reply]") && !document.querySelector('[data-key="hearing"]'), "there is no reply or recognition placeholder yet");
-    return { check: name, conversation: 4 };
+    return { check: name };
   }
   if (name === "quick-question-result") {
     const turn = document.querySelector('.tn[data-id="91"]');
-    require(visible(turn) && turn.querySelector('.me')?.textContent.includes("明天早上要帶傘嗎"), "the Alt+Space question arrived in the open quick conversation");
+    require(visible(turn) && turn.querySelector('.me')?.textContent.includes("明天早上要帶傘嗎"), "the Alt+Space question arrived in Raphael's one conversation");
     require(visible(turn.querySelector('.ra .chat-message[data-reply]')) && turn.querySelector('.ra .chat-message[data-reply]').textContent.includes("出門記得帶傘"), "its answer shows below its public step");
     // The model stays recorded in the reply's closed work detail (R-UI-120: the detail is never opened from the reply).
     const meta = turn.querySelector('.work-meta')?.textContent ?? "";
     require(/luna/i.test(meta) && !/\bsol\b/i.test(meta), `the answer names the quick model that answered it: ${meta}`);
-    require(document.querySelector('.conversation-trigger')?.textContent.includes("快速提問"), "the quick conversation stays open");
-    require(!document.querySelector('.tn[data-id="1"]'), "formal history stays out of quick questions");
+    require(document.querySelector('.tn[data-id="1"]'), "it stands in the same thread as what was typed before");
     return { check: name, model: meta, words: plainWords() };
   }
-  if (name === "quick-formal-isolation-formal") {
-    require(visible(document.querySelector('.tn[data-id="1"]')), "Raphael's formal thread is open");
-    require(!document.querySelector('.tn[data-id="90"]'), "quick questions stay out of the formal thread");
-    return { check: name };
-  }
-  if (name === "quick-formal-isolation") {
+  if (name === "raphael-typed-asks") {
     const sent = window.__look.calls.filter(call => call.command === "agent_ask_text");
     require(sent.length === 2, `two typed questions reached the native boundary, found ${sent.length}`);
-    require(sent[0].text === "整理這週的研究重點" && sent[0].conversationId === 1 && !("destination" in sent[0]), "the formal question names its thread and no quick destination");
-    require(sent[1].text === "那明天呢？" && sent[1].conversationId === 4 && sent[1].destination === "quick", "the quick follow-up names the quick destination and its conversation");
-    require(visible(document.querySelector('.tn[data-id="90"]')) && !document.querySelector('.tn[data-id="1"]'), "the quick thread shows only quick questions");
+    require(sent.every(call => call.conversationId === 1 && !("destination" in call)), "both name Raphael's one conversation and no destination: typed words are never the key's quick ask");
+    require(sent[0].text === "整理這週的研究重點" && sent[1].text === "那明天呢？", "in the order they were typed");
+    require(visible(document.querySelector('.tn[data-id="90"]')) && document.querySelector('.tn[data-id="1"]'), "the thread holds the Alt+Space question and the typed work together");
     return { check: name, sent: sent.map(call => ({ conversation: call.conversationId, destination: call.destination ?? null })) };
   }
   if (name === "quick-stop") {
@@ -7193,7 +7218,7 @@ export function checkRendered(name, context = {}) {
     const turn = document.querySelector('.tn[data-id="90"]');
     require(turn?.dataset.status === "denied" && !turn.dataset.live, "the quick question ended where it ran");
     require(!document.querySelector('.composer[data-task-state="running"]'), "the gold slot is free again");
-    require(window.__look.data.turns.find(item => item.id === 1)?.status === "done", "the formal thread is untouched");
+    require(window.__look.data.turns.find(item => item.id === 1)?.status === "done", "what was typed before it is untouched");
     return { check: name };
   }
   if (name === "quick-model-selection") {
@@ -11909,9 +11934,8 @@ export function checkRendered(name, context = {}) {
     require(title.getAttribute("aria-controls") === panel.id && !title.hasAttribute("aria-haspopup"), "title controls details without a popup");
     // The › that slides in under the pointer (R-UI-77) points at the panel; a dropdown glyph would promise a menu.
     require([...title.querySelectorAll(".i")].every(icon => icon.closest(".mb-pill-face, .mb-pill-go")), "title has no dropdown glyph outside its member avatar");
-    // Only Raphael has conversation rows (its own and the quick questions); a member has none.
-    const list = panel.querySelector(".conversation-list");
-    require(!list || (visible(list) && list.scrollWidth <= list.clientWidth + 1), "Raphael's conversation rows fit the panel");
+    // No panel, Raphael's included, has conversation rows: each member has the one.
+    require(!panel.querySelector(".conversation-list"), "no panel lists conversations");
     const picker = panel.querySelector('[data-member-brain] .mp-trigger');
     if (picker) {
       require(panel.querySelectorAll('.mp-trigger').length === 1, "member details has one shared brain control");
@@ -11922,7 +11946,7 @@ export function checkRendered(name, context = {}) {
       }
       require(source.scrollWidth <= source.clientWidth + 1, "the complete brain source remains readable");
     }
-    return { check: name, rows: list ? list.querySelectorAll('[data-conversation-open]').length : 0 };
+    return { check: name };
   }
   if (name === "composer-pair") {
     const form = [...document.querySelectorAll(".composer")].find(visible);

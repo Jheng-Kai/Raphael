@@ -553,7 +553,7 @@ half-width lines with the right of the box empty. The restore and reset confirma
 新增角色 keep the 440 px shell with hairlines (`member-maker`, `member-maker-taken`).
 
 ```powershell
-npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete polish-caption-confirm quick-clear-confirm quick-cleared member-maker member-maker-taken --theme both --width 1120,720,1920x1080
+npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete polish-caption-confirm raphael-clear-confirm raphael-cleared member-maker member-maker-taken --theme both --width 1120,720,1920x1080
 ```
 
 ## Card buttons at the right; confirmations
@@ -583,7 +583,7 @@ npm run look -- admin-approval admin-approval-batch admin-approval-long admin-de
 ```
 
 ```
-npm run look -- room-delete quick-clear-confirm computer-maintenance-reset card-question-waiting card-permission-waiting card-mail-ready card-connect-waiting card-key-waiting card-send-failed card-page-failed card-mcp-draft connector-key email-draft-handed-off chat-secret-masked card-send-retry card-mail-failed card-key-failed --theme both --width 1120,720,1920x1080
+npm run look -- room-delete raphael-clear-confirm computer-maintenance-reset card-question-waiting card-permission-waiting card-mail-ready card-connect-waiting card-key-waiting card-send-failed card-page-failed card-mcp-draft connector-key email-draft-handed-off chat-secret-masked card-send-retry card-mail-failed card-key-failed --theme both --width 1120,720,1920x1080
 ```
 
 ## Opening a conversation fast
@@ -626,7 +626,7 @@ main-entry scene. The selected matrix covers the private, quick,
 group, side-thread and members' conversations, the search field, and the empty and details states:
 
 ```powershell
-npm run look -- chat member-text missing-search long-owner quick-conversation search shortcut-find-member shortcut-find-room conversation-member-up room-text conversation-room-up room-composer-learn room-thread-open peer-chat empty details --theme both --width 1120,720,1920x1080
+npm run look -- chat member-text missing-search long-owner raphael-one-conversation search shortcut-find-member shortcut-find-room conversation-member-up room-text conversation-room-up room-composer-learn room-thread-open peer-chat empty details --theme both --width 1120,720,1920x1080
 npm run look -- chat shortcut-find-member room-thread-open peer-chat --theme both --width 1120,720,1920x1080,1280x800
 npm run look -- page-room-draft owner-card-room-page room-text --theme both --width 1120,720,1920x1080
 ```
@@ -668,7 +668,7 @@ has unopened finished news or an unseen waiting card. It uses the most urgent un
 for work under way. The sidebar, status list and other conversation entry points acknowledge only the
 conversation opened. Waiting cards retain their row until answered and a different card lights the icon
 again. Finished news uses the existing member_unread table, now keyed by member and conversation, so
-opening Raphael's main conversation keeps the quick conversation's news. The status-light-seen scene
+opening a conversation reads only its own news (a database made before schema 102 may still hold two for Raphael). The status-light-seen scene
 opens the menu with two finished conversations, then opens one through the menu and the other through
 the sidebar. It checks the row and header dots at each step.
 Neither a member's nor a group's top row has a search button; Ctrl+F (⌘F) opens the search
@@ -727,7 +727,7 @@ turn is taken out of the thread and nothing is left (no message, card, failure o
 call. A reaction taken back, or changed to another emoji, while its turn runs ends that turn (the new emoji starts its
 own); the owner writing in the conversation ends it too. The same emoji on the same message is analysed once; another
 emoji is a new reaction. A member working for the owner starts none (skipped, not queued, and not recorded). Never
-analysed: the owner's own message, a member's answer to a reaction, a quick conversation, an unfinished reply. In a
+analysed: the owner's own message, a member's answer to a reaction, an unfinished reply. In a
 group room only the author of the reacted message thinks, in the same thread, and what it makes is no discussion of
 the room. The mock core of `look` simulates the member's decision for `reaction-thinking`, `reaction-silent`,
 `reaction-ask` and `reaction-changed` (`reactionAsk`: "silent" or "words", ended by `reactionEnds`); the model path is
@@ -1173,11 +1173,11 @@ Each member has one conversation and nobody makes, renames or deletes
 conversations (R-UI-103). Migration 68 folds each member's standard conversations into its
 default in turn order, moving turns, calls, cards, drafts, pages, proposals and inbox rows; only
 the folded summaries and CLI sessions go, and a partial unique index keeps one standard
-conversation per member. Raphael's quick conversation is untouched. `conversations.create`,
+conversation per member; Raphael's quick conversation is folded into its main one by schema 102 (R-RAPHAEL-04). `conversations.create`,
 `.rename` and `.delete` are gone from the core, the shell allowlist, the management tools and the
-look mock; `list` and `clear` remain. A member's details have no conversation list; Raphael's have
-two rows, 主要對話 and 快速提問, with a quiet fill on the open one. The header names only the
-member and says 快速提問 under it when those are open.
+look mock; `list` and `clear` remain. No panel lists conversations, Raphael's included: it has the one, and its
+Alt+Space questions are turns of it. The header names only the member. Raphael's header has a ⋯ at the right where a
+slime has its share button, with one red item 清除對話 (`raphael-clear-menu`, `raphael-clear-confirm`, `raphael-cleared`).
 
 A message's ⋯ and a right click open one menu (R-UI-104): a colleague's message has its
 reactions above 回覆 and 複製, and 重新產生 on the latest answer; the owner's has 回覆 and 複製.
@@ -1199,14 +1199,14 @@ A message shows the one emoji it has as a chip (one per message, R-REACT-01); th
 single emoji and still takes back the old ✓ and ?.
 
 ```powershell
-npm run look -- conversation-sections member-conversation-sections quick-conversation quick-clear-confirm quick-cleared actions reaction-bar emoji-picker emoji-picker-speed header-pill-hover emoji-search thread-new-divider-latest raphael-details details member-panel-details composer-voice-pending-0 composer-voice-pending-1 empty-conversation-recording empty-conversation-hearing --theme both --width 1120,720,1920x1080
+npm run look -- raphael-details-no-list member-conversation-sections raphael-one-conversation raphael-clear-confirm raphael-cleared actions reaction-bar emoji-picker emoji-picker-speed header-pill-hover emoji-search thread-new-divider-latest raphael-details details member-panel-details composer-voice-pending-0 composer-voice-pending-1 empty-conversation-recording empty-conversation-hearing --theme both --width 1120,720,1920x1080
 ```
 
 Core: tests/brain/test_one_conversation_migration.py and tests/agent/test_folded_conversations.py.
 
 ## Sub-features
 
-One conversation per member (Raphael also keeps its quick questions; see One conversation per member below); public work/event chips; answers,
+One conversation per member, Raphael included (see One conversation per member below); public work/event chips; answers,
 attachments, reply quoting, message actions, search and composer menus; connector cards for an app a
 task needs, and the one resume of that task (see Connecting an app from the chat below); a secret card for a key a
 connection needs and a computer card for the owner's turn at a sign-in (see Handing a key or the computer to the owner below);
@@ -1214,12 +1214,10 @@ a permission card for an action that needs the owner's yes and an editable email
 the owner's yes and writing mail for them below).
 A delivered conversation lists what colleagues asked or handed it as one closed centred line;
 previews, search, unread state and every model read exclude those exchanges and room turns. Room answers stay in their room/thread and have no shortcut into private history.
-Raphael's single persistent quick-question conversation is created on the first global
-voice question, pinned above formal conversations as 快速提問 / Quick questions / クイック質問.
-Its fixed title and permanent identity have a Clear history overflow menu; individual messages
-can still be deleted. Opening it and typing continues with the quick model and effort.
-Alt+Space and a question typed there name the quick destination; nothing reaches quick or
-formal by default (see Quick questions below).
+Raphael has one conversation, like every member: what is said at Alt+Space and right-Alt voice (the
+`quick` flag, `destination: "quick"`) is written to it beside what is typed, and only how it is answered
+differs (see Quick questions below). Its permanent identity has the ⋯ 清除對話 in its header; individual
+messages can still be deleted. What is typed names its conversation and never a destination.
 
 ## One waiting line (R-UI-38/42)
 
@@ -1238,7 +1236,7 @@ The affected scene set includes every private-thread pending/live fixture and th
 pending/Stop result journeys; room speaking rows use a separate room contract.
 
 ```powershell
-npm run look -- composer-stop-pending composer-stop-pending-result composer-stop-roster composer-stop-voice composer-stop-voice-result composer-stop-member composer-stop-navigation composer-stop-background composer-stop-background-result composer-task-stop running running-motion quick-stop quick-formal-isolation --theme both --width 1120,720,1920x1080
+npm run look -- composer-stop-pending composer-stop-pending-result composer-stop-roster composer-stop-voice composer-stop-voice-result composer-stop-member composer-stop-navigation composer-stop-background composer-stop-background-result composer-task-stop running running-motion quick-stop raphael-typed-asks --theme both --width 1120,720,1920x1080
 ```
 
 Compare full-size `composer-stop-pending` and `running-motion` images in every size and
@@ -1270,7 +1268,7 @@ project folder) and that this raises the risk of data loss or leaks; only its re
 
 ```powershell
 npm run look -- composer-task-stop chat running running-motion empty details raphael-details details-closed --theme both --width 1120,720,1920x1080
-npm run look -- quick-conversation-list quick-conversation quick-question-result quick-formal-isolation quick-stop --theme both --width 1120,720,1920x1080
+npm run look -- raphael-one-conversation quick-question-result raphael-typed-asks quick-stop --theme both --width 1120,720,1920x1080
 npm run look -- live-scenario-owner-view --theme both --width 1120,720,1920x1080
 npm run look -- composer mode mode-bypass-confirm actions reply search search-target tooltip slash-commands --theme both --width 1120,720,1920x1080
 npm run look -- member-composer-empty member-text member-composer-hover conversation-notice --theme both --width 1120,720,1920x1080
@@ -1321,7 +1319,7 @@ cancelled task with no steps and no words draws no line at all (`conversation.ts
 composer and the member's presence go idle. `conversation.test.ts` covers the drawing, `core/tests/background` the endings.
 
 Composer voice processing belongs to the conversation selected when recording began.
-Desktop hotkey voice belongs to Raphael's quick conversation, including navigation into it after Alt+Space. Older voice history cannot settle a new
+Desktop hotkey voice belongs to Raphael's one conversation, including navigation into it after Alt+Space. Older voice history cannot settle a new
 question whose own history boundary was not on screen. Running turns read on a fresh page do not
 need a new send event to show Stop. The happy-dom `pages/agent-stop.test.ts` replays native phases,
 running/final turn announcements, roster changes, navigation and delayed ask RPC completion.
@@ -1421,36 +1419,52 @@ brain. Rendered fixtures do not prove a live consult.
 
 ## Quick questions (P19)
 
-The Alt+Space hotkey sends `agent.ask` with `destination: "quick"`. The composer's voice
-button names its selected conversation, like typing; a question in the quick conversation sends that destination
-with its conversation ID, and a formal thread sends only its ID. The core refuses a spoken
-question to Raphael that names neither, a quick request naming another conversation and a
-formal request naming the quick one. The quick model and effort answer quick turns, CLI quick
-turns keep no native session, and each turn records the model that actually answered (Raphael's
-face tooltip). A request replaces only the YES/NO questions waiting in its own conversation, so
-quick use leaves a formal approval waiting and adds no formal rows. A spoken answer with public
-progress has no reply message: the thread shows its text after the work line. Once speech recognition returns words,
-the core records the spoken question as running and announces it with `agent.turn`. The quick conversation replaces
-the recognition placeholder with the question and its live presence while the answer is pending (R-AG-06). A quick question is the one
-turn that reaches the owner's own screen (R-PC-01): the fast router, the commands to open, lock or
-copy and the desktop run are its alone, and a spoken or typed turn of a formal conversation goes to the
-narrated harness with none of them; the hidden local commands are every turn's, with the card (R-PC-02).
+The Alt+Space hotkey sends `agent.ask` with `destination: "quick"`. Raphael has one conversation, so a quick
+request is written to it like any other turn; `quick` says only how it is answered. Nothing names a destination
+but the key: the page, the composer's voice button and typed words name their conversation and never `quick`, and a
+spoken question to Raphael needs no destination of its own. The core refuses a quick request for another member and
+an ID that is not the member's own conversation. The quick model and effort answer quick turns whatever the
+conversation is (`AgentService._ask_settings`), CLI quick turns keep their own native session per model, and each turn
+records the model that actually answered (Raphael's face tooltip). A new request, quick or typed, replaces the YES/NO
+questions waiting in the conversation. A spoken answer with public progress has no reply message: the thread shows its
+text after the work line. Once speech recognition returns words, the core records the spoken question as running and
+announces it with `agent.turn`; the thread replaces the recognition placeholder with the question and its live presence
+while the answer is pending (R-AG-06). A quick question is the one turn that reaches the owner's own screen (R-PC-01):
+the fast router, the commands to open, lock or copy and the desktop run are its alone, and a typed turn goes to the narrated
+harness with none of them; the hidden local commands are every turn's, with the card (R-PC-02).
 
 ```powershell
-npm run look -- composer-stop-voice quick-question-result quick-formal-isolation quick-stop quick-model-selection --theme both --width 1120,720,1920x1080
+npm run look -- composer-stop-voice quick-question-result raphael-typed-asks raphael-one-conversation quick-stop quick-model-selection --theme both --width 1120,720,1920x1080
 ```
 
-`composer-stop-voice` opens quick during recognition, announces a running turn, and checks the question, live presence,
-and disappearance of the recognition placeholder. `quick-question-result` announces an Alt+Space answer through the native `AgentTurn` event while
-the quick conversation is open and checks its answer and quick model. `quick-formal-isolation`
-sends one formal and one quick question through the real composer and checks the destination
-each names at the native boundary and that neither thread shows the other. `quick-stop` presses
-Stop in the composer slot on a running quick question; only that session stops and the formal turn
-is untouched. `quick-model-selection` (Settings › Models) picks a Codex model and High effort for
-quick questions, both inside the model chooser, and checks that Raphael's answer model stays. The
-existing `quick-conversation`, `quick-model-menu` and `quick-effort-menu` scenes cover opening the
-stored quick thread, the quick model chooser and its effort row. Rendered fixtures do not prove the native hotkey, routing or a live model:
-core tests and Guardian S16 cover those, and the native Alt+Space entry needs its own live check.
+`composer-stop-voice` announces a running Alt+Space turn during recognition, and checks the question, live presence,
+and disappearance of the recognition placeholder. `quick-question-result` announces an Alt+Space answer through the native
+`AgentTurn` event in Raphael's conversation and checks its answer and quick model. `raphael-typed-asks` sends two typed
+questions through the real composer and checks that each names the conversation and no destination at the native boundary, and
+that the thread holds them with the Alt+Space question. `raphael-one-conversation` opens Raphael's panel and checks that it lists no
+conversation and that the typed work and the Alt+Space question are one thread. `quick-stop` presses Stop in the composer slot on a
+running quick question; only that session stops and what was typed before it is untouched. `quick-model-selection` (Settings › Models)
+picks a Codex model and High effort for quick questions, both inside the model chooser, and checks that Raphael's answer model stays;
+`quick-model-menu` and `quick-effort-menu` cover the quick model chooser and its effort row. Rendered fixtures do not prove the native
+hotkey, routing or a live model: core tests and Guardian S16 (the quick and the answer model in one conversation, each reading the other's
+words) cover those, and the native Alt+Space entry needs its own live check.
+
+## Raphael's guided tour (R-RAPHAEL-05)
+
+An empty conversation of Raphael's begins its tour on its own: the page asks `members.greet {id: 0}` once it has read the empty
+conversation and an answer model is chosen (agent.ts `greetIfSilent`; clearing the conversation asks again), and the core writes the hidden first
+turn on Raphael's persona (`persona.TOUR`): a few sentences on what the app is and where the owner stands, then one `ask_owner` card of what to do
+first (make the first slime, connect an app, dictation, calendar and usage, settings), in the owner's language. The pick starts a turn of Raphael's
+own (`begin_setup`, `persona.TOUR_ANSWER`) that explains that part and offers to do it with its own tools under the usual approval rules. With no
+answer model the empty page shows the existing 「回答還沒選模型」 notice and its choose button. The look fixture's `tour` variant is the fake brain.
+
+```powershell
+npm run look -- raphael-tour raphael-tour-answer raphael-no-model raphael-clear-menu raphael-clear-confirm raphael-cleared --theme both --width 1120,720,1920x1080
+```
+
+`raphael-tour` checks the welcome and its card as one message (four lettered options, free text, nothing in the owner's mouth, no old greeting,
+one `members.greet` for Raphael); `raphael-tour-answer` the card answered in place with the tour going on below it; `raphael-no-model` the notice and
+its button with no greeting and no greet call; `raphael-cleared` that the cleared conversation asks for the tour again. Core: tests/members/test_raphael_tour.py.
 
 ## Connecting an app from the chat (P08a)
 
@@ -1610,12 +1624,9 @@ npm run look -- context-menu-message context-menu-conversation --theme both --wi
 
 The composer fixes the member and the selected conversation before recording. Its voice
 question, waiting line, pending turn and answer remain there through navigation, including
-non-default conversations. Only the desktop question hotkey chooses the quick conversation.
-Quick questions have a separate small section above Conversations, using the existing
-`mb-dh` heading. Members without quick questions show only Conversations. Both kinds
-have the same overflow/context-menu behavior. Quick questions offer Clear history through
-`confirmDelete` with the matching clear wording; their identity remains after clearing.
-Clearing removes every delivered turn, message, step, summary, card and CLI resume ID.
+non-default conversations. Only the desktop question hotkey asks the quick way (`destination: "quick"`).
+No panel lists conversations. Raphael's header ⋯ offers 清除對話 through `confirmDelete` with the clear wording;
+its identity remains after clearing. Clearing removes every delivered turn, message, step, summary, card and CLI resume ID.
 
 Private and exchange deliveries belong to one conversation. Queries, paging and deletion
 apply that identity to both scopes. Room history remains in its room. Member deletion removes
@@ -1626,7 +1637,7 @@ legacy rows use their existing default or are removed if none exists. Empty fini
 records never create an exchange line or a date separator. Reopening the database is idempotent.
 
 ```powershell
-npm run look -- conversation-sections member-conversation-sections quick-clear-confirm quick-cleared composer-voice-pending-0 composer-voice-answer-0 composer-voice-pending-1 composer-voice-answer-1 --theme both --width 1120,720,1920x1080
+npm run look -- raphael-details-no-list member-conversation-sections raphael-clear-confirm raphael-cleared composer-voice-pending-0 composer-voice-answer-0 composer-voice-pending-1 composer-voice-answer-1 --theme both --width 1120,720,1920x1080
 ```
 
 Regression coverage: `conversation-list.test.ts`, `conversation.test.ts`,
@@ -1670,10 +1681,10 @@ the alias) and keeps the alias in its settings.
 
 R-UI-47: successful conversation deletion invalidates its outstanding history load
 and reloads the member's server-selected default before requesting history. The
-cached list predates default promotion and must not select quick history instead. The
+cached list predates default promotion. The
 existing named success toast remains. A removed member returns to Raphael; stale
 roster notifications cannot leave a deleted member selected. Clear-history retains
-the still-existing quick conversation. Deleted reply-source references remain
+the conversation's identity. Deleted reply-source references remain
 unavailable citations, not active deleted-object pages.
 
 ## Thread measures, focus and immediate use
@@ -1834,9 +1845,9 @@ provider's "too long" shrinks and sends again, at most three times. Contracts:
 the ChatGPT plan's Responses items `core/tests/brain/test_chatgpt.py`. No fake here
 proves what the real Responses API accepts: run one real long round on a sign-in.
 
-## Quick questions row and scroll fade
+## The one conversation and scroll fade
 
-Quick questions is named once by its actionable persistent conversation row; its duplicate section heading is removed. Ordinary conversations retain their heading, overflow actions, search and quick-history clearing. conversation-sections and details-quick-once enforce that distinction. The shared private and room conversation scrollport fades its top 24px to soften partial message fragments beneath the fixed header; connector-reconnected, chat/member-text/room-text and details consumers cover this boundary. The compact sheet/scrim behavior remains unchanged.
+No panel lists conversations (raphael-details-no-list, member-conversation-sections). The shared private and room conversation scrollport fades its top 24px to soften partial message fragments beneath the fixed header; connector-reconnected, chat/member-text/room-text and details consumers cover this boundary. The compact sheet/scrim behavior remains unchanged.
 
 
 ## Learned skill notices
