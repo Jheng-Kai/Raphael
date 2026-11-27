@@ -115,13 +115,14 @@ it("a page open in the conversation's place is the whole area: the panel folded,
   doc.body.innerHTML = '<div class="page-agent"><div class="mb-det" hidden></div><section class="mb-chat"><div class="mb-head"><span class="mb-head-l"><button class="icon back" data-page-back aria-label="返回"><svg></svg></button></span>' +
     '<span class="mb-head-c"><span class="conversation-head" hidden><span class="mb-pill">小晴</span></span><span class="pgv-pill"><svg class="i"></svg>輕量後背包</span></span>' +
     '<div class="ra-tools"><button class="icon share" data-page-act aria-label="存成檔案"><svg></svg></button></div></div>' +
-    '<div class="ra-stage is-page" data-page-kind="page"><div class="ra-scroll"></div><div class="pgv"><div class="pgv-body"><div class="pgv-page"><div class="pgv-frame-box"><iframe class="pg-frame"></iframe></div></div></div><div class="pgv-status" hidden></div></div>' +
-    '<div class="ra-dock"><div class="composer"></div></div></div><section class="pg-card"><b class="card-title">輕量後背包</b></section></section></div>';
+    '<div class="ra-stage is-page" data-page-kind="page"><div class="ra-scroll"></div><div class="pgv"><div class="pgv-body"><div class="pgv-page"><div class="pgv-frame-box"><iframe class="pg-frame"></iframe></div><div class="pgv-foot"></div></div></div><div class="pgv-status" hidden></div></div>' +
+    '<div class="ra-dock"><div class="composer"><div class="cmp-row"><div class="cmp-field"></div><div class="cmp-bar"><button class="cmp-attach"></button><button class="cmp-mode"></button><span class="cmp-model"></span><span class="cmp-pair"></span></div></div></div></div></div><section class="pg-card"><b class="card-title">輕量後背包</b></section></section></div>';
   const rect = (left, top, right, bottom) => ({ left, top, right, bottom, width: right - left, height: bottom - top });
   // Since R-PAGE-11 the area runs to the window's foot (900) and the composer's row stands over it; since R-PAGE-10 the page's window is the
-  // frame, which fills the area from under the header's band (60) down to just above the composer's row (110 from the foot).
+  // frame, which fills the area from under the header's band (60) down to the window's foot, and the composer over it is one line (R-PAGE-15).
   const places = { "mb-chat": rect(280, 0, 1100, 900), "mb-head": rect(280, 0, 1100, 60), "icon back": rect(290, 12, 326, 48), "icon share": rect(1000, 12, 1036, 48), "pgv-pill": rect(550, 20, 830, 60),
-    "ra-stage is-page": rect(280, 0, 1100, 900), "pgv-page": rect(280, 0, 1100, 900), "pgv-frame-box": rect(280, 60, 1100, 790), "pg-frame": rect(280, 60, 1100, 790), "composer": rect(300, 800, 1080, 870), "ra-dock": rect(280, 790, 1100, 900) };
+    "ra-stage is-page": rect(280, 0, 1100, 900), "pgv-page": rect(280, 0, 1100, 900), "pgv-frame-box": rect(280, 60, 1100, 900), "pg-frame": rect(280, 60, 1100, 900), "composer": rect(300, 836, 1080, 872), "ra-dock": rect(280, 826, 1100, 900),
+    "cmp-field": rect(312, 842, 1000, 866), "cmp-pair": rect(1040, 840, 1072, 868) };
   for (const element of doc.querySelectorAll('*')) {
     element.checkVisibility = () => true;
     element.getBoundingClientRect = () => places[element.className || element.tagName.toLowerCase()] ?? rect(0, 0, 10, 10);
@@ -131,10 +132,12 @@ it("a page open in the conversation's place is the whole area: the panel folded,
   vi.stubGlobal('innerHeight', 900); vi.stubGlobal('innerWidth', 1100);
   // The dock draws no band and takes no pointer; the composer floats on its own surface, edge and shadow.
   const band = { backgroundColor: "rgba(0, 0, 0, 0)", backgroundImage: "none", pointerEvents: "none" };
-  vi.stubGlobal('getComputedStyle', element => ({ visibility: element.className === "ra-scroll" ? "hidden" : "visible", pointerEvents: "auto", borderRadius: element.className === "pgv-frame-box" ? "0px" : "999px",
+  // What the window paints behind the page (the area's ::before) and which of the composer's setting-up controls are drawn.
+  const drawn = { before: "none", controls: false };
+  vi.stubGlobal('getComputedStyle', (element, pseudo) => pseudo ? { content: drawn.before, backgroundColor: "rgba(0, 0, 0, 0)" } : ({ display: /cmp-(attach|mode|model)/.test(element.className) && !drawn.controls ? "none" : "block", visibility: /^(ra-scroll|pgv-foot)$/.test(element.className) ? "hidden" : "visible", pointerEvents: "auto", borderRadius: element.className === "pgv-frame-box" ? "0px" : "999px",
     borderTopWidth: element.className === "composer" ? "1px" : "0px", backgroundColor: "rgb(31, 31, 31)", backgroundImage: "none", maskImage: "none", top: "60px", height: "840px", overflow: "visible", overflowY: element.className === "pgv-page" ? "hidden" : "auto",
     boxShadow: element.className === "composer" ? "rgba(0, 0, 0, 0.06) 0px 6px 20px 0px" : "none", marginLeft: "0px", paddingLeft: "0px", paddingRight: "0px", maxWidth: "none",
-    paddingTop: element.className === "pgv-page" ? "60px" : "0px", paddingBottom: element.className === "pgv-page" ? "110px" : "0px", getPropertyValue: name => name === "--sp-6" ? "32px" : "", ...(element.className === "ra-dock" ? band : {}) }));
+    paddingTop: element.className === "pgv-page" ? "60px" : "0px", paddingBottom: "0px", getPropertyValue: name => name === "--sp-6" ? "32px" : "", ...(element.className === "ra-dock" ? band : {}) }));
   try {
     expect(checkRendered('page-inplace').width).toBe(820);
     // A dialog over the page, the arrow far from the header's left, the panel still open, the member's pill still there, no Share,
@@ -155,9 +158,9 @@ it("a page open in the conversation's place is the whole area: the panel folded,
     share.removeAttribute("data-page-act");
     expect(() => checkRendered('page-inplace')).toThrow(/Share leads the header's tools/);
     share.setAttribute("data-page-act", "");
-    places["pg-frame"] = rect(380, 60, 1000, 790);
+    places["pg-frame"] = rect(380, 60, 1000, 900);
     expect(() => checkRendered('page-inplace')).toThrow(/spans the full width of the view/);
-    places["pg-frame"] = rect(280, 60, 1100, 790);
+    places["pg-frame"] = rect(280, 60, 1100, 900);
     // Cut off where the composer's row begins (a band of the page must not stand there).
     places["pgv-page"] = rect(280, 0, 1100, 790);
     expect(() => checkRendered('page-inplace')).toThrow(/fills the area|runs to the window's foot/);
@@ -168,10 +171,24 @@ it("a page open in the conversation's place is the whole area: the panel folded,
     band.pointerEvents = "auto";
     expect(() => checkRendered('page-inplace')).toThrow(/no band behind the composer/);
     band.pointerEvents = "none";
-    // The page's window runs under the composer's row instead of ending above it (R-PAGE-10): refused.
-    places["pg-frame"] = rect(280, 60, 1100, 900); places["pgv-frame-box"] = rect(280, 60, 1100, 900);
-    expect(() => checkRendered('page-inplace')).toThrow(/fills the area from under the header's band to above the composer's row/);
+    // The page's window ends above the composer's row instead of running to the window's foot (R-PAGE-11): a strip stands under it, refused.
     places["pg-frame"] = rect(280, 60, 1100, 790); places["pgv-frame-box"] = rect(280, 60, 1100, 790);
+    expect(() => checkRendered('page-inplace')).toThrow(/fills the area from under the header's band to the window's foot/);
+    places["pg-frame"] = rect(280, 60, 1100, 900); places["pgv-frame-box"] = rect(280, 60, 1100, 900);
+    // The window paints something behind the page (an area's ::before, or a colour the page said): refused.
+    drawn.before = '""';
+    expect(() => checkRendered('page-inplace')).toThrow(/paints nothing behind the page/);
+    drawn.before = "none";
+    doc.querySelector(".pgv-page").style.setProperty("--pgv-bg", "rgb(10, 10, 10)");
+    expect(() => checkRendered('page-inplace')).toThrow(/no colour of the page's is painted by the window/);
+    doc.querySelector(".pgv-page").style.removeProperty("--pgv-bg");
+    // The composer keeps its setting-up controls while a page stands (R-PAGE-15), or is no longer one row: refused.
+    drawn.controls = true;
+    expect(() => checkRendered('page-inplace')).toThrow(/composer is one line while a page stands/);
+    drawn.controls = false;
+    places["cmp-pair"] = rect(312, 872, 344, 904);
+    expect(() => checkRendered('page-inplace')).toThrow(/one row/);
+    places["cmp-pair"] = rect(1040, 840, 1072, 868);
     // An area that scrolls (it once did; the page scrolls in its frame now) is refused.
     const scrolling = doc.querySelector(".pgv-page");
     Object.defineProperty(scrolling, "scrollHeight", { value: 2000, configurable: true }); Object.defineProperty(scrolling, "clientHeight", { value: 900, configurable: true });

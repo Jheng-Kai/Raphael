@@ -144,6 +144,8 @@ export async function run(options) {
     if (options.selected.some(scene => scene.fixture?.pageWindow)) fixture.pageWindowDocs = await pageBaseDocuments(fixture.pageWindowHtml);
     // A two-column page whose rail is one window tall and sticky, its buttons at the rail's foot (R-PAGE-10).
     if (options.selected.some(scene => scene.fixture?.pageRail)) fixture.pageRailDocs = await pageBaseDocuments(fixture.pageRailHtml);
+    // A tall reading page with a light theme of its own, painted on its root: the page R-PAGE-10 and R-PAGE-11 are checked with (no band of the window's own colour).
+    if (options.selected.some(scene => scene.fixture?.pageReading)) fixture.pageReadingDocs = await pageBaseDocuments(fixture.pageReadingHtml);
     // A checklist page as the core serves it, with nothing left on it and with what the owner left on it (R-PAGE-14).
     if (options.selected.some(scene => scene.fixture?.pageState)) {
       const { html, saved } = JSON.parse(await readFile(join(import.meta.dirname, "fixtures/page-state.json"), "utf8"));

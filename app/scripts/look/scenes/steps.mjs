@@ -38,6 +38,8 @@ export const frameScroll = deltaY => ({ action: "frame-scroll", deltaY });
 export const frameExpect = (text, scrollAtLeast) => ({ action: "frame-expect", ...(text ? { text } : {}), ...(scrollAtLeast !== undefined ? { scrollAtLeast } : {}) });
 // What the page's own frame shows: a check run inside it (checks.mjs `checkFrame`).
 export const frameCheck = name => ({ action: "frame-check", name });
+// What the screen shows above ("top") or below ("end") an open page's content, read from a real capture (page-band.mjs).
+export const pageBand = where => ({ action: "page-band", where });
 export const scroll = selector => ({ action: "scroll", selector });
 export const waitScrollEnd = selector => ({ action: "wait-scroll-end", selector });
 export const rightClick = selector => ({ action: "right-click", selector });
