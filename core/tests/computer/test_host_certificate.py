@@ -865,6 +865,11 @@ async def test_native_chrome_chooses_a_client_certificate_by_itself_and_no_windo
         tab, _ = await browser.open_tab(1, tmp_path, 10)
         other = await browser.new_tab(2, tmp_path, 11)
         # The background Chrome has no chooser: the page waits, as it does for a member.
+        try:
+            raw = await asyncio.wait_for(browser.command(tab, "Page.navigate", {"url": fixture["site"]}), 12)
+        except TimeoutError:
+            raw = "waits"
+        print(f"RAW first navigation with no certificate chosen: {raw}", flush=True)
         with pytest.raises(BrowserError, match=waiting):
             await host_page.navigate(browser, tab, fixture["site"])
         assert tab.requested == fixture["site"]
