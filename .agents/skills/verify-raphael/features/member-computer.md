@@ -2531,8 +2531,8 @@ step is R-COMP-CERT-01. On a Mac no Chrome window is ever on the screen: member 
 selecting a tab brings none forward. Core: the new tests of `test_host_certificate.py` (the origin and
 the preferences shape, the writing before every start, the success, the unmatched, refused and asked-again
 cases, the busy and failed starts, the card and the windows) and `test_host_shown_chrome.py` (a taken-over
-Chrome shows nothing on a Mac) and, for a Mac only, `test_native_chrome_on_a_mac_chooses_a_client_certificate_by_itself_and_no_window_of_it_is_on_the_screen`,
-which runs Raphael's own HostBrowser against a real Chrome with `tests/computer/mac_mtls_fixture.py` (a client
+Chrome shows nothing on a Mac) and, for a Mac only, `test_native_chrome_chooses_a_client_certificate_by_itself_and_no_window_of_it_is_on_the_screen`,
+which runs Raphael's own HostBrowser against a real Chrome with `tests/computer/mtls_fixture.py` (a client
 certificate in a keychain of its own and two sites that require one; skipped unless `RAPHAEL_MTLS_FIXTURE` names the file
 the fixture wrote, so it never runs on this PC or in CI; a macOS workflow starts the fixture and sets it, with pyobjc's
 Quartz installed to list the windows on the screen). Measured on a real Mac (a macOS runner with Chrome, a client certificate in

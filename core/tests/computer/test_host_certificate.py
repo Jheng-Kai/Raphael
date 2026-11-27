@@ -7,6 +7,7 @@ import contextlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -822,10 +823,10 @@ async def test_native_chrome_shown_for_a_certificate_keeps_the_pages_and_the_ses
         site.close()
 
 
-MAC_MTLS = os.environ.get("RAPHAEL_MTLS_FIXTURE")  # the file `mac_mtls_fixture.py` wrote: a Mac, its keychain and the sites
-MAC_NATIVE = pytest.mark.skipif(sys.platform != "darwin" or not MAC_MTLS or host_browser.chrome_executable() is None,
-                                reason="needs a Mac with Chrome, a client certificate in its keychain and the sites of "
-                                       "mac_mtls_fixture.py (the macOS workflow)")
+MTLS = os.environ.get("RAPHAEL_MTLS_FIXTURE")  # the file `mtls_fixture.py` wrote: a client certificate and the sites
+MTLS_NATIVE = pytest.mark.skipif(sys.platform not in ("darwin", "win32") or not MTLS or host_browser.chrome_executable() is None,
+                                 reason="needs a Mac or Windows throwaway machine with Chrome, a client certificate in its store "
+                                        "and the sites of mtls_fixture.py (the workflow of the pull request)")
 
 
 def onscreen_windows(pid):
@@ -843,41 +844,51 @@ def onscreen_windows(pid):
     return found
 
 
-@MAC_NATIVE
-async def test_native_chrome_on_a_mac_chooses_a_client_certificate_by_itself_and_no_window_of_it_is_on_the_screen(
-        tmp_path, monkeypatch):
-    fixture = json.loads(Path(MAC_MTLS).read_text(encoding="utf-8"))
+@MTLS_NATIVE
+async def test_native_chrome_chooses_a_client_certificate_by_itself_and_no_window_of_it_is_on_the_screen(tmp_path, monkeypatch):
+    fixture = json.loads(Path(MTLS).read_text(encoding="utf-8"))
     monkeypatch.setattr(host_browser, "AUTO_WAIT_S", 10)
     answer = f"CLIENT-CN={fixture['common_name']}"
     browser = HostBrowser(tmp_path / "profile")
+    waiting = "browser_navigation_waiting|browser_certificate_needed"  # a Chrome with nothing to offer may answer or wait
 
     async def page_text(tab):
         return ((await host_page.evaluate(browser, tab, "document.body.innerText"))[0] or "").strip()
 
     async def windows():
         await asyncio.sleep(1.5)  # a window takes a moment to show or to go
+        if sys.platform == "win32":
+            return visible_windows(browser.process.pid)  # the owner's desktop: the background Chrome has its own
         return onscreen_windows(browser.process.pid)
 
     try:
         tab, _ = await browser.open_tab(1, tmp_path, 10)
         other = await browser.new_tab(2, tmp_path, 11)
         # The background Chrome has no chooser: the page waits, as it does for a member.
-        with pytest.raises(BrowserError, match="browser_navigation_waiting"):
+        with pytest.raises(BrowserError, match=waiting):
             await host_page.navigate(browser, tab, fixture["site"])
         assert tab.requested == fixture["site"]
+        began = time.monotonic()
         assert await browser.sign_in_with_certificate(tab) is None
+        print(f"TIMING auto sign-in (relaunch and load): {time.monotonic() - began:.1f} s", flush=True)
         assert not browser.shown and browser.live(other) and other.ready
+        if sys.platform == "win32":
+            assert isinstance(browser.process, host_browser.DesktopChrome)  # still the background Chrome, on a desktop of its own
         assert await page_text(tab) == answer
         if (found := await windows()) is not None:
             assert found == []
         # Chrome starting from nothing writes the noted origin before it launches: the page needs no step at all.
         await browser._stop()
         again, _ = await browser.open_tab(1, tmp_path, 10)
+        began = time.monotonic()
         assert await host_page.navigate(browser, again, fixture["site"])
+        print(f"TIMING restart and load with the noted origin: {time.monotonic() - began:.1f} s", flush=True)
         assert await page_text(again) == answer
         # A site whose authority none of the certificates here is issued by: nothing to choose, so the owner's step follows.
-        with pytest.raises(BrowserError, match="browser_navigation_waiting"):
+        began = time.monotonic()
+        with pytest.raises(BrowserError, match=waiting):
             await host_page.navigate(browser, again, fixture["other"])
+        print(f"TIMING a page with nothing to choose: {time.monotonic() - began:.1f} s", flush=True)
         assert await browser.sign_in_with_certificate(again) == "certificate_unmatched"
         await browser.show_for_owner(again)
         assert browser.shown
