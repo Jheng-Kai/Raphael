@@ -441,11 +441,68 @@ describe("step 2: the services", () => {
   });
 
   test("a catalog that cannot be read offers another try", async () => {
-    api.integrationsCatalog.mockRejectedValueOnce(new Error("down"));
+    // The read that began with the guide and the one that the step makes when it finds that one failed.
+    api.integrationsCatalog.mockRejectedValueOnce(new Error("down")).mockRejectedValueOnce(new Error("down"));
     await toServices();
     expect(root.querySelector('[data-ob="conn-reload"]')).not.toBeNull();
     await press('[data-ob="conn-reload"]');
     expect(root.querySelector(".ob-tile")).not.toBeNull();
+  });
+
+  test("the store is read from the guide's first page, so the step opens on its apps and never on a lone spinner", async () => {
+    await open();
+    // Nothing of the services step is on screen, and its apps are already being read.
+    expect(root.dataset.step).toBe("welcome");
+    expect(api.integrationsCatalog).toHaveBeenCalledTimes(1);
+    expect(api.connectorsStatus).toHaveBeenCalledTimes(1);
+    expect(api.connectorsCatalog).toHaveBeenCalledTimes(1);
+    await press('[data-ob="next"]');
+    nameFirst("Mochi");
+    await press('[data-ob="next"]');
+    await press('[data-ob="next"]');
+    expect(root.dataset.step).toBe("services");
+    expect(root.querySelector(".spin")).toBeNull();
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["gmail", "notion", "github"]);
+    // The step did not read it again.
+    expect(api.integrationsCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  test("a step opened before the read has answered shows the spinner as a fallback, and the same read fills it", async () => {
+    let answer!: (value: unknown) => void;
+    api.integrationsCatalog.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    await toServices();
+    expect(root.querySelector("#ob-conn .spin")).not.toBeNull();
+    expect(api.integrationsCatalog).toHaveBeenCalledTimes(1);
+    answer({ services: [entry("notion", "Notion")] });
+    await flush();
+    expect(root.querySelector(".spin")).toBeNull();
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["gmail", "notion"]);
+    expect(api.integrationsCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  test("a read that failed before the step is tried again when the step opens", async () => {
+    api.integrationsCatalog.mockRejectedValueOnce(new Error("down"));
+    await toServices();
+    expect(api.integrationsCatalog).toHaveBeenCalledTimes(2);
+    expect(root.querySelector(".ob-tile")).not.toBeNull();
+  });
+
+  test("saving Composio's key reads the store again behind the apps already shown, with no spinner between", async () => {
+    api.connectorsStatus.mockResolvedValueOnce({ composio_configured: false, connectors: [] });
+    api.connectorsSetKey.mockResolvedValue({ configured: true });
+    await toServices();
+    let answer!: (value: unknown) => void;
+    api.integrationsCatalog.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    await press('[data-ob="composio-open"]');
+    const field = root.querySelector<HTMLInputElement>("#ob-composio-input")!;
+    field.value = "ak_synthetic";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await flush();
+    expect(root.querySelector(".spin")).toBeNull();
+    expect(root.querySelector('[data-item="notion"]')).not.toBeNull();
+    answer({ services: [entry("notion", "Notion"), entry("github", "GitHub")] });
+    await flush();
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["gmail", "notion", "github"]);
   });
 
   test("a store that never answers offers another try instead of spinning on", async () => {

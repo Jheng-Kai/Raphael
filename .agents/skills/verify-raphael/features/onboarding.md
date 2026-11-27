@@ -87,6 +87,12 @@ Settings has no 導覽 entry any more;
    opens, inside the card, the choice of service with its key, and for images the model picker. That choice dims the whole
    window like every dialog, the caption strip included (R-UI-141); the window buttons stay on top of the dim.
 
+R-GUIDE-02: the store's apps (the built-in catalog, Composio's state and Composio's apps) are read in the background from the
+welcome on, so the services step opens on its tiles and never on a lone spinner (`onboarding-services` checks
+`onboarding-services-ready` the moment the step is drawn); the spinner stays only for a read that has not answered yet.
+Composio's key field is on this step already (`onboarding-services-composio`, `onboarding-composio-key`,
+`onboarding-composio-saved`); a saved key reads the store again behind the tiles already shown.
+
 Every choice can be gone past without choosing; the first slime asks only for its name. The last step's primary button finishes; a first
 run then saves the device setting `onboarded`, a rerun from Settings does not.
 

@@ -100,6 +100,8 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   // the services
   let services: StoreService[] | "loading" | "failed" = "loading";
   let servicesLoaded = false;
+  /** A read of the store is under way (one that began on the first page is not begun again when the step opens). */
+  let servicesReading = false;
   let servicesRead = 0;
   let waitingService: string | null = null;
   let connectFailed: string | null = null;
@@ -316,7 +318,8 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
         void providers.load();
         break;
       case "services":
-        if (!servicesLoaded || services === "failed") void loadServices();
+        // The read began with the guide, so the apps are usually there already; it starts here only when none is under way.
+        if (services === "failed" || (!servicesLoaded && !servicesReading)) void loadServices();
         break;
       case "abilities":
         void loadAbilities();
@@ -474,8 +477,13 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   async function loadServices(): Promise<void> {
     // A 重試 starts a new read; an older one that answers late changes nothing.
     const mine = ++servicesRead;
-    services = "loading";
-    if (flow.step === "services") repaintBody();
+    servicesReading = true;
+    // The apps already known stay on screen while they are read again (a saved Composio key adds its own); only a step with
+    // nothing yet to show waits behind the spinner.
+    if (!Array.isArray(services)) {
+      services = "loading";
+      if (flow.step === "services") repaintBody();
+    }
     try {
       const [builtin, status] = await Promise.allSettled([within(api.integrationsCatalog(), SERVICES_WAIT_MS), within(api.connectorsStatus(), SERVICES_WAIT_MS)]);
       if (destroyed || mine !== servicesRead) return;
@@ -495,8 +503,9 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       servicesLoaded = true;
     } catch {
       if (mine !== servicesRead) return;
-      services = "failed";
+      if (!Array.isArray(services)) services = "failed";
     }
+    servicesReading = false;
     if (!destroyed && flow.step === "services") repaintBody();
   }
 
@@ -775,5 +784,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     if (focus) root.querySelector<HTMLElement>(focus)?.focus({ preventScroll: true });
   });
 
+  // What the services step needs is read in the background from the first page, so that it is there when the owner arrives.
+  void loadServices();
   render();
 }

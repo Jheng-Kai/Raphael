@@ -5904,6 +5904,13 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name };
   }
+  if (name === "onboarding-services-ready") {
+    // The store was read from the guide's first page: the step opens on its apps the moment it is drawn, never on a lone spinner.
+    require(document.querySelector('#ob')?.dataset.step === 'services', "the services step is open");
+    require(!document.querySelector('#ob-conn .spin'), "the services step shows no loading spinner");
+    require(document.querySelector('[data-ob-services] .ob-tile'), "the services step already shows its apps");
+    return { check: name };
+  }
   if (name === "onboarding-tools" || name === "onboarding-services" || name === "onboarding-abilities") {
     // Each first-run choice is one calm centred column in one card of a designed size: a title with two small slimes
     // floating by it, the choice as tiles in a grid of three (rows for the abilities), one wide black pill and, beside
