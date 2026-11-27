@@ -1119,9 +1119,10 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "wait": { const element = await visible(step.selector, step.timeout); await element.dispose(); break; }
     // A call the window makes on its own, after a debounce or from a frame (a page's state): waited for, never slept for.
+    // `method` is a core method (`members.list`) or a native command (`device_settings_set`).
     case "wait-call":
       try {
-        await page.waitForFunction(({ method, holding }) => window.__look.calls.some(call => call.method === method && (!holding || JSON.stringify(call.params).includes(holding))),
+        await page.waitForFunction(({ method, holding }) => window.__look.calls.some(call => (call.method === method || call.command === method) && (!holding || JSON.stringify(call.params).includes(holding))),
           { timeout: 6000 }, { method: step.method, holding: step.holding ?? "" });
       } catch (error) { throw new Error(`The window never called ${step.method}${step.holding ? ` with ${step.holding}` : ""}`, { cause: error }); }
       break;

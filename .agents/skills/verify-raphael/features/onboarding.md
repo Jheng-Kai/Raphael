@@ -142,7 +142,7 @@ in `main.ts` at the guide's `onDone` (the one call of `offerOnce()`) and from th
   and clear of the caption strip, the bubble on the floating surface and at most 300 px, controls no taller than the control tokens, plain words (no
   exclamation mark, no title, at most two sentences), the cut-out equal to the target's box with its room and rounded, Raphael and the bubble beside the target and
   not over it, the sidebar and the page inert, a surface over the whole window that takes a press on the dim, and Settings open at the step's tab or closed.
-- **Skipped steps** are covered by Vitest (`tour/tour.test.ts`): a target that is not on screen at this width is dropped and the count follows.
+- **Skipped steps** are covered by Vitest only (`tour/tour.test.ts`): every look fixture has all its targets, and a scene must not remove one by hand. A target that is not on screen is dropped and the count follows.
 
 ```powershell
 npm run look -- tour-offer tour-offer-remembered tour-offer-later tour-offer-escape tour-composer tour-team tour-apps tour-permission tour-model tour-usage tour-skills tour-safety tour-keys tour-back tour-end tour-end-closed tour-escape tour-close tour-hop foot-account-menu raphael-entry foot-account-keys --theme both --width 1120,720,1920x1080

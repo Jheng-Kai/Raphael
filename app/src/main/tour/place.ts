@@ -41,8 +41,8 @@ function group(input: PlaceInput, slimeLeft: number, bubbleTop: number, words: "
   const { slime, bubble } = input;
   const bubbleLeft = words === "after" ? slimeLeft + slime + GROUP_GAP : slimeLeft - GROUP_GAP - bubble.width;
   const bubbleBox: Box = { left: bubbleLeft, top: bubbleTop, width: bubble.width, height: bubble.height };
-  // Raphael stands on the ground of the words: its feet at the bubble's foot.
-  const slimeBox: Box = { left: slimeLeft, top: bubbleTop + Math.max(0, bubble.height - slime), width: slime, height: slime };
+  // Raphael stands on the ground of the words: its feet at the bubble's foot (over the bubble's top when the words are one short line).
+  const slimeBox: Box = { left: slimeLeft, top: bubbleTop + bubble.height - slime, width: slime, height: slime };
   const left = Math.min(bubbleBox.left, slimeBox.left), right = Math.max(bubbleBox.left + bubbleBox.width, slimeBox.left + slimeBox.width);
   const top = Math.min(bubbleBox.top, slimeBox.top), bottom = Math.max(bubbleBox.top + bubbleBox.height, slimeBox.top + slimeBox.height);
   return { side: "inside", slime: slimeBox, bubble: bubbleBox, all: { left, top, width: right - left, height: bottom - top } };
@@ -69,10 +69,10 @@ function candidate(side: Side, input: PlaceInput): (Placement & { all: Box }) | 
     const shift = placed.all.left < EDGE ? EDGE - placed.all.left : placed.all.left + placed.all.width > view.width - EDGE ? view.width - EDGE - (placed.all.left + placed.all.width) : 0;
     return { ...group(input, slimeLeft + shift, top, after ? "after" : "before"), side };
   }
-  // inside: the lower right of the target, kept in the window.
+  // inside: the lower right of the target, kept in the window (a target too small to hold it still gives a group that is in view).
   const right = Math.min(spot.left + spot.width, view.width) - 24, bottom = Math.min(spot.top + spot.height, view.height) - 24;
-  const top = Math.max(EDGE_TOP, bottom - bubble.height);
-  return { ...group(input, right - bubble.width - GROUP_GAP - slime, top, "after"), side };
+  const top = Math.max(EDGE_TOP + Math.max(0, slime - bubble.height), bottom - bubble.height);
+  return { ...group(input, Math.max(EDGE, right - bubble.width - GROUP_GAP - slime), top, "after"), side };
 }
 
 /** The first side, best first, whose group lies in the window and clear of the target; `inside` always answers. */

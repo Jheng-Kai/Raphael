@@ -14,7 +14,7 @@ const offer = { onboarding: true, tourOffer: true };
 const begin = [accountMenu("tour"), wait('.tour[data-mode="step"] .tour-bubble')];
 const NEXT = '.tour [data-tour="next"]';
 const BACK = '.tour [data-tour="back"]';
-const at = n => ({ action: "wait-text", selector: ".tour .tour-count", text: `${n}/9` });
+const at = (n, of = 9) => ({ action: "wait-text", selector: ".tour .tour-count", text: `${n}/${of}` });
 /** From the first step to step `n`: one press of 下一步 each. */
 const to = n => [...begin, ...Array.from({ length: n - 1 }, (_, i) => [click(NEXT), at(i + 2)]).flat()];
 const settingsStep = pane => wait(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`);
@@ -23,7 +23,7 @@ export default [
   scene("tour-offer", "After the first-run guide Raphael springs out of the account button at the bottom left and asks whether you want a tour, with how long it takes; two buttons, nothing dimmed, the window still works under it",
     [...offered, check("tour-offer")], offer),
   scene("tour-offer-remembered", "The offer is kept in the device settings the moment it shows, so that it never comes again on its own",
-    [...offered, waitCall("device_settings_set", "tour_offered"), check("tour-offer")], offer),
+    [...guide, waitCall("device_settings_set", "tour_offered"), wait('.tour[data-mode="offer"] .tour-bubble'), check("tour-offer")], offer),
   scene("tour-offer-later", "之後再說 closes the offer: Raphael says where to find the tour again and fades, and the window is as it was",
     [...offered, click('.tour [data-tour="later"]'), wait('.tour[data-mode="bye"]'), check("tour-bye")], offer),
   scene("tour-offer-escape", "Escape closes the offer the same way",

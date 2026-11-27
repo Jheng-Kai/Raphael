@@ -60,6 +60,18 @@ test("pointing at nothing puts the group in the middle of the window", () => {
   expect(found.bubble.top).toBe(Math.round((view.height - bubble.height) / 2));
 });
 
+test("one short line of words leaves Raphael standing taller than its bubble, clear of the target and in the window", () => {
+  const face: Box = { left: 8, top: 854, width: 40, height: 40 };
+  const found = placeGroup({ ...base, bubble: { width: 230, height: 47 }, spot: face, prefer: ["above"], align: "start" });
+  expect(found.side).toBe("above");
+  expect(apart(found.slime, face) && apart(found.bubble, face)).toBe(true);
+  expect(bottom(found.slime)).toBe(bottom(found.bubble));
+  expect(found.slime.left).toBeGreaterThanOrEqual(EDGE);
+  // A target too small to hold the group inside still gives a group that is in the window.
+  const tiny = placeGroup({ ...base, bubble: { width: 230, height: 47 }, spot: { left: 4, top: 880, width: 10, height: 10 }, prefer: ["inside"] });
+  expect(tiny.slime.left).toBeGreaterThanOrEqual(EDGE);
+});
+
 test("the offer stands over the account button at its left edge", () => {
   const face: Box = { left: 16, top: 856, width: 44, height: 44 };
   const found = placeGroup({ ...base, spot: face, prefer: ["above"], align: "start" });

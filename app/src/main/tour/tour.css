@@ -5,8 +5,8 @@
 .tour-catch { position: absolute; inset: 0; display: none; pointer-events: auto; }
 .tour[data-mode="step"] .tour-catch { display: block; }
 .tour[data-dim="all"] .tour-catch { background: var(--scrim); }
-/* The cut-out is a box whose shadow is the dim; it moves with the step. */
-.tour-spot { position: absolute; box-shadow: 0 0 0 100vmax var(--scrim); pointer-events: none; transition: left 300ms ease, top 300ms ease, width 300ms ease, height 300ms ease, border-radius 300ms ease; }
+/* The cut-out is a box whose shadow is the dim; it moves with the step. Its hairline is the window's own line token, so that a black sidebar still stands out of a dimmed black page. */
+.tour-spot { position: absolute; box-shadow: 0 0 0 1px var(--line-lit), 0 0 0 100vmax var(--scrim); pointer-events: none; transition: left 300ms ease, top 300ms ease, width 300ms ease, height 300ms ease, border-radius 300ms ease; }
 .tour-slime { position: absolute; width: 64px; height: 64px; transform-origin: 50% 100%; pointer-events: none; }
 
 /* The bubble floats like a menu: the floating surface and its edge, controls filled with the control colour. */

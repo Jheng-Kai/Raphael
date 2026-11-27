@@ -4436,9 +4436,10 @@ export function checkRendered(name, context = {}) {
     const root = roots[0], bubble = root.querySelector('.tour-bubble'), slime = root.querySelector('.tour-slime'), spot = root.querySelector('.tour-spot'), catcher = root.querySelector('.tour-catch');
     require(visible(bubble) && visible(slime), "Raphael and its bubble are drawn");
     const view = { w: document.documentElement.clientWidth, h: document.documentElement.clientHeight };
+    const account = document.querySelector('#nav .sidebar-account').getBoundingClientRect();
     const inside = r => r.left >= 0 && r.top >= 0 && r.right <= view.w && r.bottom <= view.h;
     const b = bubble.getBoundingClientRect(), s = slime.getBoundingClientRect();
-    require(inside(b) && inside(s), `Raphael and its bubble are inside the window (bubble ${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)}, Raphael ${Math.round(s.left)},${Math.round(s.top)})`);
+    require(inside(b) && inside(s), `Raphael and its bubble are inside the window (bubble ${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)}, Raphael ${Math.round(s.left)},${Math.round(s.top)}; window ${view.w}x${view.h}, account ${[account.left, account.top, account.width, account.height].map(Math.round)})`);
     require(b.top >= 32, "the bubble clears the caption strip");
     // Raphael's own blue slime, drawn as the account menu draws it.
     const face = slime.querySelector('.slime-surface');
@@ -4455,7 +4456,6 @@ export function checkRendered(name, context = {}) {
     require(buttons.every(button => visible(button) && button.getBoundingClientRect().height <= 26.5), "every control hugs its words: no taller than the control tokens");
     for (const button of buttons.filter(button => button.textContent.trim())) require(button.scrollWidth <= button.clientWidth + 1, `the words of ${button.textContent} show whole`);
     const ids = buttons.map(button => button.dataset.tour);
-    const account = document.querySelector('#nav .sidebar-account').getBoundingClientRect();
     const touches = (a, c) => a.left < c.right && a.right > c.left && a.top < c.bottom && a.bottom > c.top;
     if (name === "tour-offer" || name === "tour-bye") {
       require(root.dataset.mode === (name === "tour-offer" ? 'offer' : 'bye') && root.dataset.dim === 'none', "no dim: the window is not covered");
