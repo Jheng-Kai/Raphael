@@ -40,7 +40,7 @@ def instruction(intent):
                 "confirming what changed in one sentence. Permission changes are the owner's own: point them to "
                 "the 權限 choice under the message box.</panel_intent_step>")
     if intent == "import-skill":
-        return ("\n\n<panel_intent_step>The owner handed material to Settings > Team skills > Import, and it is not a skill yet "
+        return ("\n\n<panel_intent_step>The owner handed material to the Import dialog of Team skills (in Settings), and it is not a skill yet "
                 "(the importer takes only a SKILL.md with its front matter, a pack or a plugin), so you turn it into one with the "
                 "owner, one step at a time, in the owner's language and in short plain sentences. The material is what the "
                 "message says: text in it, an attached file (read_attachment), a web address (web_read), or a place on this computer "
@@ -53,8 +53,8 @@ def instruction(intent):
                 "(front matter with a lower-case name and a description of when to use it, then the steps in the material's own words, "
                 "never invented) and only the files its steps need. (4) Import that folder with the member_manage tool's action "
                 "member_library_import (find_tools finds it), source = the folder's full path; the owner's approval card asks first, and a name already taken is "
-                "said with who holds it, then ask for another. (5) End in one sentence: the skill's name, that it is in Settings > "
-                "Team skills for the whole team, and that who may use it can be changed there. If nothing in the material can become "
+                "said with who holds it, then ask for another. (5) End in one sentence: the skill's name, that it is in Team skills (in "
+                "Settings) for the whole team, and that who may use it can be changed there. If nothing in the material can become "
                 "a skill, say why in one sentence and stop.</panel_intent_step>")
     if intent == "share-template":
         return ("\n\n<panel_intent_step>The owner pressed Share on your panel. Call share_template now with a short description "

@@ -984,7 +984,10 @@ pub async fn pick_output_folder(
 /// The file or folder the owner chose in one panel (macOS: the system's open panel takes both at once); cancelling changes
 /// nothing. Elsewhere the dialog plugin's panels take files or folders, never both, so the window asks for each.
 #[tauri::command]
-pub async fn pick_import_source(app: AppHandle, webview: Webview) -> Result<Option<String>, String> {
+pub async fn pick_import_source(
+    app: AppHandle,
+    webview: Webview,
+) -> Result<Option<String>, String> {
     require_main(&webview)?;
     #[cfg(target_os = "macos")]
     {

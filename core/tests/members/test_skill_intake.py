@@ -253,3 +253,32 @@ async def test_a_member_imports_a_git_address_only_with_the_owners_yes(rig):
     from raphael_core import management
 
     assert management.REGISTRY["member_library_import"].destructive and management.TIERS["member_library_import"].name == "T3"
+
+
+async def test_a_members_import_is_refused_with_its_reason_and_never_handed_over(rig, work):
+    """The hand-off is the window's: a tool that imports material that is no skill is told it is none, and nothing is put anywhere."""
+    for params in ({"text": "just some notes"}, upload("guide.pdf", PDF)):
+        with pytest.raises(RpcError) as caught:
+            await rig.call("skills.library.import", {**params, "handoff": False})
+        assert "front_matter" in str(caught.value) or "source" in str(caught.value) or "skill" in str(caught.value)
+    with pytest.raises(RpcError):
+        await rig.call("skills.library.import", {"text": "x", "handoff": "yes"})
+    assert not (work / "skill-sources").exists() or not list((work / "skill-sources").iterdir())
+
+
+async def test_raphaels_import_tool_asks_the_library_for_no_hand_off(rig):
+    from raphael_core.brain.settings import SettingsStore
+
+    SettingsStore(rig.conn).set("action_mode", "bypass")
+    asked = []
+    original = rig.service._management_rpc
+
+    async def watching(method, params):
+        asked.append((method, dict(params)))
+        return await original(method, params)
+    rig.service._management_rpc = watching
+    with pytest.raises(RpcError) as caught:
+        await rig.service.admin_tool(0, "member_manage", {"action": "member_library_import", "arguments": {"text": "just notes"}},
+                                      interactive=True)
+    assert "front_matter" in str(caught.value)
+    assert asked == [("skills.library.import", {"text": "just notes", "handoff": False})]

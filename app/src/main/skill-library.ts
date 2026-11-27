@@ -692,7 +692,7 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
     const menu = openPopover(anchor,
       `<button type="button" role="menuitem" tabindex="-1" data-pick="files"><span class="mlead" aria-hidden="true">${ico("file")}</span><span class="mt">${esc(t("skillLib.chooseFiles"))}</span></button>` +
       `<button type="button" role="menuitem" tabindex="-1" data-pick="folder"><span class="mlead" aria-hidden="true">${ico("folder")}</span><span class="mt">${esc(t("skillLib.folder"))}</span></button>`,
-      { className: "menu skl-pick-menu", role: "menu", label: t("skillLib.choose"), placement: "start" });
+      { className: "menu skl-pick-menu", role: "menu", label: t("skillLib.choose"), placement: "below" });
     menu.addEventListener("click", event => {
       const pick = (event.target as Element).closest<HTMLElement>("[data-pick]")?.dataset.pick;
       if (!pick) return;

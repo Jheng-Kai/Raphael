@@ -78,7 +78,7 @@ export default [
   scene("skill-library-handoff-back", "Back in Settings after a hand-off, Team skills shows nothing half-done: no dialog, no draft, no error", [
     ...importing, type("#skl-input", "https://example.com/handbook"), click('[data-skl="import-go"]'),
     wait('[data-owner-question="skill-choice"]'), ...settings("skills"), wait(".skl-pack"), click('[data-skl="import-open"]'), wait(".skl-dlg #skl-input"),
-    check("skill-library-handoff-back")], { skillHandoff: HANDOFFS }),
+    check("skill-library-handoff-back"), key("Escape"), waitGone(".skl-dlg")], { skillHandoff: HANDOFFS }),
   scene("skill-library-fetching", "A Git address being fetched says where from, in the row of the choose button, and nothing moves", [
     ...importing, type("#skl-input", "git@gitlab.example.com:group/handbook.git"), click('[data-skl="import-go"]'),
     wait('.skl-progress[role="status"]:not(:empty)'), check("skill-library-fetching")], { skillImportPending: true }),

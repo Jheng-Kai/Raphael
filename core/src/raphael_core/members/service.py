@@ -183,9 +183,9 @@ class HandOff(Exception):
     """The direct import found material that is no skill: Raphael looks at it with the owner (skill_intake.py). `kept` is the
     folder a Git address was fetched into, which stays where Raphael reads it."""
 
-    def __init__(self, kept=None):
+    def __init__(self, error, kept=None):
         super().__init__()
-        self.kept = kept
+        self.error, self.kept = error, kept
 
 
 def _rpc_error(error: MemberError) -> RpcError:
@@ -986,6 +986,11 @@ class MembersService:
         """The one box of Team skills: whatever is a skill or a plugin imports directly, with no model and no agent. What is
         not one is no work of the dialog: the answer is `handoff`, what the window needs to give the material to Raphael's own
         conversation (skill_intake.py)."""
+        # The window asks for the hand-off (the default); a member's tool never does: it is told why the material is no skill.
+        params = dict(params) if isinstance(params, dict) else params
+        handoff = params.pop("handoff", True) if isinstance(params, dict) else True
+        if type(handoff) is not bool:
+            raise invalid_params("handoff must be true or false")
         try:
             params = routed(params)
         except MemberError as error:
@@ -995,6 +1000,10 @@ class MembersService:
         try:
             key, _, _, skipped = await self._import_package(-1, params, new_package=True)
         except HandOff as instead:
+            if not handoff:
+                if instead.kept is not None:
+                    shutil.rmtree(instead.kept, ignore_errors=True)
+                raise _library_error(instead.error) from None
             try:
                 parent = getattr(self, "member_folders", default_folders)(0)[0]
                 return {"handoff": await hand_over(params, parent, kept=instead.kept)}
@@ -1113,7 +1122,7 @@ class MembersService:
                                                          skipped=skipped)
         except MemberError as error:
             if new_package and member == -1 and "plugin" not in params and needs_agent(error):
-                raise HandOff(getattr(error, "material", None)) from None
+                raise HandOff(error, getattr(error, "material", None)) from None
             if getattr(error, "material", None) is not None:
                 shutil.rmtree(error.material, ignore_errors=True)
             raise (_library_error if member == -1 else _rpc_error)(error) from None
@@ -2410,6 +2419,9 @@ class MembersService:
         if action.service != "rpc":
             raise invalid_params("This action requires its existing owner card service")
         params = {"key": action.setting, "value": arguments["value"]} if action.setting else dict(arguments)
+        if action.rpc == "skills.library.import":
+            # A member's import is a tool call: material that is no skill is refused with its reason (no_skill), never handed over.
+            params["handoff"] = False
         result = await self._management_rpc(action.rpc, params)
         if action.setting or name == "settings_read":
             # The UI response includes internal provider/device/authority state.
