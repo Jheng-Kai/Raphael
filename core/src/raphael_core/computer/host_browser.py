@@ -261,6 +261,16 @@ COOKIE_FIELDS = ("name", "value", "domain", "path", "secure", "httpOnly", "sameS
 # Where the profile says which Chrome is the one shown for a certificate and still running (`_write_shown_record`): a file of
 # its own in the profile's folder, which Chrome neither reads nor writes.
 SHOWN_RECORD = "raphael-shown-chrome.json"
+# The origins whose client certificate Chrome chooses by itself (R-COMP-CERT-02), and whether the owner was told what macOS may
+# ask the first time: a file of its own in the profile, which Chrome neither reads nor writes. Raphael writes the origins into
+# Chrome's own preferences (`write_auto_select`) before every start of a Chrome.
+AUTO_RECORD = "raphael-auto-certificates.json"
+AUTO_ORIGINS = 64  # origins kept; the oldest go first
+# How long a page gets to load once Chrome is told to choose the certificate by itself. macOS may ask the owner whether Chrome may
+# use the certificate's key meanwhile, and a Chrome that finds nothing to choose never answers.
+AUTO_WAIT_S = 60
+# The value of the setting: one filter with nothing in it, which matches every certificate Chrome has to offer.
+AUTO_SETTING = {"filters": [{}]}
 DOWNLOADS = Path(".raphael") / "downloads"  # where a page's download is placed in the member's work folder (#331)
 IGNORE = "# Raphael's own files, such as members' downloads.\n*\n"
 # Where a folder can be opened relative to another, each folder of `.raphael/downloads` is opened from the one before it
@@ -583,6 +593,78 @@ def page_url(value):
     raise BrowserError("browser_url")
 
 
+def certificate_origin(url):
+    """The origin a client certificate is chosen for, as Chrome names it in its settings (`https://host:port`, the port always
+    written), or None for an address that is not a secure web page."""
+    try:
+        parts = urlsplit(url)
+        host, port = parts.hostname, parts.port
+    except ValueError:
+        return None
+    if parts.scheme != "https" or not host or parts.username or parts.password or any(ord(char) < 32 for char in url):
+        return None
+    return f"https://{f'[{host}]' if ':' in host else host.lower()}:{port or 443}"
+
+
+def write_auto_select(profile, origins):
+    """Tell Chrome's profile to choose the client certificate for these origins by itself, with no chooser (the website setting
+    AUTO_SELECT_CERTIFICATE, which Chrome reads from the profile's preferences as it reads the enterprise policy
+    AutoSelectCertificateForUrls): an exception per origin whose filter matches every certificate the site accepts, since
+    Chrome offers only the ones the site's issuers name. Called while Chrome is not running (it writes the file itself as it
+    quits); the entries are Raphael's alone, so the whole setting is replaced. Whether the file is as wanted."""
+    file = Path(profile) / "Default" / "Preferences"
+    try:
+        preferences = json.loads(file.read_text(encoding="utf-8")) if file.exists() else {}
+    except (OSError, ValueError):
+        return False  # a file Chrome cannot read is Chrome's to repair, never overwritten
+    if not isinstance(preferences, dict):
+        return False
+    settings = preferences.get("profile")
+    settings = settings.get("content_settings") if isinstance(settings, dict) else None
+    settings = settings.get("exceptions") if isinstance(settings, dict) else None
+    before = settings.get("auto_select_certificate") if isinstance(settings, dict) else None
+    before = before if isinstance(before, dict) else {}
+    stamp = str(int((time.time() + 11644473600) * 1_000_000))  # Chrome's time: microseconds since 1601
+    wanted = {}
+    for origin in origins:
+        pattern = f"{origin},*"
+        kept = before.get(pattern)
+        wanted[pattern] = kept if isinstance(kept, dict) and kept.get("setting") == AUTO_SETTING else {
+            "last_modified": stamp, "setting": AUTO_SETTING}
+    if wanted == before:
+        return True
+    target = preferences
+    for key in ("profile", "content_settings", "exceptions"):
+        if not isinstance(target.get(key), dict):
+            target[key] = {}
+        target = target[key]
+    if wanted:
+        target["auto_select_certificate"] = wanted
+    else:
+        target.pop("auto_select_certificate", None)
+    temporary = file.with_name(file.name + ".raphael")
+    try:
+        file.parent.mkdir(parents=True, exist_ok=True)
+        temporary.write_text(json.dumps(preferences, separators=(",", ":")), encoding="utf-8")
+        os.replace(temporary, file)
+    except OSError:
+        logger.warning("Raphael's Chrome could not be told which certificate to choose", exc_info=True)
+        with suppress(OSError):
+            temporary.unlink()
+        return False
+    return True
+
+
+def member_window(shown):
+    """Where a member's new tab opens: a window of its own (each has its own surface to stream), kept off the owner's screen.
+    Windows hides it far off every screen (`DesktopChrome`'s own desktop, or a position far off); a Mac moves a window placed
+    there back onto the screen, so a Chrome that has windows there (`shown`) opens each one minimized, which keeps it off the
+    screen with no flash and still loads, streams and takes input. A Mac's headless Chrome has no windows."""
+    if sys.platform == "darwin" and not headless_chrome(shown):
+        return {"left": -32000, "top": -32000, "width": VIEWPORT[0], "height": VIEWPORT[1], "windowState": "minimized"}
+    return {"left": -32000, "top": -32000} if os.name != "nt" or shown else {}
+
+
 class DevTools:
     def __init__(self, socket, event):
         self.socket, self.event = socket, event
@@ -701,6 +783,9 @@ class HostBrowser:
         # the background one again then.
         self.shown = False
         self.shown_since = 0.0  # when that Chrome started, as the record in the profile says it
+        # Members whose page asks for a certificate that Chrome is trying to choose by itself (`sign_in_with_certificate`),
+        # for the Computer view to say so: the host's name and whether macOS may ask about the key.
+        self.signing_in = {}
         self.current = {}
         self.owner_closed = {}
         self.owner_closed_current = {}
@@ -878,6 +963,9 @@ class HostBrowser:
                 while (previous := await self._connect()) is not None:
                     await previous.close()
                     await asyncio.sleep(0.1)
+        # Chrome chooses the certificates of the origins it was told about without asking: Chrome is not running here, which is
+        # the only time its preferences can be changed (R-COMP-CERT-02).
+        write_auto_select(self.profile, self._auto_record()["origins"])
         marker = await asyncio.start_server(self._startup_page, "127.0.0.1", 0)
         try:
             self.startup_url = f"http://127.0.0.1:{marker.sockets[0].getsockname()[1]}/{secrets.token_hex(16)}"
@@ -974,6 +1062,49 @@ class HostBrowser:
         with suppress(OSError):
             (self.profile / SHOWN_RECORD).unlink()
 
+    def _auto_record(self):
+        """What the profile says of the certificates Chrome chooses by itself: the origins (oldest first) and whether the owner
+        was told what macOS may ask. Whatever is not whole is left out."""
+        try:
+            record = json.loads((self.profile / AUTO_RECORD).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            record = None
+        if not isinstance(record, dict) or record.get("version") != 1:
+            record = {}
+        origins = record.get("origins")
+        origins = [origin for origin in origins if isinstance(origin, str) and certificate_origin(origin) == origin
+                   ] if isinstance(origins, list) else []
+        return {"version": 1, "origins": list(dict.fromkeys(origins))[-AUTO_ORIGINS:], "told": record.get("told") is True}
+
+    def _save_auto_record(self, record):
+        file = self.profile / AUTO_RECORD
+        temporary = file.with_name(file.name + ".tmp")
+        try:
+            temporary.write_text(json.dumps(record), encoding="utf-8")
+            os.replace(temporary, file)
+        except OSError:
+            logger.warning("Raphael's Chrome could not note which certificates it chooses", exc_info=True)
+            with suppress(OSError):
+                temporary.unlink()
+
+    def _remember_auto(self, origin):
+        record = self._auto_record()
+        record["origins"] = [item for item in record["origins"] if item != origin] + [origin]
+        self._save_auto_record({**record, "origins": record["origins"][-AUTO_ORIGINS:]})
+
+    def _forget_auto(self, origin):
+        record = self._auto_record()
+        if origin in record["origins"]:
+            self._save_auto_record({**record, "origins": [item for item in record["origins"] if item != origin]})
+
+    def _tell_keychain(self):
+        """Whether the owner is yet to be told what macOS may ask when Chrome first uses a certificate's key (once, ever)."""
+        record = self._auto_record()
+        if sys.platform != "darwin" or record["told"]:
+            return False
+        self._save_auto_record({**record, "told": True})
+        return True
+
     async def _adopt_shown(self):
         """Take over the Chrome shown for a certificate that an earlier run left running (`_detach`), called under lock: it
         holds the certificate the owner chose, which a Chrome stopped and started again would not. Only a Chrome the profile
@@ -1015,7 +1146,7 @@ class HostBrowser:
         keep = next((target for target, info in pages.items() if info["url"] == "about:blank"), None)
         if keep is None:
             keep = (await cdp.call("Target.createTarget", {"url": "about:blank", "newWindow": True, "background": True,
-                                                           "left": -32000, "top": -32000}))["targetId"]
+                                                           **member_window(True)}))["targetId"]
         stale = set(pages) - {keep}
         for _ in range(10):
             if not stale:
@@ -1316,7 +1447,7 @@ class HostBrowser:
     async def show_for_owner(self, tab):
         """A page asked for a client certificate (#345). Chrome draws its chooser in a window, which a Chrome no one sees
         has none, so Chrome is started once more where the owner sees it, with every member's tab bound to it again
-        (`_start_shown`), and the tab's window comes to the front. It stays so, the window out of the way once the owner is
+        (`_relaunch`), and the tab's window comes to the front. It stays so, the window out of the way once the owner is
         done (`tuck_away`): the certificate they chose is kept in the memory of that Chrome only. It outlives the app
         (`_detach`, taken over by the next run, `_adopt_shown`), and is the background Chrome again only when Chrome starts
         anew (`_stop`), whether it was quit or crashed."""
@@ -1325,16 +1456,70 @@ class HostBrowser:
                 raise BrowserError("browser_tab_changed")
             fresh = not self.shown
             if fresh:
-                await self._start_shown(tab)
+                await self._relaunch(tab, shown=True)
             await self._present(tab, fresh)
 
-    async def _start_shown(self, first):
-        """Stop Chrome and start it again to be seen, called under lock. Each tab keeps its identity (what the viewer, the
-        owner's hold and a waiting card refer to) and is bound to a target of the new Chrome, given its setup again and
-        opened at its page again; session cookies, which no Chrome keeps once it stops, are carried over. What a page held in
-        memory is lost, as when Chrome starts anew. The tabs' locks are taken first, so no action runs on a tab meanwhile and
-        one in flight is waited for; a tab still held after `SWAP_WAIT_S` leaves everything as it was."""
+    async def sign_in_with_certificate(self, tab):
+        """A page asked for a client certificate (#345): first Chrome is told to choose it by itself (R-COMP-CERT-02), the way
+        the owner's own Chrome is by the enterprise policy that does it, so that no window opens on their screen. The origin is
+        written into the profile's preferences and the background Chrome starts again (`_relaunch`, as for the owner's choice),
+        and the page is opened again. Returns None when the page loaded, else why the owner has to choose: "" (nothing was
+        tried), "certificate_refused" (the keychain did not let Chrome use the key) or "certificate_unmatched" (Chrome has no
+        certificate to choose, or the origin was chosen for before and the page still asks). A Chrome that is shown already
+        keeps the choice the owner made in it."""
+        origin = certificate_origin(tab.requested or tab.url)
+        if origin is None or self.shown or not self.live(tab):
+            return ""
+        if origin in self._auto_record()["origins"]:
+            self._forget_auto(origin)  # it was chosen for and the page still asks: the owner chooses, and a later start may try again
+            return "certificate_unmatched"
+        self._remember_auto(origin)
+        host = urlsplit(origin).hostname
+        self.signing_in[tab.member] = {"host": host, "keychain": self._tell_keychain()}
+        self.notify_view()
+        navigation = None
+        try:
+            async with self.lock:
+                if not self.live(tab):
+                    raise BrowserError("browser_tab_changed")
+                navigation = await self._relaunch(tab, shown=False, wait_first=True)
+            if navigation is None:
+                raise BrowserError("browser_tab_changed")
+            try:
+                async with asyncio.timeout(AUTO_WAIT_S):
+                    result = await navigation
+            except TimeoutError:
+                result = {"errorText": "net::ERR_SSL_CLIENT_AUTH_CERT_NEEDED"}
+            error = result.get("errorText", "")
+            if not error or result.get("isDownload"):
+                tab.requested = ""
+                return None
+            self._forget_auto(origin)
+            if error.startswith("net::ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED"):
+                return "certificate_refused"
+            if error.startswith(("net::ERR_SSL_CLIENT_AUTH_", "net::ERR_BAD_SSL_CLIENT_AUTH_")):
+                return "certificate_unmatched"
+            tab.requested = ""
+            raise BrowserError("browser_navigation_failed")
+        except BaseException:
+            self._forget_auto(origin)
+            raise
+        finally:
+            if navigation is not None and not navigation.done():
+                navigation.cancel()
+                await asyncio.gather(navigation, return_exceptions=True)
+            self.signing_in.pop(tab.member, None)
+            self.notify_view()
+
+    async def _relaunch(self, first, *, shown, wait_first=False):
+        """Stop Chrome and start it again, to be seen or the background one, called under lock. Each tab keeps its identity
+        (what the viewer, the owner's hold and a waiting card refer to) and is bound to a target of the new Chrome, given its
+        setup again and opened at its page again; session cookies, which no Chrome keeps once it stops, are carried over. What
+        a page held in memory is lost, as when Chrome starts anew. The tabs' locks are taken first, so no action runs on a tab
+        meanwhile and one in flight is waited for; a tab still held after `SWAP_WAIT_S` leaves everything as it was. With
+        `wait_first` the first tab's navigation is returned as a task, to be waited for once the locks are let go."""
         held = []
+        navigation = None
         try:
             try:
                 async with asyncio.timeout(self.SWAP_WAIT_S):
@@ -1347,7 +1532,7 @@ class HostBrowser:
             urls = {item.id: self._reopen_url(item) for item in tabs}
             cookies = await self._session_cookies()
             await self._stop(keep_tabs=True)
-            self.shown = True
+            self.shown = shown
             try:
                 await self.start()
                 await self._restore_cookies(cookies)
@@ -1361,8 +1546,16 @@ class HostBrowser:
                 raise
             for item in tabs:
                 if urls[item.id]:
-                    self._send(item.session, "Page.navigate", {"url": urls[item.id]})
+                    if wait_first and item is first:
+                        navigation = asyncio.create_task(self.command(item, "Page.navigate", {"url": urls[item.id]}))
+                    else:
+                        self._send(item.session, "Page.navigate", {"url": urls[item.id]})
             self.notify_view()
+            return navigation
+        except BaseException:
+            if navigation is not None:
+                navigation.cancel()
+            raise
         finally:
             for item in held:
                 item.lock.release()
@@ -1436,7 +1629,10 @@ class HostBrowser:
         """The tab's window on the owner's screen, in front. A Chrome shown before may have it out of the way, and the page
         still waiting for its certificate is asked for again, as the chooser the owner left may be gone."""
         if not fresh:
-            await self._window(tab, {"windowState": "normal", "left": 60, "top": 60})
+            # In two steps: a window brought back from where it was tucked keeps its place unless it is moved once it is a
+            # normal window again (a Mac left it mostly off the screen).
+            await self._window(tab, {"windowState": "normal"})
+            await self._window(tab, {"left": 60, "top": 60, "width": VIEWPORT[0], "height": VIEWPORT[1] - 100})
             if url := self._openable(tab.requested):
                 self._send(tab.session, "Page.navigate", {"url": url})
         await self.command(tab, "Page.bringToFront")
@@ -1449,9 +1645,8 @@ class HostBrowser:
 
     async def _create_target(self):
         # Each tab has its own compositor surface even while a peer's tab is shown.
-        bounds = {"left": -32000, "top": -32000} if os.name != "nt" or self.shown else {}
         return (await self.cdp.call("Target.createTarget", {"url": "about:blank", "newWindow": True,
-                                                            "background": True, **bounds}))["targetId"]
+                                                            "background": True, **member_window(self.shown)}))["targetId"]
 
     async def new_tab(self, member, workspace, conversation=None, *, previous=None):
         target = await self._take_startup_target()
@@ -1521,7 +1716,10 @@ class HostBrowser:
     async def activate(self, tab):
         if not self.live(tab):
             raise BrowserError("browser_tab_changed")
-        await self.command(tab, "Page.bringToFront")
+        # Bringing a minimized window to the front brings it back onto the screen: a Mac's Chrome that has windows keeps them
+        # where they are, and the view streams whichever tab is selected.
+        if not (sys.platform == "darwin" and not headless_chrome(self.shown)):
+            await self.command(tab, "Page.bringToFront")
         if not self.live(tab):
             raise BrowserError("browser_tab_changed")
         self.select(tab)

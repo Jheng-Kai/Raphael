@@ -245,6 +245,31 @@ async def test_the_next_run_takes_over_the_shown_chrome_and_closes_its_old_pages
     assert len(chrome.sent("Page.bringToFront")) == 1 and not seen
 
 
+async def test_a_taken_over_chrome_puts_no_window_on_a_macs_screen_until_a_certificate_step_asks_for_it(tmp_path, system, monkeypatch):
+    # The owner's report: windows kept opening on the Mac. A window placed far off is put back on a Mac's screen, and bringing a
+    # minimized one to the front shows it again, so at the next start nothing is shown or made, except minimized.
+    monkeypatch.setattr(host_browser.sys, "platform", "darwin")
+    monkeypatch.delenv("RAPHAEL_MAC_HEADED", raising=False)
+    first, chrome = shown_browser(tmp_path, {"old": "https://app.example.test/old"})  # no blank page to keep: one is made
+    await first.aclose()
+    kept = chrome.sent("Target.createTarget")
+    assert len(kept) == 1 and kept[0]["windowState"] == "minimized" and kept[0]["left"] == kept[0]["top"] == -32000
+    second, _ = next_run(tmp_path, monkeypatch, chrome)
+    launches(monkeypatch)
+    assert await second.start() is False and second.shown
+    assert [params["bounds"] for params in chrome.sent("Browser.setWindowBounds")] == [{"windowState": "minimized"}] * 2
+    assert not chrome.sent("Page.bringToFront")
+    tab, _ = await second.open_tab(1, tmp_path, 10)
+    assert chrome.sent("Target.createTarget")[-1]["windowState"] == "minimized"
+    await second.activate(tab)  # selecting the member's tab in the view shows no window either
+    assert not chrome.sent("Page.bringToFront")
+    assert len(chrome.sent("Browser.setWindowBounds")) == 2
+    # The certificate step is what brings the window: normal, placed, in front.
+    await second.show_for_owner(tab)
+    assert [params["bounds"].get("windowState") for params in chrome.sent("Browser.setWindowBounds")][2:] == ["normal", None]
+    assert len(chrome.sent("Page.bringToFront")) == 1
+
+
 async def test_a_shown_chrome_the_same_run_let_go_of_is_taken_over_again(tmp_path, system, monkeypatch):
     # The app may close its computer (clearing the history) and use it again without quitting.
     browser, chrome = shown_browser(tmp_path)

@@ -634,6 +634,9 @@ class DesktopViewer:
                 "control": "owner" if owner and (owner is session or session is None and owner.conversation_id == conversation) else "member",
                 "preview_allowed": owner is None and card is None,
                 **({"target": target} if running else {}),
+                # Chrome is choosing the client certificate by itself (R-COMP-CERT-02): the view says so, and for the first
+                # time on a Mac what the keychain may ask.
+                **({"signing_in": self.host_browser.signing_in[member]} if member in self.host_browser.signing_in else {}),
                 **({"works": [{"id": tab.id, "turn_id": tab.turn_id, "transport": "host",
                                                 "state": "done" if tab.finished else "running", "tool": "browser_open",
                                                 "reason": ""}]} if running and tab.turn_id and tab.conversation == conversation else {}),
