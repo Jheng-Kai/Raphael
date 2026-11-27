@@ -3,7 +3,7 @@
 // place it had, it does not read as "at the bottom". What stands under the thread growing or shrinking is the thread's one stick
 // to the bottom (message-rich.test.ts).
 import { afterEach, expect, test, vi } from "vitest";
-import { keepReadingPlace, NUDGE_PX, SETTLE_MS } from "./reading-place";
+import { holdLines, keepReadingPlace, NUDGE_PX, SETTLE_MS } from "./reading-place";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
@@ -92,6 +92,37 @@ function scrollerAt(top: number): { scroller: HTMLElement; view: { width: number
   return { scroller, view, notify: () => notify(), tops, frames };
 }
 const frame = (frames: (() => void)[]): void => { frames.splice(0).forEach(run => run()); };
+
+test("while an edge is held the column keeps its lines: the pane's width changes and nothing is placed; let go, the place is kept once", () => {
+  const at = scrollerAt(1200);
+  const column = document.createElement("div");
+  column.className = "ra-col";
+  at.scroller.className = "ra-scroll";
+  at.scroller.append(column);
+  document.body.append(at.scroller);
+  // The line read stands 40 px under the view's top; the lines set again for a narrower column put it 300 px further down.
+  let itemAt = 1240;
+  const item = document.createElement("div");
+  item.className = "item";
+  item.getBoundingClientRect = () => ({ top: itemAt - at.view.top, bottom: itemAt - at.view.top + 300 } as DOMRect);
+  column.append(item);
+  let lines = 760;
+  Object.defineProperty(column, "clientWidth", { configurable: true, get: () => lines });
+  column.getBoundingClientRect = () => ({ width: lines, top: 0, bottom: 0 } as DOMRect);
+  column.getClientRects = () => [column.getBoundingClientRect()] as unknown as DOMRectList;
+  keepReadingPlace(at.scroller, ".item", 4, false);
+  const letGo = holdLines();
+  expect(column.style.width).toBe("760px");
+  // The pane is dragged narrower: the scroller changes, the held column does not, and the view is not moved.
+  at.view.width = 640; at.notify(); frame(at.frames);
+  expect(at.tops).toEqual([]);
+  // Let go: the column takes the pane's width again, its lines are set once, and the bottom-less place is kept.
+  letGo();
+  expect(column.style.width).toBe("");
+  lines = 600; at.view.height = 4600; itemAt = 1540; at.notify(); frame(at.frames);
+  expect(at.view.top).toBe(1540 - 40);
+  at.scroller.remove();
+});
 /** The width changes, the keeper's own frame runs, and what is written from then on is recorded. */
 function widen(at: ReturnType<typeof scrollerAt>, width = 700): void {
   at.view.width = width; at.notify(); frame(at.frames); at.tops.length = 0;

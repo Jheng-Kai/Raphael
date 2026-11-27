@@ -52,6 +52,9 @@ const audioTurn = said(825, "owner-audio", "幫我聽這段錄音，整理重點
 const documents = [["報價單.pdf", "application/pdf"], ["素材.zip", "application/zip"], ["首頁草稿.html", "text/html"]]
   .map(([name, mime], index) => ({ id: `${String(index + 1).repeat(32)}.${name.split(".").pop()}`, name, mime, size: 182000 + index * 9000 }));
 const filesTurn = said(826, "owner-files", "這三個檔案幫我看一下。", "看完了：報價單少一頁簽名，其餘沒問題。", { attachments: documents });
+const download = { id: `${"7".repeat(32)}.csv`, name: "銷售報表.csv", mime: "text/csv", size: 18432 };
+const downloadTurn = said(827, "member-download", "請到報表網站把這個月的銷售報表下載下來。", "「銷售報表.csv」下載好了，已附在這段對話裡，點一下就能打開。");
+downloadTurn.messages.unshift({ seq: 1, kind: "media", text: JSON.stringify({ attachment: download }), at_ms: 1792807160000 });
 const tourOf = '.tn[data-id="824"] .chat-message[data-video]';
 const videoOpen = [member(1), wait(`${tourOf} video[src]`), wait(`${tourOf} .mp-length:not(:empty)`)];
 const videos = { turns: [videoTurn], storedFiles };
@@ -89,6 +92,8 @@ export default [
   scene("file-cards", "Files the owner sent show a mark by their kind: a document, an archive and a page", [member(1), wait('.tn[data-id="826"] .attachment-file'), check('file-card-kinds')], { turns: [filesTurn] }),
   scene("media-reopen", "A conversation opened again shows its pictures at once: no call to the shell and no new picture request", [mark("first"), ...picturesOpen, playFor(400), member(2), playFor(800), mark("reopen"), member(1), wait(`${pictureOf(1)} img[data-attachment][src]`), wait(`${pictureOf(2)} img[data-attachment][src]`), playFor(600), check('media-reopen')], { turns: [pictureTurn], drawnPictures: photos, browserCache: true }),
   scene("dataset-chart", "A dataset chart is a stored downloadable file beside the answer", [member(1), wait('.ra-body .attachment-file'), check('dataset-chart')], {turns:[turn(chart)]}),
+  // A file a member downloaded with Raphael Chrome is its card, and the words name it and say it is attached (#347, R-COMP-HOST-02).
+  scene("download-card", "A file a member downloaded in Raphael Chrome is a file card the owner opens, and its words name the file with no folder or git", [member(1), wait('.tn[data-id="827"] .attachment-file'), click('.tn[data-id="827"] .attachment-file'), check('download-card')], { turns: [downloadTurn] }),
   scene("dataset-table", "A continued query uses the existing rich table reply", [member(1),wait('.ra-body .message-table'),check('dataset-table')], {turns:[turn(null,{attachments:[],text:'| 區域 | 合計 |\n|---|---:|\n| 台北 | 36 |\n| 台中 | 24 |',messages:[{seq:1,kind:'reply',text:'| 區域 | 合計 |\n|---|---:|\n| 台北 | 36 |\n| 台中 | 24 |',at_ms:1792807160000}]})]}),
   ...['image','video'].map(kind => scene(`generated-${kind}-missing`, "An absent configured capability names its existing repair", [member(1),wait('.ra-body [data-missing-repair="models"]'),check('generated-missing')], {turns:[missing(kind)]})),
   scene("generated-image-repair", "The missing image capability opens the existing Models settings", [member(1),

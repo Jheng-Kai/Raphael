@@ -736,7 +736,8 @@ const tellActivity = (): void => { if (typeof window !== "undefined") window.dis
 /** What each member is doing now, as the core last said: live states only, none for a member at rest. */
 export const liveStates = (): ReadonlyMap<number, SlimeState> => activity;
 
-interface SlimeFacts { id: number; waiting?: boolean; last_at?: number | null }
+/** `crowned` says it outright for a slime that is not in a roster yet (the guide's first one, who will be the chief). */
+interface SlimeFacts { id: number; waiting?: boolean; last_at?: number | null; crowned?: boolean }
 
 /** What a member's own row says, for when it is doing nothing: an answer it waits for, or sleep after a long silence. */
 function restingState(member: SlimeFacts, now: number): SlimeState {
@@ -1077,10 +1078,10 @@ export function slimeFaceHTML(member: SlimeFacts & { avatar?: string | null }, s
   const frame = `<span class="av mb-av mb-av-slime${cls ? ` ${cls}` : ""}" data-presence-member="${member.id}"${label ? ` data-tooltip="${label.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}"` : ""} style="--av:${Math.round(size)}px" aria-hidden="true">`;
   // A picture shows no activity: whatever the member is doing, its drawing does not change, so a redraw that carries
   // a new state touches nothing.
-  if (!moving) return frame + slimeSVG(slime, { state: rest, member: member.id, crown: member.id === crownedId() }) + `</span>`;
+  if (!moving) return frame + slimeSVG(slime, { state: rest, member: member.id, crown: member.crowned ?? member.id === crownedId() }) + `</span>`;
   const state = member.waiting ? "blocked" : activity.get(member.id) ?? rest, now = performance.now(), start = began.get(member.id);
   return frame +
-    slimeSVG(slime, { state, member: member.id, crown: member.id === crownedId(), delay: delayOf(member.id, now), tempo: tempoOf(member.id), since: start === undefined ? undefined : -Math.round(now - start), moving: true }) + `</span>`;
+    slimeSVG(slime, { state, member: member.id, crown: member.crowned ?? member.id === crownedId(), delay: delayOf(member.id, now), tempo: tempoOf(member.id), since: start === undefined ? undefined : -Math.round(now - start), moving: true }) + `</span>`;
 }
 
 // ---------- the picture menu ----------

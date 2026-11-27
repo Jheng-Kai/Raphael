@@ -126,7 +126,7 @@ def test_whether_the_turns_model_reads_pictures_comes_from_its_brain_and_the_cat
     from raphael_core.agent.service import AgentService
     settings = SimpleNamespace(model="cli:claude:opus")
     sees = {"value": False}
-    service = SimpleNamespace(_read_settings=lambda speaker, conversation: settings, _on_its_service=lambda model: model,
+    service = SimpleNamespace(_ask_settings=lambda ask: settings, _on_its_service=lambda model: model,
                               _tools=SimpleNamespace(services=SimpleNamespace(reads_images=lambda model: sees["value"])))
     ask = SimpleNamespace(speaker=None, conversation_id=1)
     assert AgentService._reads_images(service, ask) is True  # a CLI brain reads the picture itself

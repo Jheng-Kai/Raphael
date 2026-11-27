@@ -253,7 +253,7 @@ describe("what a capability stands on", () => {
     expect(serviceRows("read", status(), BRAIN).find((r) => r.id === "jina")!.usable).toBe(true); // its key is optional
   });
 
-  test("the vision has 「與拉斐爾相同」 and 「指定模型」, which is usable once a model is chosen and reads images", () => {
+  test("the vision has 「與回答模型相同」 and 「指定模型」, which is usable once a model is chosen and reads images", () => {
     expect(serviceRows("vision", status(), BRAIN).map((r) => [r.id, r.chosen, r.usable])).toEqual([["same", true, true], ["model", false, false]]);
     const chosen = serviceRows("vision", status({ model: "anthropic/claude-haiku-5.5" }), BRAIN);
     expect(chosen.map((r) => [r.id, r.chosen, r.usable])).toEqual([["same", false, true], ["model", true, true]]);
@@ -322,8 +322,8 @@ describe("the dialog of a capability", () => {
     const names = (kind: Capability): string[] => [...inDialog(dialog(kind)).matchAll(/class="cs-item svc-srv"[\s\S]*?<span class="nm">([^<]*)/g)].map((m) => m[1]);
     expect(names("read")).toEqual(["內建", "Jina", "Firecrawl", "Tavily"]);
     expect(names("pdf")).toEqual(["內建", "OpenRouter"]);
-    expect(names("vision")).toEqual(["與拉斐爾相同", "指定模型"]);
-    expect(inDialog(dialog("vision"))).toMatch(/與拉斐爾相同<span class="svc-tag">gpt-6-luna<\/span>/);
+    expect(names("vision")).toEqual(["與回答模型相同", "指定模型"]);
+    expect(inDialog(dialog("vision"))).toMatch(/與回答模型相同<span class="svc-tag">gpt-6-luna<\/span>/);
   });
 
   test("is in the three languages", () => {
@@ -396,9 +396,9 @@ describe("the page of one service", () => {
     expect(use(dialog("search", "openrouter", { busy: "switch" }))).toContain(" disabled");
   });
 
-  test("看圖片's pages: 「與拉斐爾相同」 says what it means and has 「改用 與拉斐爾相同」; 「指定模型」 has the picker and no field", () => {
+  test("看圖片's pages: 「與回答模型相同」 says what it means and has 「改用 與回答模型相同」; 「指定模型」 has the picker and no field", () => {
     const same = inDialog(dialog("vision", "same", { status: status({ model: "anthropic/claude-haiku-5.5" }) }));
-    expect(same).toMatch(/data-svc="use" data-service="same"[^>]*>改用 與拉斐爾相同</);
+    expect(same).toMatch(/data-svc="use" data-service="same"[^>]*>改用 與回答模型相同</);
     expect(same).toContain('<p class="cs-desc svc-why">');
     // the one in use says so on its button
     expect(inDialog(dialog("vision", "same"))).toMatch(/data-svc="use" data-service="same"[^>]*>使用中</);
@@ -660,7 +660,7 @@ describe("what the section does", () => {
     expect(changeSetting).not.toHaveBeenCalled();
   });
 
-  test("看圖片: 「與拉斐爾相同」 is the empty model, and the picker's choice is the vision_model setting", async () => {
+  test("看圖片: 「與回答模型相同」 is the empty model, and the picker's choice is the vision_model setting", async () => {
     const { host, panel, changeSetting } = await opened("vision", { model: "anthropic/claude-haiku-5.5" });
     press(host, '[data-k="svc-svc:same"]');
     press(host, '[data-k="svc-use"]');

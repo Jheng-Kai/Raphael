@@ -1,7 +1,7 @@
 // The guide in the main window: it takes the place of the pages on a first run, and opens again
 // over them from the settings. flow.ts says which screen is next, screens.ts draws it; this file
 // holds the state and does what the buttons say, through the core and the app. After the welcome the owner
-// dresses and names their first slime (member 0, their chief of staff from then on: `members.update`), then
+// dresses and names their first slime (a real member the core makes their chief of staff: `members.create`; Raphael is not it), then
 // has three choices, each done where it is shown and the same way as in Settings:
 // the AI tools (the account controller of Settings > Models and the OpenRouter key), the services
 // (the store of Connect apps), and the abilities the members share (Settings > Tools).
@@ -25,8 +25,7 @@ import { composioKeyProblem, ownServerApps, ownServerForm } from "../connections
 import { openConnectionSetup } from "../connection-setup";
 import { modelPickerHTML, mountModelPicker, type ModelPickerLook } from "../model-picker";
 import { createServices, servicesHTML as abilityRowsHTML } from "../services";
-import { FIRST_SLIME } from "../first-bot";
-import { cleanName, isMemberNameTaken } from "../members";
+import { cleanName, isMemberNameTaken, primaryIdOf } from "../members";
 import { pickSlime } from "../slime";
 import { selectSlimeTab, slimeKeys } from "../slime-tabs";
 import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
@@ -86,10 +85,14 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   /** What the AI tools' search box holds. */
   let toolsQuery = "";
 
+  /** The look the first slime starts with, until the owner dresses it: the picker's first, the cute blue slime. */
+  const START_LOOK = "slime:blue-plain";
   // The first slime: the name typed and the slime chosen, and what the core last kept of them (read once from the roster:
-  // a name the owner already gave stands in the field; the built-in one never does, the name is theirs to give).
+  // a name the owner already gave stands in the field; the built-in one never does, the name is theirs to give). It is made on the
+  // way on, once (`firstId` is the member then); going back and on again updates that one.
   let firstName = "";
-  let firstSlime = FIRST_SLIME;
+  let firstSlime = START_LOOK;
+  let firstId: number | null = null;
   let firstKept: { name: string; avatar: string } | null = null;
   let firstRead = false;
   let firstSaving = false;
@@ -351,16 +354,18 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
 
   // ---------- the first slime ----------
 
-  /** The first member as the roster has it, once: a name the owner gave before (the guide shown again) is in the field. */
+  /** The chief slime as the roster has it, once: a name the owner gave before (the guide shown again) is in the field. */
   async function readFirst(): Promise<void> {
     if (firstRead) return;
     firstRead = true;
     try {
-      const first = (await api.membersList()).members.find((member) => member.id === 0);
+      const roster = await api.membersList(), chief = primaryIdOf(roster);
+      const first = chief === null ? undefined : roster.members.find((member) => member.id === chief);
       if (destroyed || !first) return;
+      firstId = first.id;
       firstKept = { name: first.name, avatar: first.avatar ?? "" };
       if (!firstName && !isMemberNameTaken(first.name, [])) firstName = first.name;
-      if (first.avatar?.startsWith("slime:") && firstSlime === FIRST_SLIME) firstSlime = first.avatar;
+      if (first.avatar?.startsWith("slime:") && firstSlime === START_LOOK) firstSlime = first.avatar;
     } catch {
       return; // the step works without it: what is typed is sent all the same
     }
@@ -372,15 +377,18 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     paintFoot();
   }
 
-  /** Keeps the name and the slime as member 0's; false when the core refused, which was said, and the step stays. */
+  /** Makes the first slime with the name and the look chosen (or updates the one made or found); false when the core refused, which was said, and the step stays. */
   async function keepFirst(): Promise<boolean> {
     const name = cleanName(firstName);
     if (!name || firstSaving) return false;
-    if (firstKept && firstKept.name === name && (firstKept.avatar || FIRST_SLIME) === firstSlime) return true;
+    if (firstKept && firstKept.name === name && (firstKept.avatar || START_LOOK) === firstSlime) return true;
+    // Raphael's name is its own: no slime bears it.
+    if (isMemberNameTaken(name, [])) { toaster.info(t("members.nameTaken", { p0: name })); return false; }
     firstSaving = true;
     paintFoot();
     try {
-      await api.membersUpdate(0, { name, avatar: firstSlime });
+      if (firstId === null) firstId = (await api.membersCreate({ name, avatar: firstSlime })).member.id;
+      else await api.membersUpdate(firstId, { name, avatar: firstSlime });
       firstKept = { name, avatar: firstSlime };
       return !destroyed;
     } catch (err) {

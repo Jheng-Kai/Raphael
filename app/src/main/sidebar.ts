@@ -10,10 +10,11 @@ import { onOwnerProfile, ownerFaceHTML, ownerName } from "./owner-avatar";
 import { esc, ico } from "./ui";
 import { openAccountMenu } from "./account-menu";
 import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
+import { setLive, useLive } from "./live-size";
 import { mountUpdateNotice } from "./update-notice";
 
 /** The full list's widths (px): it starts at the stylesheet's own width (348 on a wide window, in proportion below that,
- *  styles.css `--sidebar-width`), and a width the owner dragged it to wins over that. */
+ *  styles.css `--sidebar-width`), and a width the owner dragged it to wins over that (`--side-live`, live-size.ts). */
 const MIN_WIDTH = 240, MAX_WIDTH = 400;
 /** The conversation never gets narrower than it is on a 900 px window with the old list: the list gives way to it. */
 const CONVERSATION_MIN = 604;
@@ -94,12 +95,17 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
   edge.className = "side-edge";
   nav.append(edge);
   const fitWidth = (): number => Math.round(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, innerWidth - CONVERSATION_MIN)));
+  // The width is read by the grid that holds the panes and by the caption strip, and by nothing else (live-size.ts): written on the
+  // root, every element of the window would be styled again for each move of the pointer.
+  useLive("--side-live", nav.parentElement);
+  useLive("--side-live", document.getElementById("window-chrome"));
   // The full list's width is the owner's when it was dragged; the rail keeps the stylesheet's.
   const placeWidth = (): void => {
     const own = !collapsed && !compactWindow.matches && width !== null;
-    if (own) document.documentElement.style.setProperty("--sidebar-width", `${Math.min(width!, fitWidth())}px`);
-    else document.documentElement.style.removeProperty("--sidebar-width");
-    edge.setAttribute("aria-valuenow", String(Math.round(nav.getBoundingClientRect().width) || (collapsed ? RAIL_WIDTH : width ?? 0)));
+    const shown = own ? Math.min(width!, fitWidth()) : null;
+    setLive("--side-live", shown === null ? null : `${shown}px`);
+    // The width is known without asking the page for it, which would draw the move before its frame.
+    edge.setAttribute("aria-valuenow", String(shown ?? (Math.round(nav.getBoundingClientRect().width) || (collapsed ? RAIL_WIDTH : width ?? 0))));
     edge.setAttribute("aria-valuemin", String(RAIL_WIDTH));
     edge.setAttribute("aria-valuemax", String(MAX_WIDTH));
   };

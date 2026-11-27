@@ -955,12 +955,13 @@ class App(Router):
         if self.vm.enabled:
             from .computer.host_computer import HostComputerTools
             from .computer.vm_tools import BROWSER_OPEN
-            self.vm_tools.host_computer = HostComputerTools(self.vm, self._conn, BROWSER_OPEN)
+            self.vm_tools.host_computer = HostComputerTools(self.vm, self._conn, BROWSER_OPEN, attachments=self.attachment_store)
         self.tool_hub = LocalTools(self.tool_hub, self._conn, enabled=not fake_llm or os.environ.get("RAPHAEL_TEST_NATIVE_LOCAL") == "1")
         local_tools = self.tool_hub
         local_tools.owner_files.member_folders = self.vm.local_folders
         if self.brain:
             self.brain.member_folders = self.vm.local_folders
+            self.brain.project_folders_changed = self.vm.refresh_mounts_soon
         from .services.generation import Generation
         from .services.generation_tools import GenerationTools
         from .services.fetch import PageFetcher
@@ -1017,6 +1018,9 @@ class App(Router):
         # Raphael's memory: the notes on this PC, the summary of the conversation, the reflection.
         memory_root = paths.memory_dir(data_dir) if memory_dir is None else memory_dir
         paths.owner_only_directory(memory_root)
+        # Schema 101 made what the owner made of member 0 a slime; its notes, cover, bot and computer folders follow it, once.
+        from .members import raphael_files
+        raphael_files.adopt(self._conn, root=memory_root.parent, data_dir=Path(data_dir), vault=self.vault, vm=self.vm)
         self.memory = MemoryService(self._conn, memory_root, self.client, self.keys, notify=self.notify,
                                     event_index=self._event_index)
         self.memory.register(self)
@@ -1033,6 +1037,10 @@ class App(Router):
             connections=self.integrations.connections,
             vault=self.vault,
         )
+        # The Docker computers mount the library's own folder, read-only: a skill's script runs there by its path, with no copy of
+        # the skills anywhere (R-SKILL-29). A member told where a skill is is told the path in its own computer.
+        self.vm.library = self.members.capabilities.library_folder()
+        self.members.capabilities.guest_library = self.vm_tools.library_path
         if self.vm_tools.host_computer is not None:
             self.vm_tools.host_computer.cards = self.handbacks
             host = self.vm_tools.host_computer
@@ -1042,6 +1050,7 @@ class App(Router):
             self.handbacks.release_browser = self.desktop_viewer.finish_browser_card
             self.vm.host_work_busy = lambda: bool(host.active or host.browser.downloads or host.browser.transfers)
         self.members.use_event_tools(self.gate)
+        self.members.use_attachment_store(self.attachment_store)
         self.members.register(self)
         from .computer.teaching import Teaching
         self.desktop_viewer.teaching = Teaching(self.desktop_viewer, self.members, self.memory)
@@ -1103,7 +1112,7 @@ class App(Router):
             return scope[0] == "async" and not scope[1].done()
         self.vm_tools.scope_busy = computer_scope_busy
         self.vm_tools.suggestions.notify = self.notify
-        self.vm_tools.suggestions.resume = self.agent.resume_on_vm
+        self.vm_tools.suggestions.resume = self.agent.resume_on_computer
         self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors, notify=self.notify))
         self.home.register()
         self.calendar.shown, self.calendar.zone, self.calendar.google_state = self.home.between, self.home.zone, self.home.google_state

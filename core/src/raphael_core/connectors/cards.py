@@ -61,6 +61,9 @@ logger = logging.getLogger(__name__)
 
 # How long a card waits for the owner, as a question of the background does.
 CARD_WAIT_MS = 24 * 3600 * 1000
+# How long a sign-in may take to set its page up before the card says so: the card reads 等你在瀏覽器登入 from the press on, so
+# a page that never opens must end the card, not leave it waiting (one request to the service may take two minutes).
+START_S = 150
 
 # The only moves a card's state makes.
 MOVES: dict[str, tuple[str, ...]] = {
@@ -364,6 +367,7 @@ class ConnectorCards:
                  wait_ms: int = CARD_WAIT_MS) -> None:
         self.store = CardStore(conn, now_ms, wait_ms)
         self._conn, self._router, self._connectors, self._notify = conn, router, connectors, notify
+        self._start_s = START_S
         self.resume: Callable[[int], Awaitable[None]] | None = None
         self.failure = None
         self._reported_failures = set()
@@ -750,6 +754,27 @@ class ConnectorCards:
         if not result.get("connected"):
             raise self._refusal("connectors.google.connect", result)
 
+    async def _signed_in(self, method: str, params: dict) -> dict:
+        """The connector's own sign-in (the one Connect apps starts), which waits for the owner in the browser once the page
+        is open. Until it is open nothing is asked of the owner: a sign-in that has not opened it within `START_S` is ended
+        (it gives back what it made) and the card says the service did not answer."""
+        if method not in ("connectors.connect", "connectors.google.connect"):
+            return await self._router.call(method, params)  # a service of the store opens its own page, unseen from here
+        opened = self._connectors.page_opened
+        opened.clear()
+        call = asyncio.ensure_future(self._router.call(method, params))
+        page = asyncio.ensure_future(opened.wait())
+        try:
+            await asyncio.wait({call, page}, timeout=self._start_s, return_when=asyncio.FIRST_COMPLETED)
+            if not call.done() and not opened.is_set():
+                raise _Failed("no_answer")
+            return await call
+        finally:
+            page.cancel()
+            if not call.done():
+                call.cancel()
+                await asyncio.gather(call, return_exceptions=True)
+
     async def _sign_in(self, card: Card, fields: dict | None = None) -> None:
         known = APPS.get(card.app)
         app = known if known and known.provider == card.provider else App(card.app, card.name, "", card.app, card.provider)
@@ -783,7 +808,7 @@ class ConnectorCards:
                             if getattr(self._connectors.store.connectors.get("composio:" + params["toolkit"]), "accounts", None):
                                 params = {**params, "again": True}
                         fields = None
-                        result = await self._router.call(method, params)
+                        result = await self._signed_in(method, params)
                         params = None
                         if not result.get("connected"):
                             raise self._refusal(method, result)

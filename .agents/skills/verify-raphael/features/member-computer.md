@@ -2,7 +2,7 @@
 
 ## Assigning a computer to a member
 
-R-COMP-CHOICE-01 through R-COMP-CHOICE-03 and R-COMP-HOST-02 through R-COMP-HOST-06.
+R-COMP-CHOICE-01 through R-COMP-CHOICE-04 and R-COMP-HOST-02 through R-COMP-HOST-06.
 The owner assigns the member's computer in the Computer tab. Its one dropdown
 saves the choice without posting in chat, with the local and SSH Docker locations
 in the same menu. New members use Raphael Chrome. The member receives its assigned
@@ -24,7 +24,8 @@ never takes focus on the owner's desktop. On a Mac it runs in Chrome's headless 
 no window at all, and pages still see the ordinary Chrome of a Mac (`RAPHAEL_MAC_HEADED=1`
 brings the window back). A JavaScript dialog that blocks a tab is reported at once, and the member
 answers it with browser_dialog (never with a sign-in, code or payment). A page's download lands in
-`.raphael/downloads` of the work folder, which git ignores, and the next Chrome result names it.
+`.raphael/downloads` of the work folder, which git ignores, and the next Chrome result names it by its file name and
+attaches it to the conversation (R-COMP-HOST-10), never saying the folder.
 No one answers a browser prompt there, so none waits: a page's permission requests are settled
 before it runs (storage access granted; notifications, location, camera, microphone, clipboard
 reading and the rest refused), and a passkey or security-key request ends at once with
@@ -57,6 +58,24 @@ changes): `core/tests/agent/test_write_boundary.py`, `core/tests/agent/test_unch
 `core/tests/computer/test_shell_writes.py`, `core/tests/computer/test_write_boundary_computer.py`,
 `core/tests/computer/test_unchosen_project_computer.py`, `core/tests/background/test_unchosen_project_background.py`.
 
+R-COMP-PROJECT-02: the member's prompt names its chosen project (name, path on this PC, path in the Docker computer, writable)
+without the owner saying so. A project chosen or added while the Docker computer runs is not mounted until the computer is made again: the prompt
+says so, the next idle call makes it again by itself, and a call that finds the computer in use says in its result that it ran in the
+workspace. Core only (no screen changes): `core/tests/brain/test_owner.py`, `core/tests/computer/test_vm.py`. Not run here, to check live with Docker: add a
+project while the computer runs and choose it, then ask the member where its project is (it names both paths), run a command and see the project at
+`/home/cua/projects/<name>`; repeat while another member's command runs and see the note.
+
+R-COMP-PROJECT-04: a member with a chosen project is told in one sentence which folder it works in (name, path on this PC, path in the
+computer) and to start there, and works in it: commands in the Docker computer start in the project's mount, relative paths of its file tools and a
+search that names no folder start there, and its own workspace stays for notes and downloads. No folder rule changes. Core only (no screen
+changes): `core/tests/brain/test_owner.py`, `core/tests/computer/test_project_defaults.py`, `core/tests/agent/test_owner_files.py`. To check live with
+Docker: choose a project for a member and send a first message; its first command prints the project's path.
+
+R-COMP-PROJECT-03: a project folder added or removed in the folder menu reaches the Docker computer by itself. An idle running computer is
+made again at once with the new mounts (workspace and sign-ins kept); one in use keeps its mounts, is never stopped, and is made again the moment
+it is idle; a sleeping one is not woken and comes up with the folders. Core only (no screen changes):
+`core/tests/computer/test_project_mounts_live.py`. To check live with Docker: make a real container, add a temporary project folder, and see the mount with `docker inspect` and `docker exec ls`, with no other step.
+
 Opening a page opens the Computer tab on that same page. The page fills the frame
 under the [host browser toolbar](#host-browser-toolbar). A takeover card appears only while a member waits for the owner for
 an owner-only step. The reason stays on the card, while the thread shows the member's own words.
@@ -84,10 +103,10 @@ Chrome's profile process tree. The VM keeps its own idle setting.
 
 Run from `app/`:
 ```sh
-npm run look -- member-settings desktop-computer-choice desktop-computer-choice-missing desktop-computer-choice-docker desktop-computer-suggestion-installed desktop-computer-suggestion-missing desktop-panel desktop-host-no-card desktop-host-panel desktop-host-takeover desktop-host-handback desktop-host-skip-idle desktop-quiet-vm --theme both --width 1120,720,1920x1080
+npm run look -- member-settings desktop-computer-choice desktop-computer-choice-missing desktop-computer-choice-docker desktop-computer-suggestion-installed desktop-computer-suggestion-missing desktop-computer-suggestion-this-pc desktop-panel desktop-host-no-card desktop-host-panel desktop-host-takeover desktop-host-handback desktop-host-skip-idle desktop-quiet-vm --theme both --width 1120,720,1920x1080
 ```
 
-Inspect the local and SSH choices, saved switching, both suggestion actions, normal Chrome
+Inspect the local and SSH choices, saved switching, both suggestion actions and the one that comes back to this computer from the virtual machine, normal Chrome
 work opening the Computer tab without a card, the full-frame page, takeover and Done, and
 the idle panels after a skipped Chrome request or unavailable VM.
 Look uses the production canvas with fixture frames. Run `test_host_computer.py` and
@@ -98,12 +117,12 @@ handback of the same tab, downloads and shutdown. The coordinate journey reads
 a page from the previous turn, checks a 1280×900 screenshot and acts on a control
 that is replaced every animation frame. The production-turn scenario reuses the
 owner's tab after listing it. The owner checks actual Google
-sign-in. Native Chrome and OS prompts, including certificate pickers, sit outside the
-page screencast.
+sign-in. Native Chrome and OS prompts sit outside the page screencast; a certificate picker is
+reached by showing Chrome (see "A page that asks for a certificate").
 
 ## Owner control in the enlarged view
 
-R-COMP-OWNER-INPUT-01, R-COMP-PREVIEW-01, R-PANEL-03 and R-NAV-04. The Computer
+R-COMP-OWNER-INPUT-02, R-COMP-PREVIEW-01, R-PANEL-03 and R-NAV-04. The Computer
 panel has an Open cover and a view-only page. In the enlarged view, Take control
 or a takeover card acquires page input. Collapse, Escape and Back fold the screen
 and release control. A takeover card stays pending until the owner chooses Done.
@@ -478,6 +497,8 @@ Layer 12 (`image/layer12/`, one Dockerfile step after layer 11's, so a PC that b
   `browser_tabs.py` (the tools' words and the pure reading of tabs), `vm.py` (`restore_window`, `browser_tabs`, layer 11 in
   `known_previous`, image v12), the acceptance (`OLD_IMAGES` with 11, panels with their window list, "shared seat windows").
 
+Page calls and lost tab ids (R-COMP-DRIVER-04): the driver's window list is asked once more when it gave none; a list still missing, a tab or window not known and the driver's `browser_tab_not_found` each say to read the tabs again with `browser_tabs` or open the browser again with `browser_open` (`test_seat_tools.py`, fake driver). The real driver's own tab ids are not changed and not proved here.
+
 Offline: `core/tests/computer/test_seat_windows.py` (scripts read and run without Docker, the tools against fakes), plus the
 updated layer tests in `test_seat_tools.py`, `test_screens.py`, `tests/evaluate/test_computer_acceptance.py`.
 
@@ -633,13 +654,15 @@ What the app does now.
   says the same instead of the bare identifier.
 
 ```powershell
-npm run look -- desktop-watch-retake desktop-watch desktop-watch-owner desktop-watch-collapse desktop-owner takeover-bar takeover-handback desktop-takeover-owner desktop-viewer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-watch-retake desktop-watch-leftover-recording desktop-watch desktop-watch-owner desktop-watch-collapse desktop-owner takeover-bar takeover-handback desktop-takeover-owner desktop-viewer --theme both --width 1120,720,1920x1080
 ```
 
 `desktop-watch-retake` reproduces the fault: take control, the screen never confirms (the look's `desktopUnconfirmed`),
 the give-back fails (`releaseFails`), 6 s later the view watches with the failure line under the screen, the core still
 holds the lease (`data-desktop-state="owner"`) and 接手控制 is shown and enabled. The check `desktop-watch` no longer skips
 the button when the lease is the owner's. Native, not run: the owner's own real take-over of a seat after a failed one.
+
+R-COMP-TAKE-02. `desktop-watch-leftover-recording` is the first member's (the chief of staff's) Docker computer with a recording the core recovered from its home (`teaching` of state `interrupted` in the status, the look's `desktop` fixture): the larger view watches and 接手控制 is shown and enabled, the same `desktop-watch` and `computer-foot-layout` checks as any watch. Run it with `npm run look -- desktop-watch-leftover-recording desktop-watch --theme both --width 1120,720,1920x1080`. Native, not run: a real interrupted recording on a real member's computer.
 
 ## Ending control is not ending watching; a running computer's preview is never a black frame
 
@@ -1179,12 +1202,12 @@ owned containers) the next time that host answers; a remote volume left with no 
 
 Selected scenes (both themes, 1120,720,1920x1080): member-delete-ask (a member without a computer),
 member-delete-ask-computer (one with a computer on a host), member-delete (the result), press-through-delete-dialog,
-room-delete and quick-clear-confirm (the shared dialog). `member-delete-ask` asserts the member's name, one
+room-delete and raphael-clear-confirm (the shared dialog). `member-delete-ask` asserts the member's name, one
 sentence, two buttons, no row, switch or field, and no word about a computer; `member-delete` asserts the call
 carries exactly `{"id":2}`. A real Docker engine and host are unverified: the tests use a fake engine.
 
 ```powershell
-npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete quick-clear-confirm --theme both --width 1120,720,1920x1080
+npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete raphael-clear-confirm --theme both --width 1120,720,1920x1080
 ```
 
 ## Viewer transport isolation, phase 1
@@ -1355,7 +1378,7 @@ Synthetic zh-TW matrix, both themes and 1120/720/1920x1080:
 npm run look -- computer-maintenance-menu computer-maintenance-restart computer-maintenance-update computer-maintenance-repair computer-maintenance-reset computer-maintenance-reset-done computer-sleep-menu computer-state-sleeping computer-state-waking computer-state-updating computer-state-repairing computer-low-disk desktop-panel takeover-menu --theme both --width 1120,720,1920x1080
 ```
 
-Compare maintenance/idle menus to takeover-menu and computer-menu-teach-only, reset to quick-clear-confirm,
+Compare maintenance/idle menus to takeover-menu and computer-menu-teach-only, reset to raphael-clear-confirm,
 and sleeping/working faces and header icon controls to desktop-panel at matching
 theme/size. Maintenance descriptions use the shared mdesc rows, so their content
 requires a wider/taller menu; reset adds a scope paragraph to the shared dialog.
@@ -1931,7 +1954,8 @@ every turn and task, every source and brain (API, and CLI through its MCP list) 
 
 - Reads (T0, kind read, no card): `read_file` (Claude Code's Read through `file_tools.Files` and the guest helper
   `files_guest.handle` run on this computer: numbered lines, pictures as images, PDFs by pages), `glob` and `grep` (Python
-  walks, as ripgrep is not on the owner's computer; newest first, Claude Code's output modes and paging, 30 s bound).
+  walks, as ripgrep is not on the owner's computer; newest first, Claude Code's output modes and paging, 30 s bound; the walk's thread never touches the
+  settings' connection: the member's folders and projects are read before it starts, here and on the host computer).
 - Kept from every read and write, through links too (`owner_files.kept`): SSH, GPG and cloud keys, the keychain and
   Windows' credential stores, browsers' profiles, password managers, `.env` files (not `.env.example`) and private keys.
   Raphael's own data keeps the data floor. Walks skip `Library`, `AppData`, caches, `.git` and `node_modules` unless they
@@ -2459,3 +2483,60 @@ answers, and that a paste lands); `npm run verify -- --computer` with Docker run
 the guest's programs, so only a real run shows what the driver's clipboard does).
 
 A computer that cannot start for its setup (R-SETUP-01): self_check's `setup.computer` says `docker_missing` (with Docker Desktop's download page), `docker_stopped`, `running` or a remote host `unreachable`, read without starting anything; raphael_help says how a member helps the owner install or open Docker Desktop in the conversation, and each engine failure (`absent`, `image_missing`, `pull_failed`, `build_failed`, `local_capacity`, `incompatible`, `start_failed`) tells the member what to do. Nothing is drawn over the screen. Core-only: `core/tests/test_setup_facts.py`.
+
+## Host browser keys
+
+R-COMP-HOST-08. press_key on Raphael Chrome refuses letters and digits (also with Shift) with
+words that point to type_text, delivers Shift with Tab and arrows, and moves Alt+Left and
+Alt+Right through the tab's own history. Offline fakes and one native Chrome test
+cover it; no screen shows it.
+
+## Host browser drag
+
+R-COMP-HOST-DRAG-01. drag on Raphael Chrome presses, moves and releases the pointer in the member's own
+tab from a ref or from_x,from_y to a destination_ref or to_x,to_y, so a slider follows and a page with
+`draggable` gets its dragenter, dragover and drop (Chrome's intercepted drag handed back at the end).
+Both ends are judged as a click is. Offline CDP fakes cover the sequence and the gates; the native
+Chrome test (skipped in CI, run on this PC) drags a slider and drops a card on a drop zone of a local
+page. No screen shows it.
+
+## A download is a file card
+
+R-COMP-HOST-10. A file a member downloads in Raphael Chrome is a card in its turn, opened from the conversation, and
+what the member reads and says names the file and that it is attached, never a folder, a path or git. The core test
+drives a real download event into a member's tab and reads the result, the file card data of the turn and the note;
+the vitest draws the turn's card; the scene `download-card` shows it and presses it.
+
+```powershell
+npm run look -- download-card dataset-chart --theme both --width 1120,720,1920x1080
+```
+
+Not covered: the native open of the stored copy (`open_attachment`), and a real Chrome download followed by a model's
+own words (a model may still word it badly; its result and note give it no path to say).
+
+## Answers stay in the reply
+
+R-COMP-HOST-09. The words a member reads about the Computer panel never replace an answer: the
+reply carries it, and the panel shows a page only when the owner asked to see one. Offline
+text tests and the host Computer scenario cover it; no screen shows it.
+
+## A page that asks for a certificate
+
+R-COMP-CERT-01. Chrome's certificate chooser needs a window, so a certificate step starts Raphael's
+Chrome once more where the owner sees it, keeps every member's tab (same identity, set up and opened
+again, session cookies carried), and leaves that Chrome running with its window out of the way once
+the owner presses Done. It is the background Chrome again only when Chrome starts anew. Core:
+`tests/computer/test_host_certificate.py` (the decision, the rebinding with two members' tabs on the
+Mac and Windows branches, the failure and busy-tab cases, and one native Chrome test that runs on this
+Windows PC: hidden desktop, then a window on the owner's own desktop, then out of the way, then hidden
+again at the next start). App: `computer-card.test.ts`, `desktop-timeline.test.ts`.
+
+```powershell
+npm run look -- desktop-host-certificate-card desktop-host-certificate --theme both --width 1120,720,1920x1080
+```
+
+The card and the larger view say that a Chrome window opened on the screen and name the Done button
+(`memberComputer.certificate`, all fifteen languages; `--locale` shows one). Not proved offline: the
+chooser itself, the window on a Mac's screen and its minimized state (does a minimized Chrome keep
+painting the tabs the Computer view streams), the Windows window coming to the front, and a real site
+that requires a certificate; they need a Mac and such a site.

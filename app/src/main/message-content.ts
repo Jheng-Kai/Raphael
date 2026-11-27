@@ -8,7 +8,11 @@ import { answerFormHTML } from "./message-forms";
 import { answerFormText, isAnswerFormKind, parseAnswerForm } from "../shared/answer-forms";
 import { publicEventText } from "./public-event";
 import { composioText } from "./composio-result";
+import { bareUrl, linkDestination, mathEnd, messageUrl, tableCells } from "./markdown-text";
+import { mathHTML } from "./math-html";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
+
+export { bareUrl, linkDestination, messageUrl, tableCells } from "./markdown-text";
 
 // Team file chips keep their own opener. Other paths can become links after the core checks them.
 const TEAM_FILE = /^\/home\/cua\/team\/[^\s<>"'`]+$/;
@@ -82,14 +86,6 @@ function imageAt(text: string, at: number): { label: string; target: string; end
   return level ? null : { label: text.slice(at + 2, middle), target: text.slice(middle + 2, end - 1), end };
 }
 
-export function messageUrl(raw: unknown): string | null {
-  if (typeof raw !== "string" || raw.length > 8192 || /[\u0000-\u0020\u007f]/.test(raw)) return null;
-  try {
-    const url = new URL(raw);
-    return /^(https?:)$/.test(url.protocol) && !url.username && !url.password ? url.href : null;
-  } catch { return null; }
-}
-
 export function urlLabel(url: string): string {
   const parsed = new URL(url);
   // A path in another script reads as the words it is, not as its percent codes.
@@ -101,37 +97,6 @@ export function urlLabel(url: string): string {
 export function shortUrl(url: string): string {
   const label = urlLabel(url);
   return label.length > 32 ? label.slice(0, 31) + "…" : label;
-}
-
-/** Letters of the scripts written without spaces between words. */
-const SPACELESS = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}]/u;
-/** What starts a part of an address (a path segment, a query value, a fragment, a handle): a page or a person named in Chinese starts after one. */
-const PART_START = "/=?#&@";
-
-/**
- * Where an address that starts at the beginning of `text` ends. It stops at a space, a quote, CJK punctuation and at
- * Chinese, Japanese or Korean words that follow it directly (`https://example.com看這裡`), unless those words start a part of
- * the address of their own (`https://zh.wikipedia.org/wiki/臺北`). A full stop, comma or closing bracket that ends the
- * sentence around it is not part of it; a bracket the address opened itself is.
- */
-export function bareUrl(text: string): string {
-  let raw = /^https?:\/\/[^\s<>"'`\u2018-\u201f\u2026\u3000-\u303f\uff00-\uffef]+/i.exec(text)?.[0] ?? "";
-  let at = 0, previous = "", inPart = false;
-  for (const char of raw) {
-    if (SPACELESS.test(char)) {
-      if (!inPart && !PART_START.includes(previous)) { raw = raw.slice(0, at); break; }
-      inPart = true;
-    } else if (PART_START.includes(char)) inPart = false;
-    previous = char; at += char.length;
-  }
-  for (let before = ""; before !== raw;) {
-    before = raw;
-    raw = raw.replace(/[.,;:!?*_]+$/, "");
-    for (const [open, close] of [["(", ")"], ["[", "]"], ["{", "}"]]) {
-      while (raw.endsWith(close) && raw.split(close).length > raw.split(open).length) raw = raw.slice(0, -1);
-    }
-  }
-  return raw;
 }
 
 /**
@@ -202,24 +167,26 @@ function linkChipHTML(url: string, labelHTML: string | null, query: string): str
     `${labelHTML === null ? ` data-link-bare${local ? "" : " data-link-title"}` : ""} rel="noreferrer noopener">${siteMark(url)}<span class="link-name">${name}</span></a>`;
 }
 
-/**
- * A markdown link's destination as CommonMark reads it: the <...> around it (how a path with spaces or backslashes is
- * written) is dropped, and so is a title after it ("...", '...' or (...)). Every model writes these forms.
- */
-export function linkDestination(raw: string): string {
-  const value = raw.trim();
-  const angled = /^<([^<>\n]*)>(?:\s+(?:"[^"]*"|'[^']*'|\([^()]*\)))?$/.exec(value);
-  if (angled) return angled[1].trim();
-  return value.replace(/\s+(?:"[^"]*"|'[^']*'|\([^()]*\))$/, "");
-}
+/** A letter or digit of any script: what an underscore must not sit between to be emphasis. */
+const WORD_CHAR = /[\p{L}\p{N}]/u;
 
-function inline(text: string, query: string, markdown: boolean, urls: Set<string>, depth = 0, mentions: readonly MentionTarget[] = [], files?: KnownFiles): string {
+/**
+ * The owner's own words, drawn as Markdown the way a reply's are: but an address is a plain link in the words (not a chip with its
+ * site's mark), a /name the owner's skill, an @ a mention, and a path just words, since it is the owner who wrote them.
+ */
+export interface OwnerWords { mentions: readonly MentionTarget[]; skills?: ReadonlyMap<string, number>; /** A group draws an address as the chip a reply's is (R-UI-82). */ chips?: boolean }
+
+function inline(text: string, query: string, markdown: boolean, urls: Set<string>, depth = 0, mentions: readonly MentionTarget[] = [], files?: KnownFiles, owner?: OwnerWords): string {
   let out = "", at = 0, plain = "";
-  const flush = (): void => { out += mentions.length ? mentionsHTML(plain, mentions, words => highlightHTML(words, query)) : highlightHTML(plain, query); plain = ""; };
+  const flush = (): void => {
+    out += owner ? ownerTextHTML(plain, query, owner.mentions, owner.skills) : mentions.length ? mentionsHTML(plain, mentions, words => highlightHTML(words, query)) : highlightHTML(plain, query);
+    plain = "";
+  };
   const link = (raw: string, label?: string): string | null => {
     const url = messageUrl(raw);
     if (!url) return null;
     urls.add(url);
+    if (owner && !owner.chips) return `<a class="message-link" href="${esc(url)}" data-act="open-url" data-url="${esc(url)}" rel="noreferrer noopener">${label === undefined || !label.trim() ? esc(raw) : highlightHTML(label, query)}</a>`;
     return linkChipHTML(url, label === undefined || !label.trim() ? null : highlightHTML(label, query), query);
   };
   while (at < text.length) {
@@ -233,7 +200,11 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
     if (markdown && text[at] === "`") {
       const marker = /^`+/.exec(text.slice(at))![0];
       const end = text.indexOf(marker, at + marker.length);
-      if (end > at + marker.length) { flush(); out += pathHTML(text.slice(at + marker.length, end), query); at = end + marker.length; continue; }
+      if (end > at + marker.length) {
+        let code = text.slice(at + marker.length, end);
+        if (code.length > 2 && code.startsWith(" ") && code.endsWith(" ") && code.trim()) code = code.slice(1, -1);
+        flush(); out += owner ? `<code>${highlightHTML(code, query)}</code>` : pathHTML(code, query); at = end + marker.length; continue;
+      }
     }
     // An unfinished image must never become an automatic link preview while streaming.
     if (markdown && text.startsWith("![", at)) {
@@ -267,7 +238,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
           if (LOCAL_PATH.test(target) || target.startsWith("/")) {
             flush();
             const said = drivePath(label.trim()), base = target.slice(Math.max(target.lastIndexOf("/"), target.lastIndexOf("\\")) + 1);
-            const words = said && said !== drivePath(target) && said !== base ? inline(label, query, true, urls, depth + 1, mentions, files) + " " : "";
+            const words = said && said !== drivePath(target) && said !== base ? inline(label, query, true, urls, depth + 1, mentions, files, owner) + " " : "";
             out += words + pathHTML(target, query); at = end; continue;
           }
         }
@@ -276,20 +247,36 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
     }
     const raw = /^https?:\/\//i.test(text.slice(at, at + 8)) ? bareUrl(text.slice(at)) : "";
     if (raw) {
+      // The owner's address stays words (the owner's text links it): its underscores and stars are not emphasis.
+      if (owner && !owner.chips && markdown && messageUrl(raw)) { urls.add(messageUrl(raw)!); plain += raw; at += raw.length; continue; }
       const html = link(raw);
       if (html) { flush(); out += html; at += raw.length; continue; }
     }
-    if (markdown) {
+    if (markdown && text[at] === "$" && depth < 8) {
+      const end = mathEnd(text, at);
+      if (end > 0) { flush(); out += `<span class="math-inline" data-math="${esc(text.slice(at + 1, end))}">${mathHTML(text.slice(at + 1, end))}</span>`; at = end + 1; continue; }
+    }
+    if (markdown && !owner) {
       const path = barePath(text, at);
       if (path) { flush(); out += pathHTML(path, query, false); at += path.length; continue; }
     }
     if (markdown && depth < 8 && /[*_~]/.test(text[at])) {
       const marker = text[at + 1] === text[at] ? text.slice(at, at + 2) : text[at];
       if (marker === "~") { plain += text[at++]; continue; }
-      const end = text.indexOf(marker, at + marker.length);
+      // An underscore run touching a letter, digit or CJK character is part of the word (GFM): `connections_list` is no emphasis.
+      const intraword = (index: number, step: 1 | -1): boolean => {
+        if (text[at] !== "_") return false;
+        while (text[index] === "_") index += step;
+        return WORD_CHAR.test(text[index] ?? "");
+      };
+      if (intraword(at - 1, -1)) { plain += text[at++]; continue; }
+      // A star or underscore followed by a space opens nothing (2 * 3 * 4), and one after a space closes nothing.
+      if (/\s/.test(text[at + marker.length] ?? " ")) { plain += marker; at += marker.length; continue; }
+      let end = text.indexOf(marker, at + marker.length);
+      while (end > at + marker.length && (intraword(end + marker.length, 1) || /\s/.test(text[end - 1]))) end = text.indexOf(marker, end + marker.length);
       if (end > at + marker.length) {
         flush(); const tag = marker === "~~" ? "del" : marker.length === 2 ? "strong" : "em";
-        out += `<${tag}>${inline(text.slice(at + marker.length, end), query, true, urls, depth + 1, mentions, files)}</${tag}>`;
+        out += `<${tag}>${inline(text.slice(at + marker.length, end), query, true, urls, depth + 1, mentions, files, owner)}</${tag}>`;
         at = end + marker.length; continue;
       }
     }
@@ -302,24 +289,11 @@ export type MessageBlock =
   | { type: "text"; source: string }
   | { type: "table"; source: string; headers: string[]; align: ("left" | "center" | "right")[]; rows: string[][] }
   | { type: "code" | "diagram"; source: string; language: string; complete: boolean }
-  | { type: "image"; source: string; alt: string; url: string };
+  | { type: "image"; source: string; alt: string; url: string }
+  /** A toggle, `<details>` with its `<summary>`: `body` is Markdown of its own. */
+  | { type: "details"; source: string; summary: string; body: string; open: boolean; complete: boolean };
 
-/** Split only structural pipes; code spans and escaped pipes belong to the cell. */
-export function tableCells(line: string): string[] {
-  const cells: string[] = []; let cell = "", ticks = 0;
-  const value = line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "");
-  for (let i = 0; i < value.length; i++) {
-    if (value[i] === "\\" && value[i + 1] === "|") { cell += "|"; i++; continue; }
-    if (value[i] === "`") {
-      const run = /^`+/.exec(value.slice(i))![0];
-      ticks = ticks === run.length ? 0 : ticks || run.length;
-      cell += run; i += run.length - 1; continue;
-    }
-    if (value[i] === "|" && !ticks) { cells.push(cell.trim()); cell = ""; }
-    else cell += value[i];
-  }
-  cells.push(cell.trim()); return cells;
-}
+const DETAILS_OPEN = /^\s*<details(\s[^>]*)?>/i;
 
 export function parseMessageBlocks(text: string, streaming = false): MessageBlock[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
@@ -333,6 +307,20 @@ export function parseMessageBlocks(text: string, streaming = false): MessageBloc
       while (++i < lines.length && !end.test(lines[i])) source.push(lines[i]);
       const language = fence[2].toLowerCase();
       blocks.push({ type: language === "mermaid" ? "diagram" : "code", source: source.join("\n"), language, complete: i < lines.length }); continue;
+    }
+    if (DETAILS_OPEN.test(lines[i])) {
+      flush();
+      let level = 0, end = i;
+      for (; end < lines.length; end++) {
+        level += (lines[end].match(/(?<!\\)<details[\s>]/gi) ?? []).length - (lines[end].match(/(?<!\\)<\/details>/gi) ?? []).length;
+        if (level <= 0) break;
+      }
+      const complete = end < lines.length, region = lines.slice(i, complete ? end + 1 : lines.length).join("\n");
+      const open = DETAILS_OPEN.exec(region)!;
+      const inner = region.slice(open[0].length).replace(/<\/details>\s*$/i, "");
+      const summary = /^\s*<summary(?:\s[^>]*)?>([\s\S]*?)<\/summary>/i.exec(inner);
+      blocks.push({ type: "details", source: region, summary: (summary?.[1] ?? "").replace(/\s*\n\s*/g, " ").trim(), body: (summary ? inner.slice(summary[0].length) : inner).trim(), open: /\bopen\b/i.test(open[1] ?? ""), complete });
+      i = complete ? end : lines.length; continue;
     }
     const separators = i + 1 < lines.length ? tableCells(lines[i + 1]) : [];
     const headers = tableCells(lines[i]);
@@ -368,7 +356,7 @@ export function parseMessageBlocks(text: string, streaming = false): MessageBloc
   flush(); return blocks;
 }
 
-function textHTML(text: string, query: string, urls: Set<string>, depth = 0, files?: KnownFiles): string {
+function textHTML(text: string, query: string, urls: Set<string>, depth = 0, files?: KnownFiles, owner?: OwnerWords): string {
   const lines = text.split("\n");
   let out = "", paragraph: string[] = [];
   const lists: { tag: string; indent: number }[] = [];
@@ -383,19 +371,33 @@ function textHTML(text: string, query: string, urls: Set<string>, depth = 0, fil
       if (!lists.length || lists[lists.length - 1].indent < indent) { lists.push({ tag, indent }); out += `<${tag}${item[3] ? ` start="${Number(item[3])}"` : ""}>`; }
       else out += "</li>";
       const task = /^\[([ xX])\]\s+(.*)$/.exec(item[4]);
-      out += `<li${task ? ' class="message-task"' : ""}>${task ? `<input type="checkbox" disabled${task[1] !== " " ? " checked" : ""} aria-label="${esc(task[2])}">` : ""}${inline(task ? task[2] : item[4], query, true, urls, 0, [], files)}`;
+      out += `<li${task ? ' class="message-task"' : ""}>${task ? `<input type="checkbox" disabled${task[1] !== " " ? " checked" : ""} aria-label="${esc(task[2])}">` : ""}${inline(task ? task[2] : item[4], query, true, urls, 0, [], files, owner)}`;
+    } else if (lists.length && /^ {2,}\S/.test(line)) {
+      // Indented words under an item carry on that item.
+      out += "<br>" + inline(line.trim(), query, true, urls, 0, [], files, owner);
     } else {
       closeList();
       const heading = /^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?$/.exec(line);
-      if (heading) { flush(); out += `<h${heading[1].length}>${inline(heading[2], query, true, urls, 0, [], files)}</h${heading[1].length}>`; }
+      const display = /^\s*\$\$(.*)$/.exec(line);
+      if (display && (/^\s*$/.test(display[1]) || /^.+\$\$\s*$/.test(display[1]))) {
+        flush();
+        let latex = display[1].replace(/\$\$\s*$/, "");
+        if (!latex.trim()) {
+          const body: string[] = [];
+          while (++i < lines.length && !/^\s*\$\$\s*$/.test(lines[i])) body.push(lines[i]);
+          latex = body.join("\n");
+        }
+        out += `<div class="math-display" data-math="${esc(latex.trim())}">${mathHTML(latex.trim(), true)}</div>`;
+      }
+      else if (heading) { flush(); out += `<h${heading[1].length}>${inline(heading[2], query, true, urls, 0, [], files, owner)}</h${heading[1].length}>`; }
       else if (/^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flush(); out += "<hr>"; }
       else if (depth < 8 && /^\s*>/.test(line)) {
         flush(); const quote: string[] = [line.replace(/^\s*> ?/, "")];
         while (i + 1 < lines.length && /^\s*>/.test(lines[i + 1])) quote.push(lines[++i].replace(/^\s*> ?/, ""));
-        out += `<blockquote>${textHTML(quote.join("\n"), query, urls, depth + 1, files)}</blockquote>`;
+        out += `<blockquote>${textHTML(quote.join("\n"), query, urls, depth + 1, files, owner)}</blockquote>`;
       }
       else if (!line.trim()) flush();
-      else paragraph.push(inline(line, query, true, urls, 0, [], files));
+      else paragraph.push(inline(line, query, true, urls, 0, [], files, owner));
     }
   }
   flush(); closeList(); return out;
@@ -406,6 +408,9 @@ const SHORT_CELL = 12;
 /** The words a table cell shows, near enough to tell a short one: a link by its words, code and emphasis without their marks. */
 const shownWords = (cell: string): string => cell.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[`*_~]/g, "").trim();
 
+/** The toggles of messages the owner opened or closed by hand: a thread is drawn again at every change, and they stay as left. */
+export const toggleStates = new Map<string, boolean>();
+
 function blockHTML(block: MessageBlock, query: string, urls: Set<string>, streaming = false, files?: KnownFiles): string {
   if (block.type === "text") return textHTML(block.source, query, urls, 0, files);
   if (block.type === "table") {
@@ -413,6 +418,12 @@ function blockHTML(block: MessageBlock, query: string, urls: Set<string>, stream
     const short = block.headers.map((header, i) => [header, ...block.rows.map(row => row[i] ?? "")].every(cell => [...shownWords(cell)].length <= SHORT_CELL));
     const cells = (row: string[], tag: string): string => row.map((cell, i) => `<${tag} class="align-${block.align[i]}${short[i] ? " short" : ""}">${inline(cell, query, true, urls, 0, [], files)}</${tag}>`).join("");
     return `<section class="rich-block message-table" data-source="${esc(block.source)}"><header class="rich-head"><span>${esc(t("chat.table"))}</span>${iconBtn("copy", t("chat.copyTable"), ' data-rich-act="copy-table"')}</header><div class="rich-scroll" tabindex="0" role="region" aria-label="${esc(t("chat.table"))}"><table${block.headers.length > 6 ? ` style="min-width:${block.headers.length * 96}px"` : ""}><thead><tr>${cells(block.headers, "th")}</tr></thead><tbody>${block.rows.map(row => `<tr>${cells(row, "td")}</tr>`).join("")}</tbody></table></div></section>`;
+  }
+  if (block.type === "details") {
+    const found = !!query && block.source.toLocaleLowerCase().includes(query.toLocaleLowerCase());
+    const body = parseMessageBlocks(block.body, streaming).map(inner => inner.type === "text"
+      ? `<div class="message-text">${textHTML(inner.source, query, urls, 0, files)}</div>` : blockHTML(inner, query, urls, streaming, files)).join("");
+    return `<details class="rich-block message-details" data-source="${esc(block.source)}"${(toggleStates.get(block.source) ?? (block.open || !block.complete || found)) ? " open" : ""}><summary>${inline(block.summary, query, true, urls, 0, [], files)}</summary><div class="details-body">${body}</div></details>`;
   }
   if (block.type === "image") return `<section class="rich-block message-image" data-image-url="${esc(block.url)}"><header class="rich-head"><span>${esc(block.alt || t("chat.image"))}</span><span>${esc(new URL(block.url).host)}</span></header><div class="rich-image-body"><button type="button" class="btn sm" data-rich-act="load-image">${esc(t("chat.loadImage"))}</button></div></section>`;
   const diagram = block.type === "diagram";
@@ -429,6 +440,32 @@ function blockHTML(block: MessageBlock, query: string, urls: Set<string>, stream
 /** `mentions` are the addresses of the owner's words, drawn as chips (a reply's `@` is just text). */
 export const messageHTML = (text: string, query = "", markdown = false, mentions: readonly MentionTarget[] = [], files?: KnownFiles): string => markdown
   ? parseMessageBlocks(composioText(text)).map(block => blockHTML(block, query, new Set(), false, files)).join("") : inline(text, query, false, new Set(), 0, mentions);
+
+/** One block of the owner's Markdown: in the owner's bubble a block is the plain thing itself (no card), drawn in the bubble's own colours. */
+function ownerBlockHTML(block: MessageBlock, query: string, owner: OwnerWords): string {
+  switch (block.type) {
+    case "text": return textHTML(block.source, query, new Set(), 0, undefined, owner);
+    case "code": case "diagram": return `<pre class="owner-code"${block.language ? ` data-language="${esc(block.language)}"` : ""}><code>${highlightHTML(block.source, query)}</code></pre>`;
+    case "image": return `<p>${highlightHTML(block.source, query)}</p>`;
+    case "table": {
+      const cells = (row: string[], tag: string): string => row.map((cell, i) => `<${tag} class="align-${block.align[i]}">${inline(cell, query, true, new Set(), 0, [], undefined, owner)}</${tag}>`).join("");
+      return `<div class="owner-table"><table><thead><tr>${cells(block.headers, "th")}</tr></thead><tbody>${block.rows.map(row => `<tr>${cells(row, "td")}</tr>`).join("")}</tbody></table></div>`;
+    }
+    case "details": {
+      const found = !!query && block.source.toLocaleLowerCase().includes(query.toLocaleLowerCase());
+      return `<details class="owner-details" data-source="${esc(block.source)}"${(toggleStates.get(block.source) ?? (block.open || found)) ? " open" : ""}><summary>${inline(block.summary, query, true, new Set(), 0, [], undefined, owner)}</summary><div class="details-body">${parseMessageBlocks(block.body).map(inner => ownerBlockHTML(inner, query, owner)).join("")}</div></details>`;
+    }
+  }
+}
+
+/**
+ * The owner's own message as Markdown, the way a reply is drawn (headings, lists, tasks, quotes, code, tables, equations, toggles):
+ * what the composer showed is what the bubble shows. Its addresses, /skills and @mentions are the owner's (OwnerWords).
+ */
+export function ownerMessageHTML(text: string, query: string, mentions: readonly MentionTarget[], skills?: ReadonlyMap<string, number>, chips = false): string {
+  const owner: OwnerWords = { mentions, skills, chips };
+  return parseMessageBlocks(text).map(block => ownerBlockHTML(block, query, owner)).join("");
+}
 
 /** A thread is drawn again on every change, and a reply that has finished reads the same each time. */
 const finished = new Map<string, string>();
@@ -474,6 +511,7 @@ export function messagePlainText(text: string, markdown = false, action?: string
 function plainTextBlock(source: string): string {
   const el = document.createElement("div"); el.innerHTML = textHTML(source, "", new Set());
   el.querySelectorAll("button").forEach(button => button.remove());
+  for (const math of el.querySelectorAll<HTMLElement>("[data-math]")) math.replaceWith(document.createTextNode(math.classList.contains("math-display") ? `$$\n${math.dataset.math}\n$$` : `$${math.dataset.math}$`));
   for (const link of el.querySelectorAll<HTMLAnchorElement>("a")) {
     const url = link.dataset.url!;
     // A bare address copies as itself, whatever its chip says on screen (its site, or the page's title once read).

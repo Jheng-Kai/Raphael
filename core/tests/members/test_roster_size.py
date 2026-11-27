@@ -13,6 +13,7 @@ def upload(identifier, size, fill):
 
 
 async def test_a_roster_with_large_covers_and_avatars_stays_small_and_the_pictures_come_by_revision(rig):
+    # Raphael's look is fixed: whatever picture the shell holds is never sent, only its cover can be an image.
     folder = rig.local / "avatar"
     folder.mkdir(parents=True)
     (folder / "picture").write_bytes(PNG + b"\x07" * 1_000_000)
@@ -32,18 +33,18 @@ async def test_a_roster_with_large_covers_and_avatars_stays_small_and_the_pictur
     assert "data:" not in json.dumps(listed)
 
     raphael, first = listed["members"][0], listed["members"][1]
-    assert raphael["avatar_rev"] and raphael["cover"]["kind"] == "image" and raphael["cover"]["rev"]
+    assert "avatar_rev" not in raphael and raphael["cover"]["kind"] == "image" and raphael["cover"]["rev"]
     assert first["avatar_rev"] and first["cover"]["rev"] and "avatar_url" not in first and "url" not in first["cover"]
     # Different pictures have different revisions; the same file keeps its own while the roster is read again.
     revs = {member["avatar_rev"] for member in listed["members"][1:]}
     assert len(revs) == 9
-    assert [m["avatar_rev"] for m in (await rig.call("members.list"))["members"]] == [m["avatar_rev"] for m in listed["members"]]
+    assert [m["avatar_rev"] for m in (await rig.call("members.list"))["members"][1:]] == [m["avatar_rev"] for m in listed["members"][1:]]
 
     avatar = await rig.call("members.picture", {"id": first["id"], "kind": "avatar"})
     cover = await rig.call("members.picture", {"id": first["id"], "kind": "cover"})
     assert avatar["rev"] == first["avatar_rev"] and avatar["url"].startswith("data:image/png;base64,") and len(avatar["url"]) > 1_000_000
     assert cover["rev"] == first["cover"]["rev"] and len(cover["url"]) > 2_000_000
-    assert (await rig.call("members.picture", {"id": 0, "kind": "avatar"}))["rev"] == raphael["avatar_rev"]
+    assert await rig.call("members.picture", {"id": 0, "kind": "avatar"}) == {"rev": None, "url": None}
     assert (await rig.call("members.picture", {"id": 0, "kind": "cover"}))["rev"] == raphael["cover"]["rev"]
 
 

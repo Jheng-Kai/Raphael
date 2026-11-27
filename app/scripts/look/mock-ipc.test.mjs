@@ -271,43 +271,45 @@ describe("shared look IPC boundary", () => {
     data.adminQuestions.draft.turn_id = turn_id;
     expect(() => installMock(data, { fixture: { adminApproval: "draft" } }, {})).toThrow("Approval fixture requires its explicit source turn");
   });
-  it("puts running state in the visible formal conversation and preserves quick questions", async () => {
+  it("puts running state in the typed turn of Raphael's one conversation and leaves its quick question alone", async () => {
     const target = {};
     installMock(fixture, { fixture: { running: true } }, target);
     const history = conversation_id => target.__TAURI_INTERNALS__.invoke('core_call', { method: 'agent.history.list', params: { member_id: 0, conversation_id } });
-    const turn = (await history(1)).turns[0];
+    const turns = (await history(1)).turns;
+    const turn = turns.find(item => item.id === 1);
     expect(turn.status).toBe('running');
     expect(turn.messages.some(message => message.kind === 'reply')).toBe(false);
-    expect((await history(4)).turns[0].status).toBe('done');
+    expect(turns.find(item => item.id === 90).status).toBe('done');
   });
-  it("stops only the named quick request and delivers an announced quick answer, leaving formal history alone", async () => {
+  it("stops only the named quick request and delivers an announced quick answer, leaving the typed turn alone", async () => {
     const target = {};
     installMock(fixture, { fixture: { quickRunning: true, arrivals: [{ ...fixture.turns[0], id: 91, session_id: "look-quick-later" }] } }, target);
     const invoke = target.__TAURI_INTERNALS__.invoke;
     const history = conversation_id => invoke("core_call", { method: "agent.history.list", params: { member_id: 0, conversation_id } });
-    const formal = await history(1);
-    expect((await history(4)).turns.map(turn => [turn.id, turn.status])).toEqual([[90, "running"]]);
+    const typed = (await history(1)).turns.find(turn => turn.id === 1);
+    expect((await history(1)).turns.find(turn => turn.id === 90).status).toBe("running");
     expect(await invoke("core_call", { method: "agent.history.stop", params: { session_id: "look-quick", member_id: 0 } })).toEqual({ stopped: true });
-    const [stopped] = (await history(4)).turns;
+    const stopped = (await history(1)).turns.find(turn => turn.id === 90);
     expect([stopped.status, stopped.text, stopped.messages.some(message => message.kind === "reply")]).toEqual(["denied", "已取消。", false]);
     target.__look.emit({ type: "AgentTurn", turn_id: 91, member_id: 0 });
-    expect((await history(4)).turns.map(turn => turn.id)).toEqual([91, 90]);
-    expect(await history(1)).toEqual(formal);
+    expect((await history(1)).turns.map(turn => turn.id)).toContain(91);
+    expect((await history(1)).turns.find(turn => turn.id === 1)).toEqual(typed);
   });
-  it.each([true, false])("settles draft approval in the formal conversation while preserving quick history (%s)", async approved => {
+  it.each([true, false])("settles draft approval in the typed turn and leaves the quick question beside it (%s)", async approved => {
     const target = {};
     installMock(fixture, { fixture: { adminApproval: "draft" } }, target);
     const invoke = target.__TAURI_INTERNALS__.invoke;
     const history = conversation_id => invoke("core_call", { method: "agent.history.list", params: { member_id: 0, conversation_id } });
-    const quick = await history(4);
-    expect((await history(1)).turns[0].status).toBe("confirm");
+    const quick = (await history(1)).turns.find(item => item.id === 90);
+    const waiting = (await history(1)).turns.find(item => item.status === "confirm");
+    expect(waiting).toBeTruthy();
     const question = await invoke("agent_question_open");
     await invoke("agent_question_answer", { id: question.id, approved, drafts: question.drafts });
-    const turn = (await history(1)).turns[0];
+    const turn = (await history(1)).turns.find(item => item.id === waiting.id);
     expect(turn.status).toBe(approved ? "done" : "denied");
     expect(turn.text).toBe(approved ? "已建立 COO、PM、RD" : "已取消建立成員。");
     if (approved) expect(turn.detail.split("\n")).toHaveLength(3);
-    expect(await history(4)).toEqual(quick);
+    expect((await history(1)).turns.find(item => item.id === 90)).toEqual(quick);
   });
   it("initializes rendered owner-view helpers before checking a reply and rejects progress in final messages", () => {
     const answer = { textContent: "需要重新登入並授予讀取權限。", checkVisibility: () => true, getBoundingClientRect: () => ({ width: 400, height: 40 }) };

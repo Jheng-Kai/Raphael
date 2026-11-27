@@ -18,7 +18,7 @@ const failureKeys = [
   "members.profile.noRoutines", "members.sourceBad", "msg.tg.codeGone",
   "onboarding.clipboardEmpty", "page.failed", "page.report.saveFailed", "plugins.connectFailed", "projectFolders.switchFilters", "projectFolders.switchSlow",
   "rooms.memberCount", "rooms.voiceFailed", "services.urlInvalid", "skillLib.duplicate",
-  "skillLib.duplicateIn", "skillLib.failed", "store.notOpen", "store.unavailable", "ui.002", "undo.001",
+  "skillLib.duplicateBoth", "skillLib.duplicateIn", "skillLib.failed", "store.notOpen", "store.unavailable", "ui.002", "undo.001",
 ];
 
 // The result lives outside the current view, or the message asks the owner to review it.

@@ -100,6 +100,61 @@ async def test_a_good_run_after_it_clears_the_reason_and_the_failed_mark(rig):
     assert view["last_error"] == "" and "last_failed" not in view
 
 
+def run_again(rig, routine):
+    """A run started the way `worker.rerun` starts one: a new turn and a new run row of the routine, and no `_run`, which
+    would have cleared the reason itself."""
+    turn_id = AgentHistory(rig.conn, rig.wall).add(session_id=f"routine:{routine.id}", question=routine.title, route="routine",
+                                                   prefix="", text="", status="running", source="routine", member_id=routine.member_id)
+    with rig.conn:
+        rig.conn.execute("INSERT INTO routine_runs (routine_id, scheduled, started, status, turn_id) VALUES (?, ?, ?, 'running', ?)",
+                         (routine.id, routine.next_run_ms, rig.wall.now, turn_id))
+    return turn_id
+
+
+async def test_a_run_again_that_works_clears_the_reason_the_failed_run_left(rig):
+    member = rig.service.store.create_member(name="小葵", role="新聞")
+    routine, turn_id = started(rig, member)
+    end(rig, turn_id, "error", "處理過程中發生異常。請再試一次。")
+    assert (await listed(rig, member))["last_error"]
+    rig.wall.now += 120_000
+    end(rig, run_again(rig, rig.service.store.routine(routine.id)), "done", "頁面做好了。")
+    view = await listed(rig, member)
+    assert view["last_error"] == "" and "last_failed" not in view
+
+
+async def test_an_older_failure_that_ends_late_does_not_overwrite_a_newer_good_run(rig):
+    member = rig.service.store.create_member(name="小葵", role="新聞")
+    routine, first = started(rig, member)
+    rig.wall.now += 120_000
+    second = run_again(rig, rig.service.store.routine(routine.id))
+    end(rig, second, "done", "頁面做好了。")
+    end(rig, first, "error", "處理過程中發生異常。請再試一次。")
+    assert (await listed(rig, member))["last_error"] == ""
+
+
+async def test_a_run_that_failed_unexpectedly_keeps_its_short_cause_in_the_run_record(rig):
+    member = rig.service.store.create_member(name="小葵", role="新聞")
+    routine, turn_id = started(rig, member)
+    trace = "TypeError: background/service.py:2100, background/run.py:310"
+    with rig.conn:
+        rig.conn.execute("INSERT INTO worker_tasks (created_at_ms, state, session_id, turn_id, language, text, report_detail, reason)"
+                         " VALUES (?, 'failed', ?, ?, 'en', 'Make the page.', ?, 'worker_TypeError')",
+                         (rig.wall.now, f"routine:{routine.id}", turn_id, trace))
+    end(rig, turn_id, "error", "處理過程中發生異常。請再試一次。")
+    [run] = (await rig.call("routines.runs", {"routine_id": routine.id}))["runs"]
+    assert run["summary"].startswith("處理過程中發生異常。請再試一次。") and trace in run["summary"]
+    # The reason of the routine stays the one sentence; only a run that failed unexpectedly names where.
+    assert (await listed(rig, member))["last_error"] == "處理過程中發生異常。請再試一次。"
+
+
+async def test_a_failed_run_with_an_ordinary_reason_keeps_its_summary_as_it_was(rig):
+    member = rig.service.store.create_member(name="小葵", role="新聞")
+    routine, turn_id = started(rig, member)
+    end(rig, turn_id, "error", "這次執行需要的一個步驟被拒絕了，沒有完成。")
+    [run] = (await rig.call("routines.runs", {"routine_id": routine.id}))["runs"]
+    assert run["summary"] == "這次執行需要的一個步驟被拒絕了，沒有完成。"
+
+
 async def test_a_run_the_owner_stopped_is_no_failure_of_the_routine(rig):
     member = rig.service.store.create_member(name="小葵", role="新聞")
     routine, turn_id = started(rig, member)

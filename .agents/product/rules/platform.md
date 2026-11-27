@@ -2,6 +2,13 @@
 
 Speed, start-up, the network and how the repository is worked. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## Pane drags
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-PERF-25 | 2026-11-26 | The width a pointer drags (the list's, the details panel's) is written once for each move, as a custom property that is not inherited (`--side-live`, `--panel-live`, registered in styles.css), to the elements whose own rules read it: the grid that holds the panes, the caption strip, a scrim, the panel and its page. It is never written to the root or to a page, where every element beneath inherits it and each move styled the whole window again (1,000 to 1,500 elements, 25 to 45 ms, so two frames in three were dropped). A scripted drag, out and back with a real pointer, restyles under 300 elements for each write (it was 1,000 to 3,400) and has no more than eight frames later than 50 ms (it had up to fifty); a column centred in its pane is placed on a whole pixel (`--col-lead`, agent.css), so its words move by whole pixels (0 half-pixel steps in the scripted drags; they were taken on 199 of 200 frames at 1920). | vitest, look | hard | app/src/main/live-size.test.ts::a drag writes the list's width to the pane grid and the caption strip alone, never to the root, once for each move; app/src/main/live-size.test.ts::the stylesheet reads the dragged widths from properties that are not inherited, so one write restyles one element; app/src/main/live-size.test.ts::a centred column lands on whole pixels, so it moves by whole pixels while the pane beside it is dragged; app/src/main/pages/agent-members.test.ts::the details panel has no fold button: its left edge drags it, narrower than it can be it closes, and it reopens at its width; sidebar-resize-smooth; sidebar-resize-busy; panel-resize-smooth; panel-resize-busy |
+| R-PERF-26 | 2026-11-26 | Holding an edge sets nothing the whole window inherits: the resize cursor and the press that selects nothing are one shield element over the window for as long as the pointer is down, not `cursor` and `user-select` on the root, which styled every element when the pointer went down and again when it came up. Folding the list to its rail and opening or closing the panel are one change each, and their frames are measured for hitches. | vitest, look | hard | app/src/main/live-size.test.ts::holding an edge sets no inherited property on the root: one shield over the window keeps the cursor and the press; sidebar-toggle-smooth; panel-toggle-smooth |
+
 ## Core responsiveness while loading skills
 
 | ID | Date | Rule | Check | Severity | Evidence |

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// The member column (member-column.ts): Raphael at the top, the groups and 未分組, the search, and
-// how a row shows a question that waits and a thread with news.
+// The member column (member-column.ts): the chief of staff at the top when there is one, the groups and 未分組, the search,
+// and how a row shows a question that waits and a thread with news. Raphael is never in it.
 import { type Mock, afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { type ColumnHost, columnHTML, createMemberColumn, memberRowHTML, openActions, openConfirmMenu } from "./member-column";
 import { openNewGroupChat } from "./group-chats";
@@ -17,7 +17,7 @@ const member = (id: number, more: Partial<Member> = {}): Member => ({
 
 const LIST: MembersList = {
   members: [
-    member(0, { name: "拉斐爾" }),
+    member(0, { name: "拉斐爾", raphael: true }),
     member(1, { name: "進度官", role: "Raphael 專案", group_id: 10 }),
     member(2, { name: "文書", role: "資料整理", group_id: 10, waiting: true, preview: "移動 12 個檔案" }),
     member(3, { name: "日文老師", role: "N2 嚴格版", group_id: 20 }),
@@ -30,7 +30,7 @@ const LIST: MembersList = {
 };
 const previews = new Map([[1, "第 17 號工單已開"], [2, "移動 12 個檔案"], [3, "今天的 10 題單字已送出"], [4, "明天 10:00 有會議"]]);
 const view = (over: Partial<Parameters<typeof columnHTML>[0]> = {}) => ({
-  list: LIST, current: 0, previews, folded: new Set<number>(), fresh: new Set<number>(), ...over,
+  list: LIST, current: 1, previews, folded: new Set<number>(), fresh: new Set<number>(), ...over,
 });
 const dom = (html: string): HTMLElement => {
   const div = document.createElement("div");
@@ -61,50 +61,47 @@ describe("the column, drawn", () => {
   test("remembering a conversation never selects it while another page is visible", () => {
     const el = dom(columnHTML(view({active:false})));
     expect(el.querySelector('[aria-current="true"]')).toBeNull();
-    expect(dom(columnHTML(view({active:true}))).querySelector('[aria-current="true"]')?.getAttribute('data-member')).toBe('0');
+    expect(dom(columnHTML(view({active:true}))).querySelector('[aria-current="true"]')?.getAttribute('data-member')).toBe('1');
   });
   test("rows show no time, whatever the last message's timestamp", () => {
     for (const last_at of [new Date(2026, 9, 24, 13, 45).getTime(), null, NaN, 1e20]) expect(dom(memberRowHTML(member(1, { last_at }), view())).querySelector("time")).toBeNull();
   });
 
-  test("Raphael leads the column as an ordinary row with its blue slime", () => {
+  test("the column lists slimes only: Raphael is in the list but never in the column", () => {
     const el = dom(columnHTML(view()));
+    expect(el.querySelector('[data-member="0"], [data-member-more="0"], [data-member-item="0"]')).toBeNull();
+    expect(el.querySelector(".mb-chief")).toBeNull();
+    expect([...el.querySelectorAll<HTMLElement>("[data-member]")].map(row => Number(row.dataset.member))).toEqual([1, 2, 3, 4]);
+    expect(dom(columnHTML(view({ list: { members: [member(0, { name: "拉斐爾", raphael: true })], groups: [] } }))).querySelector("[data-member]")).toBeNull();
+  });
+
+  test("the chief of staff leads the column as an ordinary row with its slime, once, and defaults and missing choices lead no one", () => {
+    const ids = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>("[data-member]")].map(row => Number(row.dataset.member));
+    const roster = (primary_id: number | null): MembersList => ({ ...LIST, team_context: { primary_id } as MembersList["team_context"] });
+    for (const primary of [null, 0, 99]) expect(ids(dom(columnHTML(view({ list: roster(primary) }))))).toEqual([1, 2, 3, 4]);
+    const el = dom(columnHTML(view({ list: roster(3) })));
+    expect(ids(el)).toEqual([3, 1, 2, 4]);
     const chief = el.querySelector<HTMLElement>(".mb-chief")!;
     expect(el.firstElementChild?.querySelector(".mb-chief")).toBe(chief);
     expect(chief.classList.contains("mb-row")).toBe(true);
-    expect(chief.querySelector(".mb-pin, time")).toBeNull();
-    expect(chief.dataset.member).toBe("0");
-    expect(chief.querySelector("b")?.textContent).toBe("拉斐爾");
+    expect(chief.dataset.member).toBe("3");
+    expect(chief.querySelector("b")?.textContent).toBe("日文老師");
     expect(chief.querySelector(".av")!.getAttribute("style")).toBe("--av:40px");
-    expect(chief.innerHTML).not.toMatch(/管理員|badge|app-emblem/);
     expect(chief.querySelector('.av.mb-av-slime')).not.toBeNull();
-    expect(chief.getAttribute("aria-current")).toBe("true");
-  });
-
-  test("the primary swaps with Raphael in its group, with default and missing choices unchanged", () => {
-    const ids = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>("[data-member]")].map(row => Number(row.dataset.member));
-    const roster = (primary_id: number): MembersList => ({ ...LIST, team_context: { primary_id } as MembersList["team_context"] });
-    for (const primary of [0, 99]) expect(ids(dom(columnHTML(view({ list: roster(primary) }))))).toEqual([0, 1, 2, 3, 4]);
-    const el = dom(columnHTML(view({ list: roster(3) })));
-    expect(ids(el)).toEqual([3, 1, 2, 0, 4]);
-    expect(el.querySelector('[data-group="20"] [data-member="0"] .av')).not.toBeNull();
-    expect(el.querySelector('[data-group="20"] [data-member="0"] .mb-av-slime')).not.toBeNull();
-    expect(el.querySelector('[data-member-more="0"]')).not.toBeNull();
-    expect(el.querySelector('.mb-chief')?.getAttribute('data-member')).toBe('3');
-    expect(el.querySelector('.mb-chief .av')?.getAttribute('style')).toBe('--av:40px');
+    expect(chief.querySelector(".mb-pin, time")).toBeNull();
     expect(el.querySelector('[data-member-more="3"]')).not.toBeNull();
+    expect(el.querySelector('[data-group="20"] [data-member="3"]')).toBeNull();
     expect(el.querySelector('.mb-star')).toBeNull();
     expect(LIST.members[3].group_id).toBe(20);
   });
 
-  test("a pinned primary is a tile and Raphael takes its group slot", () => {
+  test("a pinned chief is a tile and stands once", () => {
     const list = { ...LIST, members: LIST.members.map(m => m.id === 1 ? { ...m, pinned: true } : m), team_context: { primary_id: 1 } } as MembersList;
     const el = dom(columnHTML(view({ list })));
     expect(el.querySelector('.mb-pinned [data-member="1"]')).not.toBeNull();
-    expect(el.querySelector('.mb-pinned [data-member="0"]')).toBeNull();
     expect(el.querySelector('.mb-chief')?.getAttribute('data-member')).toBe('1');
-    expect(el.querySelectorAll('[data-member="0"]')).toHaveLength(1);
-    expect(el.querySelector('[data-member="0"] .mb-av-slime')).not.toBeNull();
+    expect(el.querySelectorAll('[data-member="1"]')).toHaveLength(1);
+    expect(el.querySelector('[data-member="0"]')).toBeNull();
   });
 
   test("only owner-created groups have headers, followed by ungrouped rows", () => {
@@ -147,7 +144,7 @@ describe("the column, drawn", () => {
   test("the open member's row is the current one; a new member's row fades in", () => {
     const el = dom(columnHTML(view({ current: 3, fresh: new Set([3]) })));
     expect(el.querySelector('[data-member="3"]')!.getAttribute("aria-current")).toBe("true");
-    expect(el.querySelector('[data-member="0"]')!.getAttribute("aria-current")).toBe("false");
+    expect(el.querySelector('[data-member="1"]')!.getAttribute("aria-current")).toBe("false");
     expect(el.querySelector('[data-member-item="3"]')!.classList.contains("is-new")).toBe(true);
     expect(el.querySelector('[data-member-item="1"]')!.classList.contains("is-new")).toBe(false);
   });
@@ -226,8 +223,8 @@ describe("the column, used", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-member="3"] .mb-row-t')!.click();
     expect(host.select).toHaveBeenCalledWith(3);
-    column.el.querySelector<HTMLElement>(".mb-chief")!.click();
-    expect(host.select).toHaveBeenLastCalledWith(0);
+    column.el.querySelector<HTMLElement>('[data-member="4"]')!.click();
+    expect(host.select).toHaveBeenLastCalledWith(4);
   });
 
   test("search and plus stand side by side at the top, and search opens a card of every member with 新增角色 at its foot", () => {
@@ -239,7 +236,7 @@ describe("the column, used", () => {
     const input = card.querySelector<HTMLInputElement>(".side-search-input")!;
     expect(document.activeElement).toBe(input);
     const rows = () => [...card.querySelectorAll<HTMLElement>(".side-search-row")].map(row => row.dataset.member);
-    expect(rows()).toEqual(["0", "1", "2", "3", "4"]);
+    expect(rows()).toEqual(["1", "2", "3", "4"]);
     expect(card.querySelector('[data-member="1"] .side-search-main span')!.textContent).toBe("第 17 號工單已開");
     input.value = "信箱"; input.dispatchEvent(new Event("input"));
     expect(rows()).toEqual(["4"]);
@@ -278,13 +275,20 @@ describe("the column, used", () => {
     expect(document.getElementById("app-popover")).toBeNull();
   });
 
-  test("＋ offers 新增角色 and 新增分組", () => {
-    const column = mount();
+  test("＋ offers 新增角色 and 新增分組, and a group chat only once a chief of staff is there to be in it", () => {
+    host.view = () => ({ list: { ...LIST, team_context: { primary_id: 1 } } as MembersList, current: 1, previews, fresh: new Set() });
+    let column = mount();
     column.el.querySelector<HTMLElement>('[data-col="add"]')!.click();
     const items = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")];
     expect(items.map(b => b.dataset.pick)).toEqual(["member", "group", "group-chat", "member-store"]);
     items[0].click();
     expect(host.newMember).toHaveBeenCalled();
+    column.el.remove(); closeMenu();
+    // With no slime there is nobody to meet: the same menu without the group chat.
+    host.view = () => ({ list: { members: [member(0, { name: "拉斐爾", raphael: true })], groups: [] }, current: 0, previews, fresh: new Set() });
+    column = mount();
+    column.el.querySelector<HTMLElement>('[data-col="add"]')!.click();
+    expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(b => b.dataset.pick)).toEqual(["member", "group", "member-store"]);
   });
 
   test("every row of the plus menu has a mark of its own: the store is not drawn with the plus of 新增角色", () => {
@@ -296,6 +300,7 @@ describe("the column, used", () => {
   });
 
   test("the plus menu retains group creation and opens the shared group chat creator", () => {
+    host.view = () => ({ list: { ...LIST, team_context: { primary_id: 1 } } as MembersList, current: 1, previews, fresh: new Set() });
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-col="add"]')!.click();
     document.querySelector<HTMLElement>('#app-popover [data-pick="group"]')!.click();
@@ -324,24 +329,27 @@ describe("the column, used", () => {
     expect(host.moveMember).toHaveBeenCalledWith(1, null, document.querySelector('#app-popover [data-pick="move"]'));
   });
 
-  test("only the primary's menu hands the primary on, with 換成其他角色 last, and the primary cannot be deleted or moved from it", () => {
+  test("only the chief's menu hands the role on, with 換成其他角色 last, it is a slime's menu otherwise, and Raphael has none", () => {
     const shape = () => [...document.querySelector("#app-popover")!.children].map(node => node.matches('[role="separator"]') ? "|" : (node as HTMLElement).dataset.pick);
-    let column = mount();
-    column.el.querySelector<HTMLElement>('[data-member-more="0"]')!.click();
-    expect(shape()).toEqual(["pin", "|", "primary"]);
+    host.view = () => ({ list: { ...LIST, team_context: { primary_id: 1 } } as MembersList, current: 1, previews, fresh: new Set() });
+    const column = mount();
+    column.el.querySelector<HTMLElement>('[data-member-more="1"]')!.click();
+    expect(shape()).toEqual(["pin", "unread", "|", "edit", "|", "export-template", "|", "hide", "delete", "|", "primary"]);
     expect(document.querySelector('#app-popover [data-pick="primary"]')!.textContent).toBe("換成其他角色");
     document.querySelector<HTMLElement>('#app-popover [data-pick="primary"]')!.click();
-    expect(host.memberAction).toHaveBeenCalledWith(0, "primary");
-    column.el.remove();
-    host.view = () => ({ list: { ...LIST, team_context: { primary_id: 1 } } as MembersList, current: 0, previews, fresh: new Set() });
-    column = mount();
-    column.el.querySelector<HTMLElement>('[data-member-more="1"]')!.click();
-    expect(shape()).toEqual(["pin", "unread", "|", "edit", "|", "export-template", "|", "hide", "|", "primary"]);
-    closeMenu();
-    column.el.querySelector<HTMLElement>('[data-member-more="0"]')!.click();
-    expect(shape()).toEqual(["pin"]);
+    expect(host.memberAction).toHaveBeenCalledWith(1, "primary");
     closeMenu();
     column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();
+    expect(shape()).not.toContain("primary");
+    closeMenu();
+    // Raphael has no row to open a menu from, and no menu if one is asked for.
+    expect(column.el.querySelector('[data-member-more="0"]')).toBeNull();
+    expect(column.menu(0, column.el)).toBeUndefined();
+    expect(document.getElementById("app-popover")).toBeNull();
+    // The only slime has nobody to hand the role to.
+    column.el.remove();
+    host.view = () => ({ list: { members: [member(0, { raphael: true }), member(1, { name: "進度官" })], groups: [], team_context: { primary_id: 1 } } as unknown as MembersList, current: 1, previews, fresh: new Set() });
+    mount().el.querySelector<HTMLElement>('[data-member-more="1"]')!.click();
     expect(shape()).not.toContain("primary");
   });
 
@@ -380,7 +388,7 @@ describe("the column, used", () => {
     });
 
     test("without a member to put in its place the tile does not offer 換成其他角色, and the primary's own tile keeps handing the primary on", () => {
-      host.view = () => ({ list: { members: [member(0, { name: "拉斐爾" }), member(1, { pinned: true }), member(2, { pinned: true })], groups: [] }, current: 0, previews, fresh: new Set() });
+      host.view = () => ({ list: { members: [member(0, { name: "拉斐爾", raphael: true }), member(1, { pinned: true }), member(2, { pinned: true })], groups: [] }, current: 1, previews, fresh: new Set() });
       let column = mount();
       column.el.querySelector<HTMLElement>('.mb-pinned [data-member-more="2"]')!.click();
       expect(shape()).not.toContain("replace-pinned");
@@ -460,6 +468,72 @@ describe("the column, used", () => {
     drag('[data-group="20"] .mb-gname', '[data-group="10"] .mb-gname', 70);
     expect(host.reorderGroup).toHaveBeenCalledWith(20, 10);
     expect(column.el.querySelector(".is-dragged")).toBeNull();
+  });
+});
+
+describe("the line that says where a dragged row lands", () => {
+  let host: ColumnHost & Record<string, ReturnType<typeof vi.fn>>;
+  let stopContextMenus: () => void;
+  beforeEach(() => {
+    stopContextMenus = installContextMenus(document);
+    document.body.innerHTML = "";
+    localStorage.clear();
+    host = {
+      view: () => ({ list: LIST, current: 0, previews, fresh: new Set() }),
+      select: vi.fn(), newMember: vi.fn(), newGroup: vi.fn(), moveMember: vi.fn(), deleteMember: vi.fn(),
+      renameGroup: vi.fn(), editSources: vi.fn(), deleteGroup: vi.fn(), memberAction: vi.fn(),
+      dropMember: vi.fn().mockResolvedValue(undefined), reorderGroup: vi.fn().mockResolvedValue(undefined),
+    } as never;
+  });
+  afterEach(() => stopContextMenus());
+  const mount = () => {
+    const column = createMemberColumn(host);
+    document.body.append(column.el);
+    column.draw();
+    // The rows and folders where the window draws them: a heading 30 px high, rows 40 px each, folders 10 px apart.
+    const place = (selector: string, top: number, height: number): void => {
+      column.el.querySelector<HTMLElement>(selector)!.getBoundingClientRect = () => ({ top, bottom: top + height, height, left: 0, right: 240, width: 240, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+    };
+    place('[data-group="10"]', 60, 110); place('[data-group="10"] [data-member-item="1"]', 90, 40); place('[data-group="10"] [data-member-item="2"]', 130, 40);
+    place('[data-group="20"]', 180, 70); place('[data-group="20"] [data-member-item="3"]', 210, 40);
+    place('[data-group="none"]', 260, 70); place('[data-group="none"] [data-member-item="4"]', 290, 40);
+    return column;
+  };
+  /** The pointer takes `source` and rests over `destination` at `clientY`: whether the page draws a line and allows the drop, then lets go. */
+  const carry = (column: ReturnType<typeof mount>, source: string, destination: string, clientY: number) => {
+    column.el.querySelector(source)!.dispatchEvent(new Event("dragstart", { bubbles: true, cancelable: true }));
+    const over = new MouseEvent("dragover", { bubbles: true, cancelable: true, clientY });
+    column.el.querySelector(destination)!.dispatchEvent(over);
+    const line = column.el.querySelector<HTMLElement>(".mb-drop-line");
+    const shown = !!line && !line.hidden;
+    column.el.querySelector(destination)!.dispatchEvent(new MouseEvent("drop", { bubbles: true, cancelable: true, clientY }));
+    return { shown, allowed: over.defaultPrevented };
+  };
+
+  test("is drawn only where a drop changes something: the row's own place draws none and lets nothing land", () => {
+    const column = mount();
+    // Member 1 already stands before member 2, and last in folder 10 is after member 2: only the second is somewhere else.
+    expect(carry(column, '[data-member-item="1"]', '[data-group="10"] [data-member-item="2"]', 135)).toEqual({ shown: false, allowed: false });
+    expect(host.dropMember).not.toHaveBeenCalled();
+    expect(carry(column, '[data-member-item="1"]', '[data-group="10"] [data-member-item="2"]', 165)).toEqual({ shown: true, allowed: true });
+    expect(host.dropMember).toHaveBeenCalledWith(1, 10, undefined);
+  });
+
+  test("is drawn wherever a member goes to another folder, and the drop there is the one the line shows", () => {
+    const column = mount();
+    expect(carry(column, '[data-member-item="1"]', '[data-group="20"] [data-member-item="3"]', 215)).toEqual({ shown: true, allowed: true });
+    expect(host.dropMember).toHaveBeenLastCalledWith(1, 20, 3);
+    expect(carry(column, '[data-member-item="2"]', '[data-group="none"] [data-member-item="4"]', 330)).toEqual({ shown: true, allowed: true });
+    expect(host.dropMember).toHaveBeenLastCalledWith(2, null, undefined);
+  });
+
+  test("a folder is drawn a line only where it would stand elsewhere", () => {
+    const column = mount();
+    // Folder 10 is first: before folder 20 is where it stands, and last is not.
+    expect(carry(column, '[data-group="10"] .mb-gname', '[data-group="20"]', 185)).toEqual({ shown: false, allowed: false });
+    expect(host.reorderGroup).not.toHaveBeenCalled();
+    expect(carry(column, '[data-group="10"] .mb-gname', '[data-group="20"]', 240)).toEqual({ shown: true, allowed: true });
+    expect(host.reorderGroup).toHaveBeenCalledWith(10, null);
   });
 });
 

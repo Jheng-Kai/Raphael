@@ -276,6 +276,9 @@ class RpcDriver:
                                                                url="https://example.invalid/mcp", tools=[tool])))
 
     async def owner_view(self, member=0, conversation=None, source="app"):
+        """The conversation as the owner sees it; `source` is the one way every turn of it was said, or the several
+        ways of a conversation that holds a spoken and a typed request (Raphael's)."""
+        sources = {source} if isinstance(source, str) else set(source)
         scope = {"member_id": member} if conversation is None else {"member_id": member, "conversation_id": conversation}
         turns = (await self.app.call("agent.history.list", scope))["turns"]
         reasons = []
@@ -283,7 +286,7 @@ class RpcDriver:
             if turn.get("scope", "private") == "exchange":
                 continue  # work a colleague handed this chat is that colleague's request, not the owner's
             # A task resumed after its connector card carries on the owner's own request in this chat.
-            if turn.get("member_id", 0) != member or turn.get("source") not in (source, RESUMED):
+            if turn.get("member_id", 0) != member or turn.get("source") not in (*sources, RESUMED):
                 reasons.append("wrong_conversation_scope")
             for message in turn.get("messages", []):
                 kind, text = message.get("kind"), message.get("text", "")
@@ -497,6 +500,9 @@ class RpcDriver:
         reasons += owner_reasons
         if not turns or result.get("status") not in {"done", "denied", "error"}:
             reasons.append("no_terminal_owner_result")
+        if cell.driver == 'quick':
+            # The conversation holds typed turns of the other model too; the suite checks the model of the quick ones.
+            turns = [turn for turn in turns if turn['id'] in result.get('answered', ())]
         return reasons, turns
 
     async def panel_card_scenario(self, cell):
@@ -574,7 +580,7 @@ class RpcDriver:
                       f'不要建立例行任務，也不要自己讀信。')
         room_id = None
         if room:
-            room_id = (await self.app.call('rooms.create',{'name':'立即工作驗收','member_ids':[0,target]}))['room']['id']
+            room_id = (await self.app.call('rooms.create',{'name':'立即工作驗收','member_ids':[0,ids[0],target]}))['room']['id']
             await self.app.call('rooms.send',{'room_id':room_id,'request_id':'work-'+self.nonce,
                 'text':'@拉斐爾 '+prompt,'ui_language':'zh-TW'})
             result = {'status':'done','text':''}
@@ -641,7 +647,7 @@ class RpcDriver:
         agenda = (f'請分工處理今天的 Guardian 測試信件（議題代碼 {self.nonce}）。信件助理負責用 Guardian 讀信，回報信中的 nonce；'
                   'PM 負責用 Guardian 讀同一封信，列出要回覆的重點，並附上信中的 nonce。來源文件寫「明早截止、明天中午提交」。'
                   'PM 協助討論分工；大家閱讀全部訊息，自行決定何時發言，不用固定輪次或自動總結。')
-        room_id = (await self.seed_meeting({'member_ids': [0, mail, pm], 'agenda': agenda,
+        room_id = (await self.seed_meeting({'member_ids': [0, ids[0], mail, pm], 'agenda': agenda,
                                           'roles': {str(pm): 'moderator', str(mail): 'participant'}}))['room_id']
 
         async def settled_room():
@@ -697,7 +703,7 @@ class RpcDriver:
         """Hold only external I/O; production loops and tree cancellation stay authoritative."""
         ids=await self.seed_team()
         await self.install_fixture()
-        room=(await self.app.call('rooms.create',{'name':'停止驗收','member_ids':[0,ids[1]]}))['room']
+        room=(await self.app.call('rooms.create',{'name':'停止驗收','member_ids':[0,ids[0],ids[1]]}))['room']
         entered,release=asyncio.Event(),asyncio.Event()
         armed=False
         original=self.recorder.call_tool
@@ -753,7 +759,7 @@ class RpcDriver:
             {key:message.get(key) for key in ('id','member_id','kind','status','origin_message_id')}
             for message in messages], 'exchanges':[
             dict(row) for row in self.app._conn.execute('SELECT origin_message_id,state,stop_requested,wrapup_sent,reason FROM room_exchanges WHERE room_id=?', (room['id'],))]}))
-        if not messages or messages[-1]['member_id']!=0 or messages[-1]['kind']!='wrapup':
+        if not messages or messages[-1]['member_id']!=self.app.members.primary_id() or messages[-1]['kind']!='wrapup':
             reasons.append('chief_not_last_after_stop')
         self.events.append(('guardian.stop_timings',{'redirect_ms':redirect_ms,'stop_ack_ms':ack_ms,
             'terminal_ms':round((time.perf_counter()-started)*1000)}))
@@ -763,6 +769,8 @@ class RpcDriver:
         ids = await self.seed_team()
         await self.install_fixture()
         reasons, result = [], {}
+        # The first slime made is the chief; the owner starts by choosing the mail assistant, and chooses 行銷 between the rounds.
+        await self.app.call('members.set_primary', {'id':ids[1]})
         for refresh in (False, True):
             if refresh:
                 await self.app.call('members.update', {'id':ids[-1], 'name':'研究員' + self.nonce})
@@ -939,9 +947,10 @@ class RpcDriver:
         return reasons, {**result, 'viewer': marketing}
 
     async def quick_scenario(self):
-        """S16: an Alt+Space question, sent as the hotkey sends it, is answered in the quick conversation by the
-        quick model, while formal work at the same moment stays in its thread on its own model and CLI session;
-        neither reads the other's words."""
+        """S16: an Alt+Space question, sent as the hotkey sends it, is written to Raphael's one conversation and
+        answered there by the quick model; what is typed in the same conversation is answered by the answer model,
+        and each reads the other's words. Neither makes another conversation, a member's thread or a room, and each
+        model resumes only its own native session."""
         if self.contrast is None:
             return ['formal_contrast_model_missing'], {'status': 'error', 'text': ''}
         quick_model, _, effort = self.model.partition('?effort=')
@@ -952,14 +961,14 @@ class RpcDriver:
         settings.set('agent_model', self.contrast)
         self.snapshot = {key: settings.get(key) for key in ('quick_model', 'quick_effort', 'agent_model')}
         listed = (await self.app.call('conversations.list', {'member_id': 0}))['conversations']
-        formal = next(item['id'] for item in listed if item['is_default'])
+        main = next(item['id'] for item in listed if item['is_default'])
         quick_code, formal_code = 'QK-' + self.nonce, 'FM-' + self.nonce[::-1]
 
         def quick(prompt, session):
             return self.ask(prompt, quick=True, model=self.model, session=session)
 
-        def formally(prompt, session):
-            return self.ask(prompt, conversation=formal, model=self.contrast, session=session)
+        def typed(prompt, session):
+            return self.ask(prompt, conversation=main, model=self.contrast, session=session)
 
         def elsewhere():
             # What a quick question must never add to: members' threads and rooms.
@@ -967,24 +976,16 @@ class RpcDriver:
                 'SELECT (SELECT COUNT(*) FROM agent_turns WHERE member_id != 0),'
                 ' (SELECT COUNT(*) FROM rooms), (SELECT COUNT(*) FROM room_messages)').fetchone())
 
-        seeded = await formally(f'這是正式聊天，代號是 {formal_code}。請只回覆「收到」。', 'formal-seed')
+        seeded = await typed(f'這是文字對話，代號是 {formal_code}。請只回覆「收到」。', 'typed-seed')
         before = elsewhere()
-        asked, recalled = await asyncio.gather(
-            quick(f'本次快問代號是 {quick_code}。請在快問回答本次代號，不要寫入正式聊天。', 'quick'),
-            formally('只根據這個對話回答：正式聊天的代號是什麼？', 'formal-recall'))
-        probed, guessed = await asyncio.gather(
-            quick('只根據這個快問對話回答：正式聊天的代號是什麼？不知道就說不知道。', 'quick-probe'),
-            formally('只根據這個對話回答：快問的代號是什麼？不知道就說不知道。', 'formal-probe'))
+        asked = await quick(f'本次快問代號是 {quick_code}。請在快問回答本次代號。', 'quick')
+        recalled = await typed('只根據這個對話回答：快問的代號是什麼？不知道就說不知道。', 'typed-recall')
+        probed = await quick('只根據這個對話回答：正式聊天的代號是什麼？不知道就說不知道。', 'quick-probe')
         conversations = (await self.app.call('conversations.list', {'member_id': 0}))['conversations']
-        quick_id = next((item['id'] for item in conversations if item.get('kind') == 'quick'), None)
-
-        async def thread(conversation):
-            if conversation is None:
-                return []
-            return (await self.app.call('agent.history.list', {'member_id': 0, 'conversation_id': conversation}))['turns']
-
-        quick_turns, formal_turns = await thread(quick_id), await thread(formal)
-        turns = {turn['id']: turn for turn in [*quick_turns, *formal_turns]}
+        turns_of = (await self.app.call('agent.history.list', {'member_id': 0, 'conversation_id': main}))['turns']
+        turns = {turn['id']: turn for turn in turns_of}
+        quick_turns = [turn for turn in turns_of if turn['id'] in (asked.get('turn_id'), probed.get('turn_id'))]
+        typed_turns = [turn for turn in turns_of if turn['id'] in (seeded.get('turn_id'), recalled.get('turn_id'))]
 
         def replied(turn):
             # A spoken turn answers in its text alone; a typed one also in its reply messages.
@@ -996,22 +997,24 @@ class RpcDriver:
             return replied(turn) if turn else reply.get('text', '')
 
         reasons = []
-        if ({turn['id'] for turn in quick_turns} != {asked.get('turn_id'), probed.get('turn_id')}
-                or any(turn['status'] != 'done' for turn in quick_turns) or quick_code not in answer(asked)):
+        if (len(quick_turns) != 2 or any(turn['status'] != 'done' for turn in quick_turns) or quick_code not in answer(asked)
+                or [(item['id'], item['kind']) for item in conversations] != [(main, 'standard')]):
             reasons.append('quick_destination')
         if {turn['model'] for turn in quick_turns} != {self.model}:
             reasons.append('quick_actual_model')
-        if ({turn['id'] for turn in formal_turns} != {seeded.get('turn_id'), recalled.get('turn_id'), guessed.get('turn_id')}
-                or any(quick_code in turn['question'] + replied(turn) for turn in formal_turns) or elsewhere() != before):
-            reasons.append('formal_unchanged')
-        if ({turn['model'] for turn in formal_turns} != {self.contrast} or formal_code not in answer(recalled)
-                or quick_code in answer(recalled) + answer(guessed) or formal_code in answer(probed)
-                or quick_id is None or self.app._conn.execute(
-                    'SELECT COUNT(*) FROM agent_conversation_cli_sessions q JOIN agent_conversation_cli_sessions f ON q.session_id=f.session_id WHERE q.conversation_id=? AND f.conversation_id=?', (quick_id, formal)).fetchone()[0]):
-            reasons.append('concurrent_scope')
+        if ({turn['id'] for turn in turns_of} != {reply.get('turn_id') for reply in (seeded, asked, recalled, probed)}
+                or any(turn['status'] != 'done' for turn in typed_turns) or elsewhere() != before):
+            reasons.append('conversation_unchanged')
+        if ({turn['model'] for turn in typed_turns} != {self.contrast} or quick_code not in answer(recalled)
+                or formal_code not in answer(probed)
+                or self.app._conn.execute(
+                    'SELECT COUNT(*) FROM (SELECT 1 FROM agent_conversation_cli_sessions WHERE conversation_id=? GROUP BY session_id HAVING COUNT(*) > 1)',
+                    (main,)).fetchone()[0]):
+            reasons.append('one_conversation')
         for reply in (asked, probed):
             reasons += check_reply(answer(reply), Scenario('quick-question', ''))
-        return reasons, {**asked, 'viewer': 0, 'conversation': quick_id, 'source': 'voice'}
+        return reasons, {**asked, 'viewer': 0, 'conversation': main, 'source': ('voice', 'app'),
+                         'answered': tuple(turn['id'] for turn in quick_turns)}
 
     async def connect_gmail_scenario(self):
         """S14 (Gmail): a task in 信件助理's chat that needs Gmail shows a card there. The owner abandons one

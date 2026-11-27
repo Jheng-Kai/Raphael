@@ -20,12 +20,12 @@ async def test_speech_cursor_sends_only_new_messages_with_the_board(rig,exchange
 async def test_member_posts_and_chief_decisions_never_impersonate_owner_or_interrupt(rig,exchange):
     room,ids=await team(rig)
     await send(rig,room,'@Alice review')
-    source=exchange._history.add(session_id='chief',question='Decision',route='answer',prefix='',text='',status='running')
-    post=exchange.post(0,{'room_id':room['id'],'text':'Use one stage owner.','kind':'decision'},source)
-    duplicate=exchange.post(0,{'room_id':room['id'],'text':'Use one stage owner.','kind':'decision'},source)
+    source=exchange._history.add(session_id='chief',question='Decision',route='answer',prefix='',text='',status='running',member_id=rig.lead)
+    post=exchange.post(rig.lead,{'room_id':room['id'],'text':'Use one stage owner.','kind':'decision'},source)
+    duplicate=exchange.post(rig.lead,{'room_id':room['id'],'text':'Use one stage owner.','kind':'decision'},source)
     assert duplicate['duplicate'] and duplicate['message_id']==post['message_id']
     message=rig.conn.execute('SELECT member_id,kind FROM room_messages WHERE id=?',(post['message_id'],)).fetchone()
-    assert tuple(message)==(0,'decision')
+    assert tuple(message)==(rig.lead,'decision')
     assert exchange._exchanges.get(1).reason==''
     result=await history(rig,room)
     assert result['decisions'][0]['text']=='Use one stage owner.'
@@ -60,8 +60,8 @@ async def test_startup_closes_interrupted_speech_and_reoffers_its_address_once(r
 
 async def test_a_digest_cannot_extend_itself_by_reposting(rig,exchange):
     room,ids=await team(rig)
-    source=exchange._history.add(session_id='private-review',question='Review',route='answer',prefix='',text='',status='running')
-    exchange.post(0,{'room_id':room['id'],'text':'A new finding.'},source)
+    source=exchange._history.add(session_id='private-review',question='Review',route='answer',prefix='',text='',status='running',member_id=rig.lead)
+    exchange.post(rig.lead,{'room_id':room['id'],'text':'A new finding.'},source)
     await exchange.wait_idle()
     await finish(rig,exchange,'(pass)')
     speech=rig.background.attached[-1][1]
@@ -75,9 +75,9 @@ async def test_chief_targets_an_existing_superset_room_without_faking_owner_inpu
     room,ids=await team(rig)
     result=await exchange.meeting({'room_id':room['id'],'agenda':'Review the release.','roles':{}},
                                   'en',meeting_source(rig,'target-existing'))
-    assert result['room_id']==room['id'] and result['member_ids']==[0,*ids]
+    assert result['room_id']==room['id'] and result['member_ids']==[rig.lead,*ids]
     messages=(await history(rig,room))['messages']
-    assert sum(m['text']=='Review the release.' for m in messages)==1 and messages[0]['member_id']==0
+    assert sum(m['text']=='Review the release.' for m in messages)==1 and messages[0]['member_id']==rig.lead
     assert all(m['author_kind']=='member' for m in messages)
     assert not rig.conn.execute('SELECT 1 FROM room_exchanges WHERE reason=\'interjection\'').fetchone()
 
@@ -109,19 +109,19 @@ async def test_overflow_uses_the_shared_sentence_in_the_requested_language(rig, 
         assert exchange._unfinished(origin, language) == [("Alice", Failure("context_overflow", "context_overflow").sentence("Claude Code", language))]
 
 
-def _post_many(rig, exchange, room, source, count, *, member=0, start=0):
+def _post_many(rig, exchange, room, source, count, *, member=None, start=0):
     for number in range(start, start + count):
-        exchange.post(member, {'room_id': room['id'], 'text': f'Point {number}.'}, source)
+        exchange.post(rig.lead if member is None else member, {'room_id': room['id'], 'text': f'Point {number}.'}, source)
 
 
 async def test_a_member_who_posts_too_fast_is_told_the_room_is_pausing_and_when_it_goes_on(rig, exchange):
     from raphael_core.protocol import RpcError
     room, ids = await team(rig)
     await send(rig, room, '@Alice review')
-    source = exchange._history.add(session_id='chief', question='Post', route='answer', prefix='', text='', status='running')
+    source = exchange._history.add(session_id='chief', question='Post', route='answer', prefix='', text='', status='running', member_id=rig.lead)
     _post_many(rig, exchange, room, source, 4)
     with pytest.raises(RpcError) as refused:
-        exchange.post(0, {'room_id': room['id'], 'text': 'Point 5.'}, source)
+        exchange.post(rig.lead, {'room_id': room['id'], 'text': 'Point 5.'}, source)
     words = refused.value.message
     assert 'room is pausing' in words and 'too many replies came at once' in words and 'seconds' in words
     assert '4 from each member' in words and '12 posts a minute' in words
@@ -134,7 +134,7 @@ async def test_a_busy_room_pauses_every_member_and_the_same_words_twice_are_a_re
     from raphael_core.protocol import RpcError
     room, ids = await team(rig)
     await send(rig, room, '@Alice review')
-    members = (0, *ids)
+    members = (rig.lead, *ids)
     sources = {member: exchange._history.add(session_id=f'm{member}', question='Post', route='answer', prefix='', text='',
                                              status='running', member_id=member) for member in members}
     thread = rig.conn.execute('SELECT thread_id FROM room_messages').fetchone()[0]
@@ -148,7 +148,7 @@ async def test_a_busy_room_pauses_every_member_and_the_same_words_twice_are_a_re
             exchange.post(member, {'room_id': room['id'], 'text': 'One more.'}, sources[member])
         assert 'room is pausing' in refused.value.message
     with pytest.raises(RpcError) as repeated:
-        exchange.post(0, {'room_id': room['id'], 'text': 'Earlier 0.'}, sources[0])
+        exchange.post(rig.lead, {'room_id': room['id'], 'text': 'Earlier 0.'}, sources[rig.lead])
     assert 'exact message' in repeated.value.message and 'pausing' not in repeated.value.message
 
 

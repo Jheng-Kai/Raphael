@@ -21,7 +21,7 @@ def fail(rig, question, *, steps=(), model=None, text="The reply took too long."
     """A request that ended in an error, as the history keeps it."""
     return rig.history.add(
         session_id="failed", question=question, route="answer", prefix="否", text=text, status="error",
-        model=model, steps=list(steps), conversation_id=conversation_id or rig.service.conversations.quick(),
+        model=model, steps=list(steps), conversation_id=conversation_id or rig.service.conversations.main(0),
     )  # fmt: skip
 
 

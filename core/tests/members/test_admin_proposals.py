@@ -191,25 +191,23 @@ async def test_first_bot_profile_uses_the_same_draft_and_survives_service_restar
 
     rig, team = setup
     before = await rig.call("members.list", {})
-    assert before["members"][0]["profile_ready"] is False
-    brain(("member_update", {"id": 0, "name": "晨星", "personality": "Precise", "instructions": "Research daily"}))
-    asked = await typed(rig, "Name yourself 晨星", 0)
+    assert before["members"][0]["personality"] == ""
+    brain(("member_update", {"id": 0, "personality": "Precise", "instructions": "Research daily"}))
+    asked = await typed(rig, "Give yourself a character", 0)
     assert asked["confirm"]["drafts"][0]["member_id"] == 0
     waiting = await rig.call("members.list", {})
-    assert waiting["members"][0]["name"] == before["members"][0]["name"]
-    assert waiting["members"][0]["profile_ready"] is False
+    assert waiting["members"][0]["personality"] == ""
     await rig.call("agent.confirm", {"id": asked["confirm"]["id"], "approved": True, "drafts": asked["confirm"]["drafts"]})
     after = await rig.call("members.list", {})
-    assert after["members"][0]["name"] == "晨星"
-    assert after["members"][0]["profile_ready"] is True
+    assert after["members"][0]["personality"] == "Precise"
+    assert after["members"][0]["instructions"] == "Research daily"
     assert len(after["members"]) == 1
     turn = (await rig.turns())[0]
     assert turn["text"] == "工作已交辦。"  # the turn went on after the yes and the model closed it
-    assert any(m["kind"] == "event" and m["text"] == "已重新命名為 晨星" for m in turn["messages"])
     restarted = MembersService(team.conn, tmp_path, background=team.background)
     assert restarted.speaker(0).personality == "Precise"
     assert restarted.speaker(0).instructions == "Research daily"
-    assert restarted.find("晨星").id == 0
+    assert restarted.find("Raphael").id == 0
     await rig.confirm(asked["confirm"]["id"])
     assert await rig.call("members.list", {}) == after
 
@@ -254,11 +252,11 @@ async def test_group_only_proposal_accepts_owner_edits_and_applies_once(setup, b
 
 async def test_first_bot_cancel_and_invalid_batch_leave_profile_unset(setup, brain):
     rig, team = setup
-    brain(("member_update", {"id": 0, "name": "Morning", "instructions": "Read notes"}))
+    brain(("member_update", {"id": 0, "instructions": "Read notes"}))
     asked = await typed(rig, "Set up the first Bot", 0)
     await rig.confirm(asked["confirm"]["id"], False)
     assert not team.members.first_bot_profile()
-    brain(("member_update", {"id": 0, "name": "Morning"}),
+    brain(("member_update", {"id": 0, "instructions": "Read notes"}),
           ("member_create", {"name": "", "role": "Invalid"}))
     asked = await typed(rig, "Set up both members", 0)
     await rig.confirm(asked["confirm"]["id"])
@@ -400,8 +398,6 @@ async def test_an_import_on_a_card_that_leaves_a_linked_file_out_names_it_to_the
     rig, team = setup
     skill = tmp_path / "plugin" / "skills" / "lazy-mode"
     skill.mkdir(parents=True)
-    (tmp_path / "plugin" / ".claude-plugin").mkdir()
-    (tmp_path / "plugin" / ".claude-plugin" / "plugin.json").write_bytes(b"{}")
     (skill / "SKILL.md").write_bytes((LAZY_MODE + "\nRead [it](../../../elsewhere.md).\n").encode())
     others = (publish("member_library_delete", {"key": "pack:missing"}),) if several else ()
     brain(publish("member_library_import", {"source": f"local:{tmp_path / 'plugin'}", "access": []}), *others, then="Imported.")

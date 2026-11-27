@@ -278,3 +278,25 @@ describe("on a Mac", () => {
     expect(systemMessage("common.keyPasteHint", "en", true)).toContain("⌘V");
   });
 });
+
+// Raphael is the app's guide, separate from the slimes. The answer model, the cleanup of a bot conflict and the team a
+// new person meets are not "Raphael", so these words never name him (the names are core/.../agent/speaker.py RAPHAEL_NAMES).
+const RAPHAEL_NAMES = ["Raphael", "拉斐爾", "拉斐尔", "ラファエル", "라파엘", "Рафаэль", "ราฟาเอล"];
+const NOT_RAPHAEL_KEYS = [
+  "services.sameAsAnswer", "services.why.visionSame", "services.why.searchOpenrouter",
+  "picker.roleAnswer", "onboarding.demoSummary", "msg.tg.conflict",
+] as const;
+
+test("the answer model, the key of a search, the team and a bot conflict never name Raphael in any language", () => {
+  for (const [locale, catalog] of Object.entries(catalogs)) {
+    const messages = catalog as Record<string, string>;
+    for (const key of NOT_RAPHAEL_KEYS) {
+      const text = messages[key];
+      expect(text?.trim(), `${locale} ${key}`).toBeTruthy();
+      for (const name of RAPHAEL_NAMES) expect(text.toLowerCase(), `${locale} ${key} names ${name}`).not.toContain(name.toLowerCase());
+    }
+  }
+  expect(catalogs["zh-TW"]["services.sameAsAnswer"]).toBe("與回答模型相同");
+  expect(catalogs["zh-TW"]["picker.roleAnswer"]).toBe("回答模型");
+  expect(catalogs.en["services.sameAsAnswer"]).toBe("Same as the answer model");
+});

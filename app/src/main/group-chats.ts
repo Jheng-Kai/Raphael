@@ -22,7 +22,7 @@ import { askGroupName, confirmDelete, openDialog } from "./member-dialogs";
 import { openActions } from "./member-column";
 import { lightHTML, lightOf } from "./sidebar-light";
 import { createChatComposer } from "./chat-composer";
-import { messageHTML, messagePlainText, replyContentHTML } from "./message-content";
+import { messagePlainText, ownerMessageHTML, replyContentHTML } from "./message-content";
 import { followRichScroll, mountRichContent, preserveRichScroll, richScrollFollows, releaseRichScroll } from "./message-rich";
 import { mountConversationScroll, passWheelUnder } from "./conversation-scroll";
 import { messageExpandHTML, measureMessagePreviews, messagePreviewMeasure } from "./message-preview";
@@ -42,7 +42,7 @@ import { composioAction, composioText } from "./composio-result";
 import { mountPages } from "./page-card";
 import { carryTyped } from "./secret-card";
 import { carryMail } from "./mail-card";
-import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML, groupFacesHTML, memberOf } from "./members";
+import { plainLine, chiefFirst, primaryIdOf, memberRole, faceHTML, groupFacesHTML, memberOf, RAPHAEL_ID } from "./members";
 import { NAME, eventLineHTML } from "./event-line";
 import { handoffRun, roomHandoffHTML } from "./handoff-line";
 import { memberColor, nameAccent } from "./owner-bubble";
@@ -51,7 +51,7 @@ import type { WireAttachment, HandoffView } from "./types";
 import type { AppContext, MembersList, Room, RoomMessage, RoomExchange, MainEvent } from "./types";
 import { btn, closeMenu, copyButton, esc, ico, iconButton, openMenu, openPopover, patchHTML, sel, toaster } from "./ui";
 import "./automations.css";
-import { firstBotName } from "./first-bot";
+import { raphaelName } from "./raphael";
 
 /** Why a member's room reply never came, by the core's reason for its blocked intent. */
 const BLOCKED = {
@@ -84,7 +84,7 @@ export function clearRoomSelection(): void { selectedRoom = null; changed(); }
 const changed = (): void => { for (const listener of listeners) listener(); };
 const responderChoices = (list: MembersList, selected: Set<number>) => [
   { value: "auto", label: t("rooms.autoResponder") },
-  ...primaryFirst(list.members, primaryIdOf(list)).filter(m => selected.has(m.id)).map(m => ({ value: `member:${m.id}`, label: m.name })),
+  ...chiefFirst(list.members, primaryIdOf(list)).filter(m => selected.has(m.id)).map(m => ({ value: `member:${m.id}`, label: m.name })),
   { value: "everyone", label: t("team.everyone") },
 ];
 /**
@@ -93,7 +93,7 @@ const responderChoices = (list: MembersList, selected: Set<number>) => [
  * taken out.
  */
 const memberRowsHTML = (list: MembersList, selected: Set<number>): string =>
-  `<div class="room-list" role="group" aria-label="${esc(t("rooms.members"))}">${primaryFirst(list.members, primaryIdOf(list)).map(m =>
+  `<div class="room-list" role="group" aria-label="${esc(t("rooms.members"))}">${chiefFirst(list.members, primaryIdOf(list)).map(m =>
     btn(faceHTML(m, 28) + `<span class="room-row-name">${esc(m.name)}</span><span class="room-row-mark" data-check aria-hidden="true">${selected.has(m.id) ? ico("check") : ""}</span>`,
       "room-row", ` data-dlg="member" data-member="${m.id}" aria-pressed="${selected.has(m.id)}"${m.id === primaryIdOf(list) ? " disabled" : ""}`)).join("")}</div>`;
 const responderField = (list: MembersList, selected: Set<number>, value: string) =>
@@ -111,12 +111,15 @@ export async function openRoomsMenu(anchor: HTMLElement): Promise<void> {
 export async function openNewGroupChat(opts: { onCreated?(room: Room): void } = {}): Promise<void> {
   try {
     const list = await api.membersList(getLocale());
+    // A group chat has the chief of staff in it, always first: with no slime there is nobody to meet.
+    const chief = primaryIdOf(list);
+    if (chief === null) return;
     let group = "none", saving = false, responder = "auto";
     const creationRequestId = crypto.randomUUID();
-    const selected = new Set<number>([primaryIdOf(list)]);
+    const selected = new Set<number>([chief]);
     const choices = [{ value: "none", label: t("members.ungrouped") }, ...list.groups.map(g => ({ value: String(g.id), label: g.name }))];
     const dialog = openDialog({ title: t("rooms.new"), cls: "au-group-dialog", body:
-      `<label class="au-field"><span>${esc(t("rooms.name"))}</span><input id="room-name" class="mb-fin" maxlength="24" autocomplete="off" value="${esc(list.members.find(m=>m.id===primaryIdOf(list))?.name??"Raphael")}" placeholder="${esc(t("rooms.namePlaceholder"))}" aria-label="${esc(t("rooms.name"))}"></label>` +
+      `<label class="au-field"><span>${esc(t("rooms.name"))}</span><input id="room-name" class="mb-fin" maxlength="24" autocomplete="off" value="${esc(list.members.find(m=>m.id===chief)?.name??"")}" placeholder="${esc(t("rooms.namePlaceholder"))}" aria-label="${esc(t("rooms.name"))}"></label>` +
       `<div class="au-field"><span>${esc(t("rooms.group"))}</span>${sel(choices, group, t("rooms.group"), ' data-dlg="group"')}</div>` +
       `<section class="au-field"><span>${esc(t("rooms.members"))}</span>${memberRowsHTML(list, selected)}</section>` + responderField(list,selected,responder),
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("rooms.create")), attrs: ' data-dlg="create"' } }, canClose: () => !saving,
@@ -157,7 +160,7 @@ export async function openGroupChat(roomId: number): Promise<void> {
 
 async function editRoomMembers(room: Room, saved: () => void): Promise<void> {
   try {
-    const list = await api.membersList(getLocale()), selected = new Set([primaryIdOf(list),...room.member_ids]);
+    const list = await api.membersList(getLocale()), chief = primaryIdOf(list), selected = new Set([...(chief === null ? [] : [chief]), ...room.member_ids.filter(id => id !== RAPHAEL_ID)]);
     let saving = false, responder = room.default_responder ?? "auto";
     const dialog = openDialog({ title: t("rooms.members"), cls: "au-group-dialog",
       body: memberRowsHTML(list, selected) + responderField(list,selected,responder),
@@ -195,7 +198,7 @@ async function editRoomRoles(room: Room, saved: () => void): Promise<void> {
     let saving = false;
     const dialog = openDialog({ title: t("rooms.roles"), cls: "au-group-dialog",
       // The same list as the members': each person's face and name, the role as a bare dropdown at the right.
-      body: `<div class="room-list">${primaryFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id }) => {
+      body: `<div class="room-list">${chiefFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id }) => {
         const member = list.members.find(m => m.id === id);
         return `<div class="room-row is-static">${member ? faceHTML(member, 28) : ""}<span class="room-row-name">${esc(member?.name ?? "")}</span>${sel(choices, roles[id] ?? "participant", `${t("rooms.roles")} ${member?.name ?? ""}`, ` data-dlg="role" data-member="${id}"`)}</div>`;
       }).join("")}</div>`,
@@ -413,7 +416,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     snapshot = roomStamp();
     // The chief's crown is the gold one its slime already wears (crown.ts, same member as primaryIdOf); a second crown
     // icon over a 24 px face hid it, so only its name for screen readers stays here.
-    patchHTML(el.querySelector('.au-room-heading')!,`<b>${esc(room.is_team ? t("rooms.team") : room.name)}</b><div class="au-room-faces">${primaryFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id })=>{const m=person(id);return m?`<span class="au-room-participant" data-tooltip="${esc(memberRole(m)?`${m.name} · ${memberRole(m)}`:m.name)}">${faceHTML(m,24)}${id===primaryIdOf(list)?`<span class="au-room-crown" role="img" aria-label="${esc(t("rooms.chief"))}"></span>`:""}</span>`:"";}).join("")}</div>`);
+    patchHTML(el.querySelector('.au-room-heading')!,`<b>${esc(room.is_team ? t("rooms.team") : room.name)}</b><div class="au-room-faces">${chiefFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id })=>{const m=person(id);return m?`<span class="au-room-participant" data-tooltip="${esc(memberRole(m)?`${m.name} · ${memberRole(m)}`:m.name)}">${faceHTML(m,24)}${id===primaryIdOf(list)?`<span class="au-room-crown" role="img" aria-label="${esc(t("rooms.chief"))}"></span>`:""}</span>`:"";}).join("")}</div>`);
     const active=exchange&&["queued","running"].includes(exchange.state);
     composer.setTaskState(active || handoffs.some(task=>["queued","running","waiting"].includes(task.state)) ? "running" : sendingRooms.has(room.id) ? "ack" : "idle");
     let statusHTML=room.membership_state==="needs_adjustment"?btn(esc(t("rooms.adjustMembers")),"sm",' data-room-act="members"'):"";
@@ -481,7 +484,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
         return `<li class="tn room-intent-blocked" role="status">${eventLineHTML(t("rooms.intentBlocked",{p0:NAME,p1:t(BLOCKED[intent.reason as keyof typeof BLOCKED]??"rooms.blockedWorker")}),faceOf(intent.recipient_id,name),name)}</li>`;
       }
       if("task" in entry){
-        return `<li class="tn handoff-row">${roomHandoffHTML(tasks, (id, fallback) => { const member = person(id) ?? { id, name: id === 0 ? firstBotName() : fallback }; return { name: member.name || fallback, face: faceHTML(member, 20) }; })}</li>`;
+        return `<li class="tn handoff-row">${roomHandoffHTML(tasks, (id, fallback) => { const member = person(id) ?? { id, name: id === 0 ? raphaelName() : fallback }; return { name: member.name || fallback, face: faceHTML(member, 20) }; })}</li>`;
       }
       const m=entry.message;
       if (m.kind === "report" && m.report) return `<li class="tn" data-room-message="${m.id}">${roomReportHTML(m)}</li>`;
@@ -497,7 +500,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',reactionControlHTML() + iconButton("chat", t("rooms.thread"), ` data-room-act="thread" data-message="${m.id}"`).replace(" title=", " data-tooltip=") + (!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
       const metadata = (m.reply_count ? `<button type="button" class="btn sm room-thread-chip" data-room-act="thread" data-message="${m.id}">${esc(t("rooms.threadCount", { p0: m.reply_count }))}</button>` : "");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
-      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${withReactions(`${words?"":reply}${filesHTML(m.attachments)}${words?`<div class="bubble">${reply}<div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}`, m.reactions)}${actions}${metadata}</div></div>`:`<div class="ra"><span class="ra-face"${member?` data-tooltip="${esc(member.name)}"`:""}>${member?faceHTML(member,30):""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}"${m.status!=="running"&&m.member_id!==null?` data-path-member="${m.member_id}"`:""}>${index===0?withReactions(quoted(replyContentHTML(part,"",m.status==="running"),reply),m.reactions):replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?actions+metadata:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title"), pictureActionsHTML(actions)) : ""}</div></div>`}</li>`;
+      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${withReactions(`${words?"":reply}${filesHTML(m.attachments)}${words?`<div class="bubble">${reply}<div class="message-text">${ownerMessageHTML(words, "", addressable, undefined, true)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}`, m.reactions)}${actions}${metadata}</div></div>`:`<div class="ra"><span class="ra-face"${member?` data-tooltip="${esc(member.name)}"`:""}>${member?faceHTML(member,30):""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}"${m.status!=="running"&&m.member_id!==null?` data-path-member="${m.member_id}"`:""}>${index===0?withReactions(quoted(replyContentHTML(part,"",m.status==="running"),reply),m.reactions):replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?actions+metadata:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title"), pictureActionsHTML(actions)) : ""}</div></div>`}</li>`;
     }), })).filter(line => line.html) : [{ key: "empty", html: `<li class="au-empty">${esc(t("rooms.empty"))}</li>`, turnId: undefined }];
     renderedMessages.retain(new Set(grouped.map(({entry}) => entryKey(entry))));
     const changed = patchThread(thread, wanted, drawn, {
@@ -559,7 +562,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   el.querySelector('[data-room-menu]')!.addEventListener('click',e=>{if(room)roomActions(e.currentTarget as HTMLElement,room,()=>void refresh(),close);});
   el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-picture","copy-code","attachment-open","attachment-image","older"].includes(act??""))e.stopPropagation();
     if(act==="private-work") openMemberThread(_app,Number(target.dataset.member),Number(target.dataset.turn));
-    else if(act==="peer-chat"){peer?.close();peer=openPeerChat(el,target,()=>handoffs,(id,fallback)=>{const member=person(id)??{id,name:id===0?firstBotName():fallback};return{name:member.name||fallback,face:faceHTML(member,28),accent:nameAccent(member)};},()=>{peer=null;});}
+    else if(act==="peer-chat"){peer?.close();peer=openPeerChat(el,target,()=>handoffs,(id,fallback)=>{const member=person(id)??{id,name:id===0?raphaelName():fallback};return{name:member.name||fallback,face:faceHTML(member,28),accent:nameAccent(member)};},()=>{peer=null;});}
     else if(act==="members"&&room)void editRoomMembers(room,()=>void refresh());
     else if(act==="expand-message") {
       e.stopPropagation();

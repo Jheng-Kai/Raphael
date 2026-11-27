@@ -4,9 +4,10 @@ export function installMock(fixture, config = {}, target = window) {
   const variant = config.fixture ?? {};
   if (variant.computerSuggestion) {
     const turn = data.turns.find(turn => turn.id === 2);
-    const reason = "安裝套件需要執行終端機指令。";
-    Object.assign(turn, { question: "請安裝並執行這個套件。", text: reason, status: "done",
-      computer_suggestion: { reason, installed: variant.computerSuggestion === "installed", state: "pending" },
+    const toHost = variant.computerSuggestion === "this-pc";
+    const reason = toHost ? "公司內部網站要用你在這台電腦上已登入的帳號和公司網路才打得開。" : "安裝套件需要執行終端機指令。";
+    Object.assign(turn, { question: toHost ? "請整理公司內部網站的新人指南。" : "請安裝並執行這個套件。", text: reason, status: "done",
+      computer_suggestion: { reason, installed: toHost || variant.computerSuggestion === "installed", state: "pending", target: toHost ? "host" : "docker" },
       messages: [{ seq: 1, kind: "reply", text: reason, at_ms: turn.created_at_ms + 500 }] });
   }
   if (variant.typingPerformance) {
@@ -53,13 +54,16 @@ export function installMock(fixture, config = {}, target = window) {
         { id: 716, name: "outline", description: "", enabled: true }] });
   }
   if (variant.skillPackages) {
-    // A library longer than the tab: the way back from a package's page must land where the list was left.
-    const kits = ["寫作工具", "資料分析", "客服回覆", "行銷素材", "財務報表", "招募流程", "產品規格", "設計檢查"];
+    // A library longer than the tab at every size (1920x1080 included): the way back from a package's page must land where the
+    // list was left. Its last kit (pack:45) is out of view until the list is scrolled.
+    const kits = ["寫作工具", "資料分析", "客服回覆", "行銷素材", "財務報表", "招募流程", "產品規格", "設計檢查",
+      "法務審閱", "會議準備", "教育訓練", "採購比價", "專案追蹤", "品質檢查", "社群經營", "翻譯校對"];
     data.skillLibrary = [...data.skillLibrary, ...kits.map((name, at) => ({
       key: `pack:${30 + at}`, name, kind: "pack", source: `example/kit-${at + 1}`, description: "", version: "", enabled: true, access: "all", updatable: true,
       skills: [{ id: 300 + 2 * at, name: `${name}一`, description: `${name}的第一個技能`, enabled: true }, { id: 301 + 2 * at, name: `${name}二`, description: `${name}的第二個技能`, enabled: true }],
     }))];
   }
+  if (variant.skillLibraryEmpty) data.skillLibrary = [];
   if (variant.hiddenMember) {
     // One member and one group chat taken off the list: they wait in the sidebar's hidden folder.
     const member = data.members.find(item => item.id === 2), room = data.rooms.find(item => item.id === 1);
@@ -289,7 +293,7 @@ export function installMock(fixture, config = {}, target = window) {
   }
   if (variant.presence) {
     const sample = data.presenceSample;
-    const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id !== 4));
+    const base = structuredClone(data.turns.find(turn => turn.member_id === 1));
     const working = ["working", "action-long", "action-group"].includes(variant.presence);
     const turn = {...base, id: 651, question: sample.question, text: working ? "" : sample.answer, status: working ? "running" : "done", task: null, steps: [], handoffs: [],
       model: "sample/model", cost_usd: .001, messages: [{seq: 1, kind: "progress", text: sample.progress, at_ms: base.created_at_ms + 1000}, ...working ? [] : [{seq: 2, kind: "reply", text: sample.answer, at_ms: base.created_at_ms + 3000}]]};
@@ -338,7 +342,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.menuMoveFlip) data.groups[1].name = data.handoffGroupSample.menuGroup;
   if (variant.polishData) data.history = Array.from({length:25}, (_,i)=>({...data.history[0], id:i+1, created_at_ms:data.now+i*1000, text:`Synthetic dictation ${i+1}` + (i===24 ? " Example text for checking the two-line preview. ".repeat(30) : "")})).reverse();
   if (variant.polishSearch) {
-    data.turns = [0,1].flatMap(member=>Array.from({length:205},(_,i)=>({...structuredClone(data.turns.find(t=>(t.member_id??0)===member && t.conversation_id!==4)), id:1000+member*1000+i, question:`Synthetic ${i} needle`, text:'needle and needle', messages:[], attachments:[], steps:[], session_id:`polish-${member}-${i}`, status:'done', member_id:member})));
+    data.turns = [0,1].flatMap(member=>Array.from({length:205},(_,i)=>({...structuredClone(data.turns.find(t=>(t.member_id??0)===member)), id:1000+member*1000+i, question:`Synthetic ${i} needle`, text:'needle and needle', messages:[], attachments:[], steps:[], session_id:`polish-${member}-${i}`, status:'done', member_id:member})));
     data.messages = Array.from({length:105},(_,i)=>({...structuredClone(data.messages[0]), id:3000+i, room_id:1, text:`Synthetic ${i} needle and needle`, status:'done'}));
   }
   if (variant.polishVoice) {
@@ -351,7 +355,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.missingModelList) data.clis = data.clis.map(cli => cli.id === "codex" ? {...cli, installed: true, available: true, models: []} : cli);
   if (variant.richReply) {
     const source = data.richContent[variant.richReply === true ? "reply" : variant.richReply];
-    data.turns = [0, 1].map((member, index) => ({ ...structuredClone(data.turns.find(turn => (turn.member_id ?? 0) === member && turn.conversation_id !== 4)), id: 701 + index,
+    data.turns = [0, 1].map((member, index) => ({ ...structuredClone(data.turns.find(turn => (turn.member_id ?? 0) === member)), id: 701 + index,
       member_id: member, text: source, question: "請整理研究資料，並提供表格與流程。", status: variant.richRunning ? "running" : "done", route: "answer", steps: [],
       messages: [{ seq: 1, kind: "reply", text: source, at_ms: data.now }], attachments: [] }));
     data.messages = [{ ...structuredClone(data.messages.find(message => message.member_id !== null)), id: 701, member_id: 1, text: source, kind: "message", status: "done", attachments: [] }];
@@ -462,7 +466,7 @@ export function installMock(fixture, config = {}, target = window) {
       member.unread_threads = member.unread ? [{ conversation_id: member.main_conversation_id, from: null, kind: member.unread_kind }] : [];
     }
     // What the scene's check expects, said here by the owner's rule and not read back from the app: thinking is no light, a question is orange.
-    data.expectedLights = { members: Object.fromEntries(data.members.map(member => [member.id, { thinking: null, message: "message", done: "done", failed: "failed", waiting: "waiting" }[variant.sidebarLights[member.id]] ?? null])), rooms: {} };
+    data.expectedLights = { members: Object.fromEntries(data.members.filter(member => member.id !== 0).map(member => [member.id, { thinking: null, message: "message", done: "done", failed: "failed", waiting: "waiting" }[variant.sidebarLights[member.id]] ?? null])), rooms: {} };
   }
   // The group chats of the same sidebar: room 1 has a message (the fixture's own), room 2 a meeting that ended, room 3 a question that waits.
   if (variant.sidebarLightRooms) {
@@ -473,10 +477,12 @@ export function installMock(fixture, config = {}, target = window) {
     data.messages.push({ ...spoken, id: next, room_id: 2, text: "會議結束，結論已整理好" }, { ...spoken, id: next + 1, room_id: 3, text: "要先確認預算嗎？" });
     Object.assign(data.expectedLights.rooms, { 1: "message", 2: "done", 3: "waiting" });
   }
-  // Pinned tiles (`pinnedTiles`: member ids, 0 is Raphael, who is pinned by its own setting): the core lists the pinned first, then by
+  // Pinned tiles (`pinnedTiles`: slime ids; Raphael is never pinned): the core lists the pinned first, then by
   // position, and a `position` written to a member is a place in the order of all of them, numbered again from 0.
-  if (variant.pinnedTiles) for (const id of variant.pinnedTiles) { if (id === 0) data.settings.chief_pinned = true; else data.members.find(member => member.id === id).pinned = true; }
-  if (variant.onlyRaphael) data.members = data.members.filter(member => member.id === 0);
+  if (variant.pinnedTiles) for (const id of variant.pinnedTiles) data.members.find(member => member.id === id).pinned = true;
+  if (variant.onlyRaphael || variant.onboarding) data.members = data.members.filter(member => member.id === 0);
+  // With no slime there is no folder of slimes and no group chat of them either.
+  if (variant.onlyRaphael) { data.groups = []; data.rooms = []; }
   if (variant.chatgptSignedIn) {
     data.chatgpt = { signed_in: true, email: "owner@example.test", plan_scope_granted: true };
     data.settings.agent_model = "@chatgpt:gpt-6-sol?effort=medium";
@@ -489,8 +495,12 @@ export function installMock(fixture, config = {}, target = window) {
   // A member saved before Claude Code's list named exact models: it holds the alias the CLI takes for its newest Haiku.
   if (variant.claudeAlias) data.members.find(member => member.id === 3).model = "cli:claude:haiku";
   if (variant.waitingMember !== undefined) data.members.find(member => member.id === variant.waitingMember).waiting = true;
-  // The owner's primary contact: Raphael until another member is chosen (`primaryMember` seeds it). The roster says it, as the core does.
-  data.primaryId = variant.primaryMember ?? 0;
+  // The owner's chief of staff: a slime, the first one ever made unless `primaryMember` seeds another (null: nobody, as with no slime
+  // at all). Raphael is never the chief. The roster says it, as the core does. The app opens on the chief's conversation, which reads it,
+  // so the default is the first slime with nothing unread, waited for or running that a scene is about to look at.
+  const quiet = member => !member.unread && !member.waiting && !member.activity && !member.unread_threads?.length;
+  const slimes = data.members.filter(member => member.id !== 0 && !member.hidden);
+  data.primaryId = variant.primaryMember === undefined ? ((slimes.find(quiet) ?? slimes[0])?.id ?? null) : variant.primaryMember;
   data.roomWrapupMessage.member_id = data.primaryId;
   if (variant.problem) data.status.openrouter.state = "no_key";
   // The dictation days moved on to end on another day (`statsUntil`, YYYY-MM-DD): the first days of a month put its name
@@ -501,8 +511,9 @@ export function installMock(fixture, config = {}, target = window) {
   }
   let adminQuestion = variant.adminApproval ? data.adminQuestions[variant.adminApproval] : null;
   let adminTurn = adminQuestion ? data.turns.find(turn => turn.id === adminQuestion.turn_id) : null;
+  // No slime and nothing said yet: the app opens on Raphael's conversation, empty.
   if (variant.unconfiguredRaphael) {
-    data.members = [{ ...data.members[0], profile_ready: false }];
+    data.members = [data.members[0]];
     data.groups = [];
     data.turns = [];
     adminQuestion = adminTurn = null;
@@ -514,8 +525,9 @@ export function installMock(fixture, config = {}, target = window) {
     adminTurn.text = "";
   }
   if (variant.running || variant.quickRunning) {
-    const conversation = data.conversations.find(item => item.member_id === (variant.runningMember ?? 0) && (variant.quickRunning ? item.kind === "quick" : item.is_default));
-    const runningTurn = data.turns.find(turn => turn.member_id === conversation?.member_id && turn.conversation_id === conversation?.id);
+    // `quickRunning`: the Alt+Space turn of Raphael's one conversation (90) is the one that runs.
+    const conversation = data.conversations.find(item => item.member_id === (variant.runningMember ?? 0) && item.is_default);
+    const runningTurn = variant.quickRunning ? data.turns.find(turn => turn.id === 90) : data.turns.find(turn => turn.member_id === conversation?.member_id && turn.conversation_id === conversation?.id);
     runningTurn.status = "running";
     // "fresh": the reply has only just started, before any step or progress line.
     runningTurn.messages = variant.running === "fresh" ? [] : runningTurn.messages.filter(message => message.kind !== "reply");
@@ -637,6 +649,26 @@ export function installMock(fixture, config = {}, target = window) {
       messages: [], steps: [], handoffs: [exchange(60, 1, "小晴", turn.created_at_ms - EARLIER + 5_000, sample.earlierRequest, sample.earlierResult),
         exchange(62, 2, "小森", turn.created_at_ms - EARLIER + 6_000, sample.otherRequest, sample.otherResult)] });
     turn.handoffs = [exchange(61, 1, "小晴", turn.created_at_ms + 5_000, sample.request, sample.result)];
+  }
+  // The sub-workers a member started with `delegate_task`: one line under the answer, its rows open to each one's goal, model,
+  // steps and state (R-DELEGATE-03). "running": one is done, one works, one waits for a place, one waits for the owner's yes.
+  if (variant.delegateGroup) {
+    const sample = data.delegateSample, done = variant.delegateGroup === "done", turn = data.turns.find(turn => turn.id === 1);
+    const states = done ? ["done", "done", "done"] : ["done", "running", "queued", "running"];
+    const delegates = states.map((state, i) => ({
+      task_id: 700 + i, source_turn_id: turn.id, member_id: turn.member_id ?? 0, title: sample.goals[i % 3], goal: sample.goals[i % 3],
+      state, reason: null, model: sample.models[i % 3][0], model_name: sample.models[i % 3][1], model_calls: state === "queued" ? 0 : 3 + i,
+      tool_calls: state === "queued" ? 0 : i === 1 ? 1 : 4 + i, cost_usd: 0.002 * i, created_at_ms: turn.created_at_ms + 1_000 + i,
+      started_at_ms: state === "queued" ? null : turn.created_at_ms + 2_000, finished_at_ms: state === "done" ? turn.created_at_ms + 9_000 : null,
+      waiting_owner: !done && i === 3 ? 1 : 0, result: state === "done" ? sample.results[i % 3] : "" }));
+    data.turns = [{ ...turn, question: sample.request, text: sample.answer, messages: [], steps: [], handoffs: [], delegates }];
+  }
+  if (variant.identifiers) {
+    // Identifiers with underscores in the owner's words, a member's reply and both sides of a hand-off (never emphasis).
+    const turn = data.turns.find(turn => turn.id === 1), sample = data.identifiersSample;
+    turn.question = sample.owner; turn.text = sample.reply;
+    turn.messages = [{ seq: 1, kind: "reply", text: sample.reply, at_ms: turn.created_at_ms }];
+    if (turn.handoffs?.[0]) Object.assign(turn.handoffs[0], { request: sample.request, result: sample.result });
   }
   if (variant.handoffGroup) {
     const many = variant.handoffGroup === "many", done = variant.handoffGroup === "done";
@@ -777,6 +809,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.computerCard) {
     const turn = structuredClone(data.computerTurns[variant.computerCard]);
     if (variant.browserHandback) Object.assign(turn.computers[0], { browser: true, app: "Chrome", note: variant.desktop.host_request.detail });
+    if (variant.computerReason) turn.computers[0].reason = variant.computerReason;
     data.turns.push(turn);
   }
   if (variant.composioResults) {
@@ -941,7 +974,7 @@ export function installMock(fixture, config = {}, target = window) {
     if (event) data.home.calendar.push({ ...event, id: "event:all-day", title: "素材整理日", all_day: true });
   }
   if (variant.longOwner || variant.longReply || variant.rawReplyEnvelope) {
-    const turn = data.turns.find(turn => turn.member_id === (variant.longReply ? 1 : 0) && turn.conversation_id !== 4);
+    const turn = data.turns.find(turn => turn.member_id === (variant.longReply ? 1 : 0));
     const text = Array.from({ length: 12 }, (_, index) => `${index + 1}. 整理每日新聞素材：先閱讀來源與發表日期，再核對事件發生時間。保留原始連結、重點摘要與尚待確認的資訊。\n\n將已確認的素材依主題整理，為下一次編輯保留完整脈絡。`).join("\n\n");
     if (variant.longOwner) turn.question = text;
     if (variant.longReply || variant.rawReplyEnvelope) {
@@ -950,7 +983,7 @@ export function installMock(fixture, config = {}, target = window) {
     }
   }
   if (variant.splitReplies) {
-    const turn = data.turns.find(turn => turn.member_id === 1 && turn.conversation_id !== 4);
+    const turn = data.turns.find(turn => turn.member_id === 1);
     const parts = ["我先核對了來源與時間。", "接著確認資料：\n\n- 第一個來源已更新\n- 第二個來源日期一致", "最後一步保留完整範例：\n\n```ts\nconst ready = true;\n```"];
     turn.text = parts.at(-1);
     turn.messages = parts.map((text, index) => ({ seq: index + 1, kind: "reply", text, at_ms: turn.created_at_ms + index }));
@@ -1254,6 +1287,7 @@ export function installMock(fixture, config = {}, target = window) {
     else data.conversations.push({ id: nextId(data.conversations), member_id: member, title: "", is_default: true, kind: "standard", created_at_ms: data.now, updated_at_ms: data.now });
   };
   // As the core does: the member types while its own model writes the greeting; it comes as its line and one question card.
+  // Raphael's empty conversation begins its guided tour the same way: its welcome and the card of what to do first.
   const greet = member => {
     mainConversation(member.id);
     const conversation = data.conversations.find(item => item.member_id === member.id && item.is_default);
@@ -1261,11 +1295,14 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns.push(greeting);
     if (!variant.greetingPending) setTimeout(() => {
       // The member's own line with the one question card (the core's greeting), asked after the line.
-      const line = `嗨，我是${member.name} 👋 很高興加入你的團隊。`;
+      const tour = member.id === 0;
+      const line = tour ? "歡迎。史萊姆是你的團隊，負責日常工作；我是嚮導與管家，替你設定、連接應用程式，並在你同意的規則下操作這台電腦。" : `嗨，我是${member.name} 👋 很高興加入你的團隊。`;
       Object.assign(greeting, { status: "done", text: line, messages: [{ seq: 1, kind: "reply", text: line, at_ms: data.now }],
         task: { id: 9900 + greeting.id, state: "waiting", waiting_owner: 1, started_at_ms: data.now, created_at_ms: data.now + 1, finished_at_ms: null },
-        owner_questions: [{ id: `greeting-card-${greeting.id}`, task_id: 9900 + greeting.id, turn_id: greeting.id, member_id: member.id, kind: "ask_owner", card_id: "", question: "你想先讓我接手哪一件事？",
-          options: ["整理 Gmail 信件", "安排行程與提醒", "查資料、做研究", "寫文件與報告"], free_text: true, state: "asked", result: null, created_at_ms: data.now + 1 }] });
+        owner_questions: [{ id: `greeting-card-${greeting.id}`, task_id: 9900 + greeting.id, turn_id: greeting.id, member_id: member.id, kind: "ask_owner", card_id: "",
+          question: tour ? "你想先做什麼？" : "你想先讓我接手哪一件事？",
+          options: tour ? ["建立第一隻史萊姆", "連結應用程式", "認識聽寫、行事曆和用量", "看看設定"] : ["整理 Gmail 信件", "安排行程與提醒", "查資料、做研究", "寫文件與報告"],
+          free_text: true, state: "asked", result: null, created_at_ms: data.now + 1 }] });
       notify("AgentTurn", { turn_id: greeting.id, member_id: member.id });
     }, 600);
     return greeting;
@@ -1442,10 +1479,38 @@ export function installMock(fixture, config = {}, target = window) {
         if ("enabled" in p) pack.enabled = p.enabled;
         if ("access" in p) pack.access = p.access;
         if (p.skill) pack.skills.find(skill => skill.id === p.skill.id).enabled = p.skill.enabled;
+        if (p.rename) pack.skills.find(skill => skill.id === p.rename.id).name = p.rename.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
         return { package: pack };
       }
+      case "skills.library.convert": {
+        // A conversion under way (`skillConvert`): it works until the scene lets it end, then the skill the slime wrote is in the library.
+        const convert = variant.skillConvert;
+        if (!convert || p.task_id !== convert.task.task_id) throw new Error("[-32602] Invalid params: this conversion is not under way");
+        if (convert.ends !== "done") return { state: "working", ...convert.task };
+        const skill = { id: 610, name: "weekly-report", description: "整理每週進度並寫成報告", enabled: true };
+        const pack = { key: "skill:weekly", name: "weekly-report", kind: "single", source: convert.match, description: "", version: "", enabled: true, access: "all", updatable: false, skills: [skill] };
+        if (!data.skillLibrary.some(item => item.key === pack.key)) data.skillLibrary = [...data.skillLibrary, pack].sort((a, b) => a.name.localeCompare(b.name));
+        return { state: "done", package: pack };
+      }
       case "skills.library.import": {
+        // The one box sends a pasted link as text; the core says it is a link (members/skill_convert.py `kind_of`).
+        const asked = p.source ?? (typeof p.text === "string" && p.text.trim() && !/\s/.test(p.text.trim()) ? p.text.trim() : undefined);
+        p = asked !== undefined && p.source === undefined ? { source: asked } : p;
+        if (variant.skillConvert && (p.source === variant.skillConvert.match || p.file?.name === variant.skillConvert.match)) return { converting: variant.skillConvert.task };
         if (p.source === "nothing/here") throw new Error("[-32602] Invalid params: not_found: no SKILL.md found");
+        // A cause the core names (members/skill_errors.py): its kind leads the message and its detail rides at the end. The
+        // scene's fixture holds the refusal of each source it fails.
+        const refusal = variant.importRefusal?.[p.source];
+        if (refusal) throw new Error(`[-32602] Invalid params: ${refusal[0]}: the core's own words [[${JSON.stringify({ reason: refusal[1], ...refusal[2] })}]]`);
+        if (variant.skillImportPending) return new Promise(() => {});
+        if (variant.importMade?.[p.source]) {
+          // What the import makes (a plugin of skills that share a name prefix, or a package that left some out), by source.
+          const made = variant.importMade[p.source];
+          const kit = { key: made.key, name: made.name, kind: made.kind, source: p.source, description: "", version: "", enabled: true, access: [], updatable: true,
+            skills: made.skills.map((name, at) => ({ id: made.id + at, name, description: `${name} 的說明`, enabled: true })) };
+          data.skillLibrary = [...data.skillLibrary, kit].sort((a, b) => a.name.localeCompare(b.name));
+          return { package: kit, ...(made.skipped ? { skipped: made.skipped } : {}) };
+        }
         const skills = p.text ? [{ id: 401, name: "旅行行程", description: "依日期整理行程與訂位", enabled: true }]
           : [{ id: 402, name: "簡報大綱", description: "把資料整理成簡報大綱", enabled: true }, { id: 403, name: "講稿", description: "依大綱寫講稿", enabled: true }];
         const pack = { key: `pack:${data.skillLibrary.length + 10}`, name: p.text ? "旅行行程" : "簡報工具", kind: skills.length > 1 ? "pack" : "single",
@@ -1714,15 +1779,19 @@ export function installMock(fixture, config = {}, target = window) {
         }
         // the roster of every model carries the same inventory and the same count as the sidebar and the connections page
         const counted = inventory();
-        const roster = data.members.map(m => ({ ...m, chief: m.id === data.primaryId, pinned: m.id === 0 ? !!data.settings.chief_pinned : m.pinned }));
+        // Raphael is member 0, flagged: its name is the language's own, it has no role, no picture, no place, no folder and no pin.
+        const raphaelName = { en: "Raphael", ja: "ラファエル" }[p.ui_language];
+        const raphael = ({ avatar_url: _picture, avatar_rev: _rev, avatar_crop: _crop, ...m }) => ({ ...m, ...(raphaelName ? { name: raphaelName } : {}),
+          raphael: true, role: "", avatar: "", chief: false, pinned: false, hidden: false, group_id: null, position: -1, model: "" });
+        const roster = data.members.map(m => m.id === 0 ? raphael(m) : { ...m, chief: m.id === data.primaryId });
         if (variant.pinnedTiles) roster.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.position - b.position || a.id - b.id);
         // The core lists Raphael first, then the others by place (pinned first), and the folders by place.
         if (variant.sidebarDrag) roster.sort((a, b) => (a.id === 0 ? -1 : b.id === 0 ? 1 : (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.position - b.position || a.id - b.id));
         const folders = variant.sidebarDrag ? [...data.groups].sort((a, b) => a.position - b.position || a.id - b.id) : data.groups;
         return { members: roster, groups: folders, team_context: {
-          schema_version: 1, revision: "fixture", self_id: 0, count: data.members.length, primary_id: data.primaryId, chief_id: data.primaryId,
+          schema_version: 1, revision: "fixture", self_id: 0, count: data.members.length - 1, primary_id: data.primaryId, chief_id: data.primaryId,
           inventory_state: counted.state, room_member_ids: null,
-          members: data.members.map(m => ({ id: m.id, name: m.name, role: m.role, blurb: m.blurb ?? "" })),
+          members: data.members.filter(m => m.id !== 0).map(m => ({ id: m.id, name: m.name, role: m.role, blurb: m.blurb ?? "" })),
           apps: counted.apps, connected: counted.count,
         } };
       }
@@ -1742,6 +1811,8 @@ export function installMock(fixture, config = {}, target = window) {
         ? [...data.servers, ...data.managedConnectors.map(c => ({ id: c.id, name: c.name || (c.kind === "google" ? "Google" : c.id), enabled: c.enabled, ...(c.logo ? { logo: c.logo } : {}) }))]
         : data.servers };
       case "members.update": {
+        // As the core: Raphael takes only its words and settings; its name, role, look, place and folder are fixed.
+        if (p.id === 0 && Object.keys(p).some(key => ["name", "role", "avatar", "pinned", "hidden", "group_id", "position"].includes(key))) throw '[1001] Raphael is fixed {"kind":"raphael"}';
         const member = update(data.members, p.id, p);
         if (variant.pinnedTiles && p.position !== undefined) {
           const order = data.members.filter(other => other.id !== p.id).sort((a, b) => a.position - b.position || a.id - b.id);
@@ -1750,7 +1821,8 @@ export function installMock(fixture, config = {}, target = window) {
         }
         // As store.py `_move`: a place is among all the members but Raphael, and every place is numbered again from 0.
         if (variant.sidebarDrag && p.position !== undefined) moveInto(data.members.filter(other => other.id !== 0), member, p.position);
-        if (p.hidden && p.id === data.primaryId) data.primaryId = 0;
+        // The chief hidden hands the role to the next visible slime, or to nobody.
+        if (p.hidden && p.id === data.primaryId) data.primaryId = data.members.find(other => other.id !== 0 && other.id !== p.id && !other.hidden)?.id ?? null;
         notify("MembersChanged", { member_id: p.id });
         return { member };
       }
@@ -1774,8 +1846,9 @@ export function installMock(fixture, config = {}, target = window) {
         return { member };
       }
       case "members.set_primary": {
-        // as the core: Raphael or a member that is there and not hidden from the sidebar; only the choice changes
-        if (p.id !== 0 && !data.members.some(member => member.id === p.id && !member.hidden)) throw new Error("Invalid params: no such member");
+        // as the core: a slime that is there and not hidden from the sidebar (Raphael is refused); only the choice changes
+        if (p.id === 0) throw '[1001] Raphael cannot be the chief {"kind":"raphael"}';
+        if (!data.members.some(member => member.id === p.id && !member.hidden)) throw new Error("Invalid params: no such member");
         data.primaryId = p.id; notify("MembersChanged", { member_id: p.id }); return { primary_id: p.id };
       }
       case "members.template": {
@@ -1799,23 +1872,26 @@ export function installMock(fixture, config = {}, target = window) {
         throw new Error("Unknown template action");
       }
       case "members.create": {
-        const member = { ...data.members[1], role: "", blurb: "", ...p, id: nextId(data.members) };
+        const member = { ...(data.members.find(other => other.id !== 0) ?? {}), role: "", blurb: "", ...p, id: nextId(data.members) };
         data.members.push(member);
+        // The first slime ever made is the chief of staff.
+        if (data.primaryId == null) data.primaryId = member.id;
         if (p.greet) greet(member);
         notify("MembersChanged", { member_id: member.id });
-        return { member, routine_offer: variant.routineOffer ? {title:"範例摘要",prompt:"整理範例資料。",schedule:{kind:"daily",time:"09:00"}} : null };
+        return { member: { ...member, chief: member.id === data.primaryId }, routine_offer: variant.routineOffer ? {title:"範例摘要",prompt:"整理範例資料。",schedule:{kind:"daily",time:"09:00"}} : null };
       }
       case "members.greet": {
         // As the core: only while the owner has written nothing to the member and no greeting runs.
         const member = data.members.find(item => item.id === p.id);
-        if (!member || p.id === 0) throw new Error("Invalid params: no such member");
+        // Raphael's tour (`tour`): its model is the fake brain here; without it the core refuses as it does for a conversation that has words.
+        if (!member || (p.id === 0 && !variant.tour)) throw new Error("Invalid params: no such member");
         const own = data.turns.filter(turn => turn.member_id === p.id);
         if (own.some(turn => turn.route === "greeting" && turn.status === "running") || own.some(turn => (turn.question ?? "").trim() && !["greeting", "member", "routine", "resumed"].includes(turn.source)))
           throw new Error("Invalid params: greeting requires a conversation without an owner message or running greeting");
         for (let at = data.turns.length - 1; at >= 0; at--) if (data.turns[at].member_id === p.id && data.turns[at].route === "greeting" && data.turns[at].status === "error") data.turns.splice(at, 1);
         return { turn_id: greet(member).id };
       }
-      case "members.delete": if (Object.keys(p).some(key => key !== "id")) throw new Error("Invalid params: members.delete takes only the member's id"); data.members =data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
+      case "members.delete": if (Object.keys(p).some(key => key !== "id")) throw new Error("Invalid params: members.delete takes only the member's id"); if (p.id === 0) throw '[1001] Raphael cannot be deleted {"kind":"raphael"}'; data.members =data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = data.members.find(other => other.id !== 0 && !other.hidden)?.id ?? null; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
       case "members.skills.list": {
         if (variant.ownerSkillLinks && p.member_id === 1) return {
           skills: [{ id: 715, name: "code-review", slash_name: "code-review", enabled: true, shared: true }], sets: [], library: [],
@@ -2057,6 +2133,15 @@ export function installMock(fixture, config = {}, target = window) {
           data.turns = data.turns.filter(item => item.member_id !== 1).concat(setupStage("job"));
           notify("AgentTurn", { turn_id: 9820, member_id: 1 });
         }
+        if (turn.route === "greeting" && turn.member_id === 0 && question.state === "answered") {
+          // The tour goes on in a turn of Raphael's own, on what was picked: the part explained, and the offer to do it.
+          const picked = String(p.answer);
+          const step = { ...structuredClone(turn), id: nextId(data.turns), session_id: `setup-${turn.id}-look`, question: picked, setup: true, source: "app", route: "answer", prefix: "", status: "done",
+            created_at_ms: data.now + 2, text: `${picked}：我可以現在替你做，會先說明要做什麼，經你同意才會動手。要開始嗎？`, task: undefined, owner_questions: [],
+            messages: [{ seq: 1, kind: "reply", text: `${picked}：我可以現在替你做，會先說明要做什麼，經你同意才會動手。要開始嗎？`, at_ms: data.now + 2 }] };
+          data.turns.push(step);
+          notify("AgentTurn", { turn_id: step.id, member_id: 0 });
+        }
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         return { status: question.state };
       }
@@ -2148,7 +2233,7 @@ export function installMock(fixture, config = {}, target = window) {
         const messages = data.messages.filter(item => item.room_id === p.room_id && (!variant.chatMetadata || (item.thread_id ?? 1) === (p.thread_id ?? 1)));
         return { parent: p.thread_id ? data.messages.find(item=>item.room_id===p.room_id && item.reply_thread_id===p.thread_id) : null, messages: messages.filter(item => !p.before || item.id < p.before).sort((a,b)=>a.id-b.id).slice(-100), decisions: messages.filter(item => item.kind === "decision"), pending_questions: messages.flatMap(item => item.turn?.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked"), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };
       }
-      case "rooms.create": { const room = { ...p, member_ids: p.is_team ? data.members.map(m => m.id) : p.member_ids, id: nextId(data.rooms), created: data.now, group_id: p.group_id ?? null, is_team: Number(p.is_team ?? false), default_responder: p.default_responder ?? "auto" }; data.rooms.push(room); return { room }; }
+      case "rooms.create": { const room = { ...p, member_ids: p.is_team ? data.members.filter(m => m.id !== 0).map(m => m.id) : p.member_ids, id: nextId(data.rooms), created: data.now, group_id: p.group_id ?? null, is_team: Number(p.is_team ?? false), default_responder: p.default_responder ?? "auto" }; data.rooms.push(room); return { room }; }
       case "rooms.update": {
         const room = data.rooms.find(room => room.id === p.room_id), previous = room.read_message_id ?? 0;
         update(data.rooms, p.room_id, p);

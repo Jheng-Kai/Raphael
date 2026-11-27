@@ -1586,7 +1586,7 @@ PRAGMA user_version = 67;
 COMMIT;
 """
 
-# Each member keeps one standard conversation; the quick conversation is independent.
+# Each member keeps one standard conversation; the quick conversation is independent (until schema 102 folds it into Raphael's).
 _MIGRATIONS[68] = """
 BEGIN;
 CREATE TEMP TABLE conversation_fold AS
@@ -2467,6 +2467,34 @@ def _project_folders(conn):
 
 
 _MIGRATIONS[99] = _project_folders
+
+
+_MIGRATIONS[100] = """
+BEGIN;
+ALTER TABLE computer_suggestions ADD COLUMN target TEXT NOT NULL DEFAULT 'docker' CHECK (target IN ('host', 'docker'));
+PRAGMA user_version = 100;
+COMMIT;
+"""
+
+
+def _separate_raphael(conn):
+    from .raphael_split import separate
+
+    separate(conn)
+
+
+# Raphael (member 0) is the app's guide alone; what the owner made of it becomes a slime (raphael_split.py).
+_MIGRATIONS[101] = _separate_raphael
+
+
+def _fold_raphael_conversations(conn):
+    from .raphael_one import fold
+
+    fold(conn)
+
+
+# Raphael keeps one conversation: its quick one is folded into its main one (raphael_one.py).
+_MIGRATIONS[102] = _fold_raphael_conversations
 
 
 LATEST_VERSION = max(_MIGRATIONS)

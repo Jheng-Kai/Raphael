@@ -29,10 +29,10 @@ async def test_showing_youtube_opens_the_live_host_panel_without_a_link_or_takeo
             messages = kwargs["messages"]
             replies = [message for message in messages if message["role"] == "tool"]
             if replies:
-                assert "The owner can see this page in the app's Computer panel." in str(replies[-1]["content"])
+                assert "The Computer panel shows this page, but your reply is the answer." in str(replies[-1]["content"])
                 self.turns = iter([(answer, [])])
             else:
-                assert "To show a page, open it and say where to look" in messages[0]["content"]
+                assert "Only when the owner asked to see a page, open it" in messages[0]["content"]
                 definitions = [tool["function"] for tool in kwargs["tools"]]
                 chrome_open = next(tool for tool in definitions if "your own background Chrome tab" in tool.get("description", ""))
                 self.turns = iter([("", [(chrome_open["name"], {"url": url})])])
@@ -205,7 +205,8 @@ async def test_installing_a_package_on_chrome_suggests_the_vm_and_waits_for_the_
             definitions = {tool["function"]["name"] for tool in kwargs["tools"]}
             offers.append(definitions)
             if "computer__vm_exec" in definitions:
-                assert "computer__suggest_computer" not in definitions
+                assert "this PC" in next(tool["function"]["description"] for tool in kwargs["tools"]
+                                         if tool["function"]["name"] == "computer__suggest_computer")
                 assert "The owner switched this member to the virtual machine" in str(kwargs["messages"])
                 assert question in str(kwargs["messages"])
                 self.turns = iter([("I can continue in the virtual machine.", [])])
@@ -234,7 +235,8 @@ async def test_installing_a_package_on_chrome_suggests_the_vm_and_waits_for_the_
         turn_id = original["turn_id"]
         assert original["text"] == reason and app.vm_tools.computer_mode(member.id) == "host"
         assert [(trace["name"], trace["outcome"]) for trace in driver.traces] == [("mcp:computer/suggest_computer", "ok")]
-        assert app.vm_tools.suggestions.views([turn_id])[turn_id] == {"reason": reason, "installed": installed, "state": "pending"}
+        assert app.vm_tools.suggestions.views([turn_id])[turn_id] == {
+            "reason": reason, "installed": installed, "state": "pending", "target": "docker"}
         action = await app.call("agent.computer_suggestion", {"turn_id": turn_id, "action": "switch" if installed else "setup"})
         if not installed:
             assert action == {"setup": True}
@@ -250,6 +252,64 @@ async def test_installing_a_package_on_chrome_suggests_the_vm_and_waits_for_the_
             assert "computer__vm_exec" in offers[-1]
         assert await app.call("agent.computer_suggestion", {"turn_id": turn_id, "action": "dismiss"}) == {}
         assert not app.vm_tools.suggestions.views([turn_id])
+    finally:
+        await driver.aclose()
+
+
+@pytest.mark.parametrize("action", ["switch", "dismiss"])
+async def test_a_member_on_the_vm_suggests_this_pc_and_waits_for_the_owner(tmp_path, monkeypatch, action):
+    question = "Read the onboarding page of our company wiki and summarise it."
+    reason = "The wiki is behind the company network and needs the sites you are signed in to on this PC."
+    offers = []
+
+    class Client(FakeClient):
+        async def chat_tools(self, **kwargs):
+            definitions = {tool["function"]["name"]: tool["function"] for tool in kwargs["tools"]}
+            offers.append(set(definitions))
+            if "computer__vm_exec" not in definitions:
+                assert "The owner switched this member back to this computer" in str(kwargs["messages"])
+                assert question in str(kwargs["messages"])
+                self.turns = iter([("I can continue in Raphael Chrome.", [])])
+            elif any(message["role"] == "tool" for message in kwargs["messages"]):
+                self.turns = iter([(reason, [])])
+            else:
+                assert "this PC" in definitions["computer__suggest_computer"]["description"]
+                self.turns = iter([("", [("computer__suggest_computer", {"reason": reason})])])
+            return await super().chat_tools(**kwargs)
+
+    async def never_start(*args, **kwargs):
+        pytest.fail("Showing a suggestion or choosing this PC must not start the VM")
+
+    driver = RpcDriver(tmp_path, "fake/model", Client([]), Budget(8))
+    app = driver.app
+    app.vm.enabled = True
+    app.vm_tools.host_computer = HostComputerTools(app.vm, app._conn, BROWSER_OPEN)
+    monkeypatch.setattr(app.vm, "start", never_start)
+    member = app.members.store.create_member(name="Browser member")
+    with app._conn:
+        app.vm_tools.set_computer_mode(member.id, "docker")
+    try:
+        original = await driver.ask(question, member=member.id)
+        turn_id = original["turn_id"]
+        assert original["text"] == reason and app.vm_tools.computer_mode(member.id) == "docker"
+        assert [(trace["name"], trace["outcome"]) for trace in driver.traces] == [("mcp:computer/suggest_computer", "ok")]
+        assert app.vm_tools.suggestions.views([turn_id])[turn_id] == {
+            "reason": reason, "installed": True, "state": "pending", "target": "host"}
+        # The card alone proposes: the member stays on the VM until the owner chooses.
+        assert not app.vm_tools.suggestions.tasks
+        result = await app.call("agent.computer_suggestion", {"turn_id": turn_id, "action": action})
+        assert result == {}
+        if action == "dismiss":
+            assert app.vm_tools.computer_mode(member.id) == "docker" and not app.vm_tools.suggestions.tasks
+            assert not app.vm_tools.suggestions.views([turn_id])
+        else:
+            await asyncio.wait_for(asyncio.gather(*app.vm_tools.suggestions.tasks), 5)
+            assert app.vm_tools.computer_mode(member.id) == "host"
+            continued = app._conn.execute("SELECT question,text FROM agent_turns WHERE source_turn_id=?", (turn_id,)).fetchall()
+            assert [tuple(row) for row in continued] == [(question, "I can continue in Raphael Chrome.")]
+            assert await app.call("agent.computer_suggestion", {"turn_id": turn_id, "action": "switch"}) == {}
+            assert not app.vm_tools.suggestions.tasks
+            assert "computer__vm_exec" not in offers[-1]
     finally:
         await driver.aclose()
 

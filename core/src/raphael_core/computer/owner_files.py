@@ -64,7 +64,7 @@ DEFINITIONS = {
     "glob": {
         "description": f"Find files by name on {WHERE.replace('path absolute', 'path a folder, absolute')}, as Claude Code's "
                        "Glob: pattern such as **/*.pdf or Documents/**/*.{docx,xlsx} (one without / matches at any depth), "
-                       "under path (the owner's home by default). Newest first, 100 at most. Skips app data, caches and "
+                       "under path (your working folder when one is chosen for you, else the owner's home). Newest first, 100 at most. Skips app data, caches and "
                        "where keys are kept unless path is inside them; a narrow path is faster.",
         "parameters": {"type": "object", "properties": {
             "pattern": {"type": "string", "minLength": 1, "maxLength": 1000},
@@ -72,8 +72,8 @@ DEFINITIONS = {
             "required": ["pattern"], "additionalProperties": False}},
     "grep": {
         "description": f"Search file contents on {WHERE.replace('path absolute', 'path a file or folder, absolute')}, as "
-                       "Claude Code's Grep: pattern is a regular expression, path a file or folder (the owner's home by "
-                       "default); glob (e.g. *.{md,txt}) or type (e.g. py) picks files; ignore_case; multiline lets . match "
+                       "Claude Code's Grep: pattern is a regular expression, path a file or folder (your working folder when one is chosen for you, "
+                       "else the owner's home); glob (e.g. *.{md,txt}) or type (e.g. py) picks files; ignore_case; multiline lets . match "
                        "newlines. output_mode: files_with_matches (default, newest first), content (matching lines; "
                        "line_numbers on by default; after, before or context lines) or count. head_limit (default 250, 0 "
                        "for all) and offset page the results. Text files only; a narrow path is faster.",
@@ -551,12 +551,32 @@ class OwnerFileTools:
         self.member_folders = default_folders
         self.reads = FileReads()
 
+    def work_project(self, member_id):
+        """The project chosen for this member, when it is there."""
+        from ..folders import choice
+        try:
+            return choice(self.settings, member_id)
+        except (KeyError, TypeError, ValueError):
+            return None
+
     def shared_path(self, path, member_id):
         """Allow only ordinary files under this member's own and the team's canonical folders."""
+        return self.shared_in(path, self.shared_folders(member_id))
+
+    def shared_folders(self, member_id):
+        """This member's own and the team's folders. They come from the settings, whose connection belongs to the loop's
+        thread: read them here and hand a walk in another thread the plain list (`shared_in`)."""
+        try:
+            return list(self.member_folders(member_id))
+        except (OSError, RuntimeError, ValueError, VmError):
+            return []
+
+    @staticmethod
+    def shared_in(path, folders):
         from ..paths import local_storage_root
         try:
             resolved = Path(place(path))
-            for folder in self.member_folders(member_id):
+            for folder in folders:
                 root = local_storage_root(folder)
                 if resolved.is_relative_to(root):
                     parts = resolved.relative_to(root).parts
@@ -569,16 +589,19 @@ class OwnerFileTools:
 
     def guard(self, member_id=None):
         """Whether a path is Raphael's own data, as a walk in another thread may ask it: the data floor without its
-        database connection (which stays in this thread), and the folder of each database it has open."""
+        database connection (which stays in this thread), and the folder of each database it has open. Everything it needs
+        from the database is read here, in this thread; the guard it returns holds plain values."""
         from ..agent.data_floor import DataFloor
         floor = DataFloor(None, environ=self.data_floor.environ, core_root=self.data_floor.core_root)
         databases = []
         if self.data_floor.conn is not None:
             databases = [os.path.dirname(row[2]) for row in self.data_floor.conn.execute("PRAGMA database_list") if row[2]]
 
+        folders = [] if member_id is None else self.shared_folders(member_id)
+
         def protected(path):
             try:
-                return ((member_id is None or not self.shared_path(path, member_id))
+                return ((member_id is None or not self.shared_in(path, folders))
                         and (floor.protected(path) or any(_under(os.path.realpath(path), folder) for folder in databases)))
             except (OSError, ValueError):
                 return False
@@ -615,6 +638,9 @@ class OwnerFileTools:
                 # one is not made.
                 if self.reach(arguments, member_id) == "outside" and approver != "user":
                     return PluginResult(False, "approval_required", OUTSIDE_WORDS)
+            if name in ("glob", "grep") and not arguments.get("path") and (project := self.work_project(member_id)):
+                # A search that names no folder starts in the member's project, as Claude Code searches its working directory.
+                arguments = {**arguments, "path": project}
             path = arguments.get("path")
             if name != "glob" and name != "grep" or path:
                 if kept_place(path or "~"):

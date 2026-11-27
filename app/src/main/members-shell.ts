@@ -11,7 +11,8 @@
 // reads is told to the core (`members.read`), so that its row loses its dot.
 //
 // What the core cannot answer (a core from before the members, or one that is starting again)
-// leaves Raphael alone in the column: the page works as it did before.
+// leaves the column empty and the page on Raphael's conversation. Raphael is not one of the column's slimes: the account menu
+// opens its conversation (`select(RAPHAEL_ID)`), which is also where the page is until the owner has a slime and picks one.
 
 import { bindNavLayer } from "./nav-layers";
 import * as api from "./api";
@@ -21,7 +22,6 @@ import { eventRead } from './event-read';
 import { describeError } from "./format";
 import { currentRoomId, openNewGroupChat, openRoomsMenu } from "./group-chats";
 import { getLocale, onLocaleChange, t } from "./i18n";
-import { onAvatarChange } from "./avatar";
 import type { MentionField } from "./mention-field";
 import type { MentionTarget } from "./mention-text";
 import { bindComposerMentions, mentionTargets } from "./team-mentions";
@@ -29,6 +29,7 @@ import { createMemberActions } from "./member-actions";
 import { createMemberColumn } from "./member-column";
 import { createDetails, type DetailsTab } from "./member-details";
 import { createMemberSettings, type MemberSettings } from "./member-settings";
+import { setLive, useLive } from "./live-size";
 import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
 
 /** The details panel's widths (px): it opens at about 453 and drags to about 685; narrower than PANEL_CLOSE it closes. */
@@ -46,7 +47,7 @@ import { openMemberCreator } from "./member-creator";
 import { openMemberStore } from "./member-store";
 import { previewTemplateFile } from "./member-templates";
 import { movedGroup, movedMember, withoutPlaces } from "./member-order";
-import { RAPHAEL_ID, faceHTML, firstUnreadTurn, isMemberNameTaken, memberOf, orderedMembers, memberRole, raphaelOf, stableMember, unreadThreads } from "./members";
+import { RAPHAEL_ID, fallbackMemberId, faceHTML, firstUnreadTurn, isMemberNameTaken, memberOf, orderedMembers, memberRole, primaryIdOf, raphaelOf, stableMember, unreadThreads } from "./members";
 import { memberColor, nameAccent } from "./owner-bubble";
 import { followSlimeRoster, setSlimeState } from "./slime";
 import { lightClass, lightName, lightOf, strongest } from "./sidebar-light";
@@ -98,7 +99,7 @@ export interface MembersShell {
   readonly picker: HTMLElement;
   /** The pill with the open member, for the middle of the chat's top row. */
   readonly pill: HTMLElement;
-  /** The id of the open member: 0 is Raphael. */
+  /** The id of the open member: 0 is Raphael, whose conversation is open until the owner has a slime and picks one. */
   current(): number;
   /** The name of member `id`, as the list has it (Raphael's for 0). */
   nameOf(id: number): string;
@@ -144,6 +145,8 @@ export function createMembers(host: MembersHost): MembersShell {
   let list: MembersList | null = null;
   const fields = new Set<MentionField>();
   let current = RAPHAEL_ID;
+  /** Whether the owner (or a route) picked a conversation: until then the chief of staff's is the one that opens. */
+  let chosen = false;
   const previews = new Map<number, string>();
   let known: Set<number> | null = null;
   let fresh = new Set<number>();
@@ -216,8 +219,6 @@ export function createMembers(host: MembersHost): MembersShell {
     close: () => setDetails(false),
     // The gear: the member's settings page in the main area, or, when it is open, back to the conversation.
     openSettings: () => { if (settings.isOpen()) host.app.go("agent"); else host.app.go("agent", `member-settings:${current}`); },
-    openConversation: host.onOpenConversation ? (member, conversation) => host.onOpenConversation!(member, conversation) : undefined,
-    conversationOf: member => host.conversationOf?.(member),
     openTurn: (member, conversation, turn) => host.onOpenConversation?.(member, conversation!, turn),
     openPage: page => host.onOpenPage?.(current, page),
   });
@@ -239,10 +240,12 @@ export function createMembers(host: MembersHost): MembersShell {
   const panelEdge = document.createElement("div");
   panelEdge.className = "det-edge";
   details.el.prepend(panelEdge);
+  // The width is read by the page's grid and by the panel itself, and by nothing else (live-size.ts): written as `--pa-det` on the page,
+  // every element of the conversation would be styled again for each move of the pointer.
   const placePanel = (): void => {
-    const page = details.el.parentElement;
-    if (panelWidth === null) page?.style.removeProperty("--pa-det");
-    else page?.style.setProperty("--pa-det", `${panelWidth}px`);
+    useLive("--panel-live", details.el.parentElement);
+    useLive("--panel-live", details.el);
+    setLive("--panel-live", panelWidth === null ? null : `${panelWidth}px`);
   };
   mountEdge(panelEdge, {
     label: t("nav.panelWidth"),
@@ -347,8 +350,10 @@ export function createMembers(host: MembersHost): MembersShell {
     previews.clear();
     for (const m of read.members) previews.set(m.id, m.preview ?? "");
     for (const field of fields) field.refresh();
-    if (current !== RAPHAEL_ID && !ids.has(current)) {
-      current = RAPHAEL_ID;
+    // The open slime is gone: the chief's conversation (or the next slime's, or Raphael's with none). Nothing picked yet: the chief's.
+    const open = current !== RAPHAEL_ID && !ids.has(current) ? fallbackMemberId(read, current) : !chosen && current === RAPHAEL_ID ? primaryIdOf(read) ?? RAPHAEL_ID : current;
+    if (open !== current) {
+      current = open;
       host.onSelect(current);
       details.showMember();
     }
@@ -424,6 +429,7 @@ export function createMembers(host: MembersHost): MembersShell {
   // ---------- choosing ----------
 
   function select(id: number, keepDetailsTab = false): void {
+    chosen = true;
     // Another member (or the same one, from the sidebar) leaves the settings page for the conversation.
     panelBeforeSettings = null;
     settings.close();
@@ -671,9 +677,6 @@ export function createMembers(host: MembersHost): MembersShell {
     void previewTemplateFile(String((event as CustomEvent<string>).detail ?? ""), createMember, null, () => {});
   });
   onLocaleChange(() => { drawAll(); });
-  // The owner's picture stands for the first member everywhere, and the roster does not say when it comes or goes: a read that
-  // finds the same roster draws nothing, so the faces are drawn again here.
-  onAvatarChange(() => { if (list !== null) drawAll(); });
   // A group chat comes where the conversation is: the settings page gives way to it.
   window.addEventListener("raphael:open-room", () => { panelBeforeSettings = null; settings.close(); });
   details.el.hidden = !open;

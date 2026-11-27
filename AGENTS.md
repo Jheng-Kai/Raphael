@@ -32,12 +32,15 @@ from git (everything that differs from where the branch left `origin/main`, comm
 
 1. `tsc`, the app's own TypeScript check.
 2. The Vitest tests related to each changed frontend file (`vitest related`: the tests that import it, and
-   changed test files themselves).
+   changed test files themselves), and the tests that read a changed file as text (a stylesheet's rules;
+   `textReaders` in `verify-checks.mjs`).
 3. The repository's rule tests, which read the whole tree: the product rules (RULES.md and its area files in
    `.agents/product/rules/`) and their named tests, the feature maps,
    design tokens, focus rings, layout, UI rules, every locale and the history marks (`repo-clean`).
 4. For each changed core package, its test folder (`raphael_core/members/…` → `core/tests/members`), for a
-   changed top-level module its test file, and each changed core test file, with warnings as errors.
+   changed top-level module its test file, each changed core test file, and the core tests that read a changed
+   file as text (the shell's method list feeds the boundary tests; `READ_BY_CORE_TESTS` in `verify-checks.mjs`), with
+   warnings as errors.
 5. Contrast only when CSS changed, and Rust formatting only when Rust changed.
 
 Add to it only what the change itself calls for:

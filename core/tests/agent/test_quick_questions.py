@@ -1,4 +1,4 @@
-"""Quick questions own one persistent context and use the ordinary public turn stream."""
+"""A quick question is one more turn of Raphael's one conversation, answered the quick way, on the ordinary turn stream."""
 
 import json
 import asyncio
@@ -25,7 +25,7 @@ async def test_api_effort_respects_selected_models_supported_levels(make_rig, cl
     rig.settings.set("quick_effort", saved)
     client.chats.append(chat('{"text":"Hello","prefix":"Answer"}'))
     await rig.call("agent.ask", {"session_id": "effort", "text": "Hello", "ui_language": "en",
-        "source": "app", "destination": "quick", "conversation_id": rig.service.conversations.quick()})
+        "source": "app", "destination": "quick", "conversation_id": rig.service.conversations.main(0)})
     assert client.chat_calls[-1]["reasoning_effort"] == expected
 
 
@@ -38,14 +38,14 @@ async def test_quick_effort_is_independent_of_the_answers_reference_effort(make_
     rig.settings.set("quick_effort", "low")
     client.chats.append(chat('{"text":"Quick answer","prefix":"Answer"}'))
     await rig.call("agent.ask", {"session_id": "quick-effort", "text": "Hello", "ui_language": "en",
-        "source": "app", "destination": "quick", "conversation_id": rig.service.conversations.quick()})
+        "source": "app", "destination": "quick", "conversation_id": rig.service.conversations.main(0)})
     assert client.chat_calls[-1]["model"] == entry.id
     assert client.chat_calls[-1]["reasoning_effort"] == "low"
     settings = rig.service._read_settings()
     assert settings.model == entry.id + "?effort=high" and rig.service._effort(settings) == "high"
 
 
-def test_database_migration_preserves_formal_conversations_and_enforces_one_quick(tmp_path):
+def test_an_old_database_ends_with_one_conversation_for_raphael_and_never_makes_a_quick_one(tmp_path):
     from raphael_core.brain import db
     path = tmp_path / "v27.db"
     with sqlite3.connect(path) as raw:
@@ -57,78 +57,63 @@ def test_database_migration_preserves_formal_conversations_and_enforces_one_quic
     try:
         store = Conversations(conn)
         assert store.get(1)["title"] == "Formal" and store.get(1)["kind"] == "standard"
-        quick = store.quick()
-        with pytest.raises(sqlite3.IntegrityError):
-            conn.execute("INSERT INTO conversations(member_id,title,created_at_ms,updated_at_ms,is_default,kind) VALUES(0,'',1,1,0,'quick')")
-        with pytest.raises(sqlite3.IntegrityError):
-            conn.execute("UPDATE conversations SET member_id=1 WHERE id=?", (quick,))
+        assert [(row["id"], row["kind"]) for row in store.list(0)] == [(1, "standard")]
+        assert store.destination(0, None, quick=True) == 1 and not hasattr(store, "quick")
+        assert conn.execute("SELECT COUNT(*) FROM conversations WHERE kind = 'quick'").fetchone()[0] == 0
     finally:
         conn.close()
 
 
-async def test_the_quick_destination_reuses_quick_context_and_never_the_formal_thread(make_rig, client):
+async def test_a_quick_question_is_written_to_raphaels_one_conversation_and_reads_what_was_typed_there(make_rig, client):
     notices = []
     rig = make_rig(notify=lambda method, params: notices.append((method, params)))
-    formal = rig.service.conversations.main()
-    rig.seed("formal secret", "private project", conversation_id=formal)
+    main = rig.service.conversations.main()
+    rig.seed("typed earlier", "private project", conversation_id=main)
     for n in range(2):
         client.decisions.append(decision("unclear"))
         client.chats.append(chat('{"progress":"Checking the clock.","text":"Noon","prefix":"Answer"}'))
         result = await rig.call("agent.ask", {"session_id": f"quick-{n}", "text": f"question {n}",
             "ui_language": "en", "destination": "quick"})
         assert result["status"] == "done"
-    quick = rig.service.conversations.quick()
-    assert quick != formal
-    assert [t.question for t in rig.history.list(conversation_id=quick)] == ["question 1", "question 0"]
-    assert [t.question for t in rig.history.list(conversation_id=formal)] == ["formal secret"]
-    assert "formal secret" not in json.dumps(client.chat_calls)
-    assert "question 0" in json.dumps(client.chat_calls[-1])
+    assert [t.question for t in rig.history.list(conversation_id=main)] == ["question 1", "question 0", "typed earlier"]
+    assert "typed earlier" in json.dumps(client.chat_calls[0]) and "question 0" in json.dumps(client.chat_calls[-1])
     assert len(client.decide_calls) == 2
     assert not client.json_calls
     progress = [p for m, p in notices if m == "agent.progress"]
     assert len(progress) == 2
     assert progress[0]["text"] == rig.history.messages([result["turn_id"]])[result["turn_id"]][0]["text"]
-    assert (await rig.call("conversations.list"))["conversations"][0]["kind"] == "quick"
+    assert [(c["id"], c["kind"]) for c in (await rig.call("conversations.list"))["conversations"]] == [(main, "standard")]
+    assert rig.conn.execute("SELECT COUNT(*) FROM conversations WHERE kind = 'quick'").fetchone()[0] == 0
 
 
 @pytest.mark.parametrize("selected,expected", [("", ""), ("openai/quick", "openai/quick")])
-async def test_model_and_effort_follow_kind_for_voice_and_typed_continuation(make_rig, client, selected, expected):
+async def test_model_and_effort_follow_the_quick_flag_not_the_conversation(make_rig, client, selected, expected):
     rig = make_rig()
     rig.settings.set("quick_model", selected)
     rig.settings.set("quick_effort", "medium")
-    quick = rig.service.conversations.quick()
+    main = rig.service.conversations.main()
     for source in ("voice", "app"):
         if source == "voice":
             client.decisions.append(decision("unclear"))
         client.chats.append(chat('{"text":"Hello","prefix":"Answer"}'))
         await rig.call("agent.ask", {"session_id": source, "text": "Hello", "ui_language": "en",
-            "source": source, "destination": "quick", "conversation_id": quick})
+            "source": source, "destination": "quick", "conversation_id": main})
         if not expected:
             assert client.chat_calls == []
             continue
         assert client.chat_calls[-1]["model"] == expected
         assert client.chat_calls[-1]["reasoning_effort"] == "medium"
-    formal = rig.service.conversations.main()
+    # the same conversation, asked without the flag, is answered by the answer model at its own effort
     client.chats.append(chat('{"text":"Hello","prefix":"Answer"}'))
-    await rig.call("agent.ask", {"session_id": "formal", "text": "Hello", "ui_language": "en",
-        "source": "app", "conversation_id": formal})
+    await rig.call("agent.ask", {"session_id": "typed", "text": "Hello", "ui_language": "en",
+        "source": "app", "conversation_id": main})
     assert client.chat_calls[-1]["reasoning_effort"] == "none"
-
-
-def test_quick_kind_survives_reopen_and_cannot_be_renamed(tmp_path):
-    path = tmp_path / "quick.db"
-    with connect(path) as conn:
-        quick = Conversations(conn).quick()
-    with connect(path) as conn:
-        store = Conversations(conn)
-        assert store.quick() == quick
-        assert store.get(quick)["kind"] == "quick"
-        assert not hasattr(store, "rename")
+    assert rig.service._read_settings(quick=True).quick and not rig.service._read_settings().quick
 
 
 async def test_overlay_retains_full_quick_history_below_half_window(make_rig, client):
     rig = make_rig()
-    quick = rig.service.conversations.quick()
+    quick = rig.service.conversations.main(0)
     for n in range(12):
         rig.seed(f"quick-seed-{n:02}", "Earlier answer", conversation_id=quick)
     client.chats.append(chat('{"text":"Hello","prefix":"Answer"}'))
@@ -181,9 +166,8 @@ async def test_quick_cli_passes_effort_rebuilds_a_legacy_session_then_resumes(ma
     monkeypatch.setattr(brains, "available", lambda *args, **kwargs: True)
     brains._models["codex"] = [{"id": "cli:codex:fast", "reasoning_efforts": ["low", "medium"]}]
     rig = make_rig(cli_brains=brains)
-    quick = rig.service.conversations.quick()
+    quick = rig.service.conversations.main(0)
     rig.settings.set("quick_model", "cli:codex:fast")
-    rig.seed("FORMAL_SENTINEL", "Formal work", conversation_id=rig.service.conversations.main())
     for n in range(12):
         rig.seed(f"quick-seed-{n:02}", "Earlier answer", conversation_id=quick)
     model = "cli:codex:fast?effort=low"
@@ -192,7 +176,7 @@ async def test_quick_cli_passes_effort_rebuilds_a_legacy_session_then_resumes(ma
         "destination": "quick", "conversation_id": quick})
     assert result["text"] == "Quick answer."
     assert calls[0]["session"] is None and calls[0]["effort"] == "low"
-    assert "FORMAL_SENTINEL" not in calls[0]["user"] and "quick-seed-00" in calls[0]["user"]
+    assert "quick-seed-00" in calls[0]["user"]
     assert "quick-seed-11" in calls[0]["user"]
     assert rig.service._cli_sessions.get(0, model, quick) == "new-native-session"
     await rig.call("agent.ask", {"session_id": "cli-next", "text": "Continue", "ui_language": "en", "source": source,
@@ -232,15 +216,17 @@ async def test_cli_turns_record_the_model_that_answered_and_keep_separate_sessio
     rig.settings.set("agent_model", "cli:codex:deep?effort=high")
     rig.settings.set("quick_model", "cli:codex:fast")
     rig.settings.set("quick_effort", "low")
-    quick, formal = rig.service.conversations.quick(), rig.service.conversations.main()
+    main = rig.service.conversations.main()
     for n in range(2):
         await rig.call("agent.ask", asking(session=f"quick-{n}", destination="quick"))
-        await rig.call("agent.ask", asking(session=f"formal-{n}", source="app", conversation_id=formal))
+        await rig.call("agent.ask", asking(session=f"formal-{n}", source="app", conversation_id=main))
     assert runs == [("fast", "low", None), ("deep", "high", None), ("fast", "low", "thread-1"), ("deep", "high", "thread-2")]
-    assert {turn.model for turn in rig.history.list(conversation_id=quick)} == {"cli:codex:fast-2026?effort=low"}
-    assert {turn.model for turn in rig.history.list(conversation_id=formal)} == {"cli:codex:deep?effort=high"}
-    assert rig.service._cli_sessions.get(0, "cli:codex:fast?effort=low", quick) == "thread-1"
-    assert rig.service._cli_sessions.get(0, "cli:codex:deep?effort=high", formal) == "thread-2"
+    turns = rig.history.list(conversation_id=main)
+    assert {turn.model for turn in turns if turn.session_id.startswith("quick")} == {"cli:codex:fast-2026?effort=low"}
+    assert {turn.model for turn in turns if turn.session_id.startswith("formal")} == {"cli:codex:deep?effort=high"}
+    # one conversation, one thread per model
+    assert rig.service._cli_sessions.get(0, "cli:codex:fast?effort=low", main) == "thread-1"
+    assert rig.service._cli_sessions.get(0, "cli:codex:deep?effort=high", main) == "thread-2"
 
 
 def answered(text):
@@ -253,27 +239,30 @@ def asking(**params):
 
 
 @pytest.mark.parametrize("params", [
-    {"destination": "quick", "conversation_id": "formal"},
     {"destination": "quick", "conversation_id": 999999},
-    {"source": "app", "conversation_id": "quick"},
-    {"source": "voice", "conversation_id": "quick"},
-    {},
-    {"source": "voice"},
-    {"source": "overlay"},
+    {"source": "app", "conversation_id": 999999},
     {"destination": "formal"},
     {"destination": "QUICK"},
     {"destination": True},
 ])
-async def test_a_missing_or_wrong_destination_is_refused_and_nothing_runs(make_rig, client, params):
+async def test_a_wrong_destination_or_conversation_is_refused_and_nothing_runs(make_rig, client, params):
     rig = make_rig()
-    ids = {"formal": rig.service.conversations.main(), "quick": rig.service.conversations.quick()}
-    if params.get("conversation_id") in ids:
-        params = {**params, "conversation_id": ids[params["conversation_id"]]}
+    main = rig.service.conversations.main()
     with pytest.raises(RpcError) as refused:
         await rig.call("agent.ask", asking(**params))
     assert refused.value.code == INVALID_PARAMS
     assert client.decide_calls == [] and client.chat_calls == []
-    assert [rig.history.list(conversation_id=ids[kind]) for kind in ("formal", "quick")] == [[], []]
+    assert rig.history.list(conversation_id=main) == []
+
+
+@pytest.mark.parametrize("params", [{}, {"source": "voice"}, {"source": "overlay"}, {"source": "app"}])
+async def test_a_spoken_question_to_raphael_names_no_destination_because_there_is_one_conversation(make_rig, client, params):
+    rig = make_rig()
+    client.decisions.append(decision("unclear"))
+    client.chats.append(chat('{"text":"Hello.","prefix":"Answer"}'))
+    reply = await rig.call("agent.ask", asking(**params))
+    assert reply["status"] == "done"
+    assert [turn.id for turn in rig.history.list(conversation_id=rig.service.conversations.main())] == [reply["turn_id"]]
 
 
 def test_only_raphael_has_a_quick_destination(conn):
@@ -281,34 +270,23 @@ def test_only_raphael_has_a_quick_destination(conn):
         Conversations(conn).destination(1, None, quick=True)
 
 
-async def test_concurrent_quick_and_formal_requests_each_finish_in_their_own_place_and_model(make_rig, client):
+async def test_a_quick_and_a_typed_request_in_turn_are_each_answered_by_their_own_model_in_one_conversation(make_rig, client):
     rig = make_rig()
     rig.settings.set("agent_model", "openai/formal")
     rig.settings.set("quick_model", "openai/quick")
-    formal = rig.service.conversations.main()
-    entered, release = asyncio.Event(), asyncio.Event()
-
-    async def thinking(**kwargs):
-        entered.set()
-        await release.wait()
-        return answered("Quick answer")(**kwargs)
-
+    main = rig.service.conversations.main()
     client.decisions.append(decision("unclear"))
-    client.chats = [thinking, answered("Formal answer")]
-    quick_ask = asyncio.ensure_future(rig.call("agent.ask", asking(session="q", text="QUICK_NONCE", destination="quick")))
-    await asyncio.wait_for(entered.wait(), 5)
-    formal_reply = await rig.call("agent.ask", asking(session="f", text="FORMAL_NONCE", source="app", conversation_id=formal))
-    release.set()
-    quick_reply = await asyncio.wait_for(quick_ask, 5)
-    [quick_turn] = rig.history.list(conversation_id=rig.service.conversations.quick())
-    [formal_turn] = rig.history.list(conversation_id=formal)
+    client.chats = [answered("Quick answer"), answered("Formal answer")]
+    quick_reply = await rig.call("agent.ask", asking(session="q", text="QUICK_NONCE", destination="quick"))
+    formal_reply = await rig.call("agent.ask", asking(session="f", text="FORMAL_NONCE", source="app", conversation_id=main))
+    quick_turn, formal_turn = reversed(rig.history.list(conversation_id=main))
     assert (quick_turn.id, quick_turn.question, quick_turn.text, quick_turn.model) == (
         quick_reply["turn_id"], "QUICK_NONCE", "Quick answer", "openai/quick")
     assert (formal_turn.id, formal_turn.question, formal_turn.text, formal_turn.model) == (
         formal_reply["turn_id"], "FORMAL_NONCE", "Formal answer", "openai/formal")
     quick_call, formal_call = client.chat_calls
     assert quick_call["model"] == "openai/quick" and "FORMAL_NONCE" not in json.dumps(quick_call)
-    assert formal_call["model"] == "openai/formal" and "QUICK_NONCE" not in json.dumps(formal_call)
+    assert formal_call["model"] == "openai/formal" and "QUICK_NONCE" in json.dumps(formal_call)  # it reads what was said before
 
 
 @pytest.fixture
@@ -319,42 +297,40 @@ def copying_asks_first(monkeypatch):
 
 
 @pytest.mark.usefixtures("copying_asks_first")
-async def test_a_question_waiting_in_one_kind_survives_a_request_of_the_other(make_rig, client, actions):
-    # A fixed command for this PC is a quick question's alone (R-PC-01), so the question that waits is the quick one and a
-    # formal request, typed in a thread, leaves it waiting.
+async def test_a_message_typed_in_the_conversation_replaces_the_question_a_quick_ask_left_waiting(make_rig, client, actions):
+    # A fixed command for this PC is a quick question's alone (R-PC-01). Its question waits in Raphael's one conversation,
+    # so what is typed there next replaces it, as in any conversation.
     rig = make_rig()
-    quick, formal = rig.service.conversations.quick(), rig.service.conversations.main()
-    rig.seed("Weather", "24 degrees.", conversation_id=quick)
+    main = rig.service.conversations.main()
+    rig.seed("Weather", "24 degrees.", conversation_id=main)
     client.decisions.append(decision("command", "copy_text"))
     waiting = await rig.ask("copy that")
-    assert waiting["status"] == "confirm" and waiting["conversation_id"] == quick
+    assert waiting["status"] == "confirm" and waiting["conversation_id"] == main
     client.chats.append(chat('{"text":"Hello."}'))
-    typed_reply = await rig.call("agent.ask", asking(session="formal-hello", text="hello", source="app", conversation_id=formal))
+    typed_reply = await rig.call("agent.ask", asking(session="typed-hello", text="hello", source="app", conversation_id=main))
     assert typed_reply["text"] == "Hello."
-    assert (await rig.confirm(waiting["confirm"]["id"], True))["status"] == "done"
-    assert ("copy_to_clipboard", "24 degrees.") in [call[:2] for call in actions.calls]
-    assert [turn.status for turn in rig.history.list(conversation_id=quick)] == ["done", "done"]
-    assert [turn.question for turn in rig.history.list(conversation_id=formal)] == ["hello"]
+    assert not actions.calls
+    assert [turn.question for turn in rig.history.list(conversation_id=main)][:2] == ["hello", "copy that"]
 
 
 @pytest.mark.usefixtures("copying_asks_first")
-async def test_a_quick_confirmation_continues_in_the_quick_conversation(make_rig, client, actions):
+async def test_a_quick_confirmation_continues_in_the_one_conversation(make_rig, client, actions):
     rig = make_rig()
-    quick, formal = rig.service.conversations.quick(), rig.service.conversations.main()
-    rig.seed("Weather", "24 degrees.", conversation_id=quick)
+    main = rig.service.conversations.main()
+    rig.seed("Weather", "24 degrees.", conversation_id=main)
     client.decisions.append(decision("command", "copy_text"))
     waiting = await rig.ask("copy that")
-    assert waiting["status"] == "confirm" and waiting["conversation_id"] == quick
+    assert waiting["status"] == "confirm" and waiting["conversation_id"] == main
     assert (await rig.confirm(waiting["confirm"]["id"], True))["status"] == "done"
-    assert [(turn.question, turn.status) for turn in rig.history.list(conversation_id=quick)] == [
+    assert ("copy_to_clipboard", "24 degrees.") in [call[:2] for call in actions.calls]
+    assert [(turn.question, turn.status) for turn in rig.history.list(conversation_id=main)] == [
         ("copy that", "done"), ("Weather", "done")]
-    assert rig.history.list(conversation_id=formal) == []
 
 
 async def test_a_spoken_quick_question_is_announced_before_the_router_returns(make_rig, client):
     notices = []
     rig = make_rig(notify=lambda method, params: notices.append((method, params)))
-    quick = rig.service.conversations.quick()
+    quick = rig.service.conversations.main(0)
     routing, release = asyncio.Event(), asyncio.Event()
 
     async def slow_route(**kwargs):
@@ -383,7 +359,7 @@ async def test_a_spoken_quick_question_is_announced_before_the_router_returns(ma
 
 async def test_editing_a_quick_transcript_during_routing_keeps_its_place(make_rig, client):
     rig = make_rig()
-    quick = rig.service.conversations.quick()
+    quick = rig.service.conversations.main(0)
     routing, release = asyncio.Event(), asyncio.Event()
 
     async def slow_route(**kwargs):
@@ -430,13 +406,13 @@ async def test_stop_ends_a_quick_question_in_its_place_and_its_late_answer_write
     answer.set()
     reply = await asyncio.wait_for(asked, 5)
     await asyncio.sleep(0)
-    [stopped] = rig.history.list(conversation_id=rig.service.conversations.quick())
-    assert reply["turn_id"] == 0 and stopped.status == "cancelled"
+    stopped, earlier = rig.history.list(conversation_id=formal)
+    assert reply["turn_id"] == 0 and stopped.status == "cancelled" and stopped.session_id == "quick-stop"
     assert "LATE_ANSWER" not in json.dumps([stopped.text, stopped.detail, rig.history.messages([stopped.id])])
-    assert [turn.question for turn in rig.history.list(conversation_id=formal)] == ["FORMAL_SENTINEL"]
+    assert earlier.question == "FORMAL_SENTINEL" and earlier.text == "Formal answer"
 
 
-async def test_a_restart_keeps_the_quick_destination_and_its_context(make_rig, client):
+async def test_a_restart_keeps_the_conversation_and_its_context(make_rig, client):
     before = make_rig()
     client.decisions.append(decision("unclear"))
     client.chats.append(answered("BEFORE_RESTART"))
@@ -445,8 +421,7 @@ async def test_a_restart_keeps_the_quick_destination_and_its_context(make_rig, c
     client.decisions.append(decision("unclear"))
     client.chats.append(answered("After restart"))
     second = await after.call("agent.ask", asking(session="after", destination="quick"))
-    quick = after.service.conversations.quick()
-    assert quick == before.service.conversations.quick()
-    assert [turn.id for turn in after.history.list(conversation_id=quick)] == [second["turn_id"], first["turn_id"]]
+    main = after.service.conversations.main()
+    assert main == before.service.conversations.main()
+    assert [turn.id for turn in after.history.list(conversation_id=main)] == [second["turn_id"], first["turn_id"]]
     assert "BEFORE_RESTART" in json.dumps(client.chat_calls[-1])
-    assert after.history.list(conversation_id=after.service.conversations.main()) == []

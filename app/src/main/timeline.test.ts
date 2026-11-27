@@ -817,7 +817,7 @@ describe("a turn", () => {
     expect(html).not.toContain('class="me-src"');
     // The owner's own finished message: its ⋯ decides 編輯 when it opens (R-UI-163).
     expect(html).toContain('data-owner-act="own"');
-    expect(html).toContain('<div class="bubble"><div class="message-text">台北天氣如何，順便記到行事曆</div><button');
+    expect(html).toContain('<div class="bubble"><div class="message-text"><p>台北天氣如何，順便記到行事曆</p></div><button');
     expect(html).not.toContain('class="ra-face"');
     expect(html).not.toContain("查看過程");
     expect(html).toContain('class="work-meta">GPT-6 Luna · US$0.0012');
@@ -876,7 +876,7 @@ describe("a turn", () => {
 
   test("a turn that is not in the history yet: the words typed, or a shimmer for words being heard, and Raphael thinking", () => {
     const typed = pendingTurnHTML("明天會下雨嗎？", "app", LOOK);
-    expect(typed).toContain('<div class="bubble"><div class="message-text">明天會下雨嗎？</div><button');
+    expect(typed).toContain('<div class="bubble"><div class="message-text"><p>明天會下雨嗎？</p></div><button');
     expect(typed).toContain('<i class="face loop">');
     expect(typed).toContain('class="live-presence"');
     expect(pendingTurnHTML(null, "voice", LOOK)).toContain('<span class="shimmer">正在辨識…</span>');

@@ -13,6 +13,7 @@ from typing import Any
 
 from .agent.policy import Tier
 from .members.skill_names import SKILL_NAME_RULE
+from .members.skill_paths import as_local
 
 # Trusted execution context, never an RPC/model argument. Clearing the very chat
 # that requested a change must not cancel or await its own executing tool.
@@ -123,15 +124,21 @@ ACTIONS = (
     row("room_members", "rooms.update", "Replace group chat membership. The card names the complete new membership.", {"room_id": ID, "member_ids": IDS}, ("room_id", "member_ids"), destructive=True),
     row("room_stop", "rooms.stop", "Stop all work belonging to a group chat.", {"room_id": ID}, ("room_id",)),
     row("room_delete", "rooms.delete", "Delete a group chat, messages and associated room state.", {"room_id": ID}, ("room_id",), destructive=True),
-    row("conversation_clear", "conversations.clear", "Clear the selected conversation. Read conversations.list for the permanent quick conversation ID.", {"id": ID}, ("id",), destructive=True),
+    row("conversation_clear", "conversations.clear", "Clear the selected conversation (Raphael's one conversation, whose quick questions are in it). Read conversations.list for its ID.", {"id": ID}, ("id",), destructive=True),
     row("member_library_list", "skills.library.list", "List team skill packages and access.", {}),
-    row("member_library_import", "skills.library.import", "Import a team skill package.", {
+    row("member_library_import", "skills.library.import",
+        "Import a team skill package from a GitHub or skills.sh link (a repository, a folder, a SKILL.md), owner/repo, a local folder or "
+        "file, pasted text or an uploaded file. No size limit refuses an ordinary skill. A source of several skills is one package; skills "
+        "imported alone whose names begin with the same word join one plugin by themselves. `plugin` imports a GitHub link or local "
+        "folder that holds .claude-plugin/plugin.json as a plugin (its skills, commands and MCP cards).", {
         "source": TEXT, "text": TEXT, "file": obj({"name": TEXT, "data": TEXT}, ("name", "data")),
         "name": TEXT, "marketplace": TEXT, "plugin": BOOL, "set_id": ID,
         "access": {"type": ["string", "array"], "items": ID}}, destructive=True),
-    row("member_library_update", "skills.library.update", "Change or refresh a team skill package.", {
+    row("member_library_update", "skills.library.update", "Change or refresh a team skill package, or with `rename` give one skill of "
+        "it another name (not a plugin's skill).", {
         "key": TEXT, "access": {"type": ["string", "array"], "items": ID}, "enabled": BOOL, "refresh": BOOL,
-        "skill": obj({"id": ID, "enabled": BOOL}, ("id", "enabled"))}, ("key",), destructive=True),
+        "skill": obj({"id": ID, "enabled": BOOL}, ("id", "enabled")), "rename": obj({"id": ID, "name": TEXT}, ("id", "name"))},
+        ("key",), destructive=True),
     row("member_library_delete", "skills.library.delete",
         "Delete a team skill package, or with `skill` (a skill id from member_library_list) only that one skill of it.", {"key": TEXT, "skill": ID}, ("key",), destructive=True),
     row("member_skill_import", "members.skills.import", "Import a member's skill package through the UI importer. " + SKILL_NAME_RULE + ".", {"member_id": MEMBER_ID, "shared": BOOL, "source": TEXT, "text": TEXT, "file": obj({"name": TEXT, "data": TEXT}, ("name", "data"))}, ("member_id",)),
@@ -139,7 +146,7 @@ ACTIONS = (
     row("member_skill_delete", "members.skills.delete", "Delete a member or shared skill package and grants.", {"member_id": MEMBER_ID, "shared": BOOL, "id": ID}, ("member_id", "id"), destructive=True),
     row("member_command_save", "members.commands.save", "Save a member's slash command template containing {input}.", {"member_id": MEMBER_ID, "id": ID, **{key: TEXT for key in ("name", "description", "template")}}, ("member_id", "name", "template")),
     row("member_command_delete", "members.commands.delete", "Delete a member's slash command.", {"member_id": MEMBER_ID, "id": ID}, ("member_id", "id"), destructive=True),
-    row("conversation_list", "conversations.list", "Read a member's conversation IDs, including the quick conversation.", {"member_id": MEMBER_ID, "query": TEXT}, ("member_id",)),
+    row("conversation_list", "conversations.list", "Read a member's conversation ID: each member, Raphael included, has the one.", {"member_id": MEMBER_ID, "query": TEXT}, ("member_id",)),
     row("dictionary_list", "dictionary.list", "Read the dictionary with entry IDs."),
     row("settings_read", "settings.get", "Read current non-secret settings."),
     row("member_skills_list", "members.skills.list", "Read a member's installed skills including disabled packages.", {"member_id": MEMBER_ID, "shared": BOOL}, ("member_id",)),
@@ -182,9 +189,8 @@ ACTIONS = (
           ("image_model", TEXT, "Set the image model only when explicitly requested by the owner."),
           ("video_model", TEXT, "Set the video model only when explicitly requested by the owner."),
           ("model_favorites", {"type": "object", "properties": {key: STRINGS for key in ("cleanup", "answer", "stt")}, "additionalProperties": False}, "Set starred models only at the owner's request."),
-          ("first_bot_profile", obj({key: TEXT for key in ("name", "role", "personality", "instructions")}), "Edit the first Bot's profile."),
-          ("raphael_draft_first", BOOL, "Set the first Bot's mail draft preference."),
-          ("chief_pinned", BOOL, "Pin/unpin the primary contact."),
+          ("first_bot_profile", obj({key: TEXT for key in ("personality", "instructions")}), "Edit Raphael's personality and instructions."),
+          ("raphael_draft_first", BOOL, "Set Raphael's mail draft preference."),
           *((key, TEXT, "Choose this model only when the owner explicitly requests it; never recover a failure by changing it.")
             for key in ("cleanup_model", "stt_cloud_model", "assistant_model", "router_model", "memory_model", "pdf_model", "vision_model")),
           *((key, STRINGS, "Edit the model fallback list only when explicitly requested by the owner.")
@@ -341,7 +347,7 @@ def destructive(name, arguments, retention=None):
             return False
     if item is None:
         return False
-    if item.name == "member_skill_import" and str(arguments.get("source", "")).startswith("local:"):
+    if item.name == "member_skill_import" and str(as_local(arguments.get("source", ""))).startswith("local:"):
         return True
     if item.destructive or name == "manage_connection" and arguments.get("operation") == "disconnect":
         return True
@@ -404,6 +410,7 @@ INTERACTION_RPCS = {
     **dict.fromkeys(("attachments.info", "attachments.upload"),
                    "Owner composer file selection and bounded upload; not model management tools."),
     "routines.run": "Only the owner's explicit routine test starts a manual run through the existing worker.",
+    "skills.library.convert": "The owner's importer follows a conversion it started; a finished one imports the package it made, as the owner's import would.",
     **dict.fromkeys(("members.viewing", "members.greet", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract", "agent.history.send_now",
                      "worker.cancel", "worker.rerun", "pages.open", "pages.viewing", "pages.video_base"),
                    "Existing owner conversation, work or presentation entry; not team administration."),
@@ -422,8 +429,8 @@ OWNER_ONLY_SETTINGS = {
     "routine_timezone": "The owner's routine time zone preference is never model-editable.",
     "routine_detected_timezone": "Internal detected device time zone, never model-editable.",
     "chatgpt.registrations.v1": "Internal provider registration state, never model-editable.",
-    **dict.fromkeys(("action_mode", "local_commands_mode", "local_commands_seen", "worker_cost_cap_usd", "monthly_limit_usd"),
-                   "Permission, local command authority and spending limits are owner-only."),
+    **dict.fromkeys(("action_mode", "local_commands_mode", "local_commands_seen", "worker_cost_cap_usd", "monthly_limit_usd", "delegate_parallel"),
+                   "Permission, local command authority, spending limits and how much of the PC work may take are owner-only."),
     **dict.fromkeys(("computer_vm_mode", "computer_ssh_alias", "computer_vm_idle_minutes", "raphael_computer_mode", "routine_webhook_port", "disconnected_clis", "owner_photo"),
                    "Device, login, webhook or native avatar state belongs to the owner."),
     **dict.fromkeys(("stt_engine", "stt_local_model"),

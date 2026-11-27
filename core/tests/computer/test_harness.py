@@ -10,7 +10,7 @@ from .test_operate import operating, shell, PRESS_SEVEN  # noqa: F401
 def quick(operating, **params):
     """As a question typed in the quick conversation asks: the one turn that can reach the owner's desktop."""
     return operating.call("agent.ask", {"ui_language": "en", "source": "app", "destination": "quick",
-                                        "conversation_id": operating.service.conversations.quick(), **params})
+                                        "conversation_id": operating.service.conversations.main(0), **params})
 
 
 async def test_cli_computer_tool_uses_auxiliary_api_model_and_keeps_approval_flow(operating, client, shell, conn, tmp_path):

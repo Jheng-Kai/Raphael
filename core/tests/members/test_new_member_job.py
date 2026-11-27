@@ -43,6 +43,7 @@ async def test_a_member_the_chief_makes_says_nothing_of_itself(setup):
 
 async def test_chores_ask_one_outcome_question_then_save_the_agreed_goal(setup, client):
     rig, team = setup
+    await made(rig, name="Lead")  # the first member made is the chief of staff, which has no job to ask for
     new = await made(rig, name="Mia")
     client.chats = [live_said("這些工作希望達成什麼成果？")]
     await typed(rig, "每天整理郵件和列出待辦", new["id"])
@@ -74,6 +75,7 @@ def test_only_a_member_with_no_job_is_offered_the_tool():
 
 async def test_the_owners_answer_becomes_its_job_and_the_next_turn_runs_on_it(setup, client):
     rig, team = setup
+    await made(rig, name="Lead")  # the first member made is the chief of staff, which has no job to ask for
     new = await made(rig, name="Mia")
     client.chats = [chat("", ("set_my_job", {"role": "信件管家", "instructions": "每天整理未讀信件，重要的先問我。"})),
                     live_said("好，我負責每天整理未讀信件。")]
@@ -102,6 +104,7 @@ async def test_a_cli_brain_is_told_and_offered_it_through_mcp(setup, tmp_path, m
     (tmp_path / ".codex/auth.json").touch()
     rig.service._cli_brains = CliBrains(home=tmp_path, environ={}, commands={"codex": ["unused-test-boundary"]})
     rig.settings.set("agent_model", "cli:codex:test")
+    await made(rig, name="Lead")  # the first member made is the chief of staff, which has no job to ask for
     new = await made(rig, name="Mia")
     seen = {}
 

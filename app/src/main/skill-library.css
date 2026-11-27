@@ -1,12 +1,14 @@
 /* Team skills (skill-library.ts): one row per package in Settings' list; a package of several opens on a page of its own. */
-.skl-import { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4); padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); }
-.skl-import-alt { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
-.skl-link { display: flex; align-items: center; gap: var(--sp-2); }
-.skl-link > .field { flex: 1 1 auto; min-width: 0; }
-.skl-go-row { display: flex; justify-content: flex-end; }
-/* 匯入 stands as tall as the link field beside it. */
-.skl .btn.skl-go { flex: none; min-height: var(--h-field); }
-.skl-text { width: 100%; min-height: 112px; resize: vertical; font-family: var(--mono); font-size: var(--fs-sm); }
+/* 匯入 sits in the page's header before the close, as wide as its word (the small button's tokens); it opens the importer's dialog. */
+.modal-body .set-head > .skl-head-import { flex: none; margin-left: auto; }
+.modal-body .set-head > .skl-head-import + .btn.close-button { margin-left: 0; }
+/* The importer's dialog: one box that takes anything, files, a folder or a link dropped on it, text pasted in it, and the way
+   to choose files at its foot; 匯入 is the dialog's own action. What it is doing and why it failed are said under the field. */
+.skl-dlg .skl-import { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+.skl-import-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+/* A compact field of two or three lines that grows with what is pasted; no grip, the box is what a drop lights. */
+.skl-text { width: 100%; box-sizing: border-box; min-height: calc(2lh + var(--sp-3)); max-height: calc(12lh + var(--sp-3)); resize: none; field-sizing: content; font-size: var(--fs-sm); line-height: 1.5; }
+.skl-import.is-over .skl-text { background: var(--hover); border-color: var(--line-lit); }
 .skl-error { margin: 0; color: var(--err); font-size: var(--fs-sm); }
 .skl-skipped { margin: 0 0 var(--sp-4); color: var(--text-2); font-size: var(--fs-sm); }
 .skl-skipped p { margin: 0; }
@@ -38,7 +40,6 @@
 .slist > .row.skl-entry > .ctl { position: relative; flex: none; flex-wrap: nowrap; }
 .skl-access { max-width: 200px; }
 .skl-access > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.skl-import-hint { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
 
 /* A package's page, in the list's place: the back arrow (as an app's page of 連接 has it), the name and the count, its
    controls as on its row, where it came from, then its skills on one card of Settings' rows. */
@@ -69,3 +70,11 @@
   .skl-pack { --skl-control-space: calc(140px + 2 * var(--h-ctl) + 3 * var(--sp-2)); }
   .skl-access { max-width: 140px; }
 }
+
+/* An import under way says so under the card, quietly (a status, no spinner). */
+.skl-progress { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
+/* The title becomes a field in the same place and type while a skill of a pack is renamed. */
+.modal-body .back-title > .skl-rename { display: block; flex: 1 1 auto; min-width: 0; }
+.skl-rename .field { width: 100%; }
+/* What an import left out stands a little below the header it follows, on the package's page. */
+.skl-page .skl-skipped { margin-top: var(--sp-3); }

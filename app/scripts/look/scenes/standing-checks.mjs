@@ -13,7 +13,6 @@ export function withStandingChecks(scenes) {
       ? [check("details-pointer-focus"), step] : [step]),
     ...(checks[original.name] ? [check(checks[original.name])] : []),
     ...(["automations-calendar", "dictation-overview", "chat"].includes(original.name) ? [check("sidebar-shell")] : []),
-    ...(original.name === "raphael-details" ? [check("details-quick-once")] : []),
     ...(original.name === "connector-reconnected" ? [check("conversation-scroll-edge")] : []),
     ...(["conversation-delete-main"].includes(original.name) ? [check("toast-clearance")] : []),
     ...(original.name === "member-conversation-sections" ? [check("details-alignment")] : []),

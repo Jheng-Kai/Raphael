@@ -208,10 +208,11 @@ test("the primary member's slime wears the gold crown on its edge, in place of a
   expect(tilt(slimeSVG({ character: "horns-red" }, { ...plain, crown: true }))).toBe(0);
   // a plain slime gives its hat up for the crown
   expect(slimeSVG({ color: "teal" }, { ...witch, crown: true })).not.toContain("#554177");
-  // a primary the roster does not have is Raphael's again
+  // a primary the roster does not have is nobody: Raphael is never crowned, and the crown is gone with the chief
   crownPrimary({ members: [{ id: 4 }], team_context: { primary_id: 9 } });
-  expect(crownedId()).toBe(0);
-  expect(faceHTML({ id: 0, name: "Raphael" }, 40)).toContain("#F6C141");
+  expect(crownedId()).toBeNull();
+  expect(faceHTML({ id: 0, name: "Raphael" }, 40)).not.toContain("#F6C141");
+  expect(faceHTML({ id: 4, name: "x", avatar: "slime:color:teal" }, 40)).not.toContain("#F6C141");
 });
 
 test("the crown is one set of plain coordinates on every character, drawn once and never again in the dark rim", () => {
@@ -1006,7 +1007,7 @@ test("a face in the member list looks at the pointer while the pointer is on its
   expect(css).toContain('.slime-surface[data-slime-gazing] .slime[data-state="idle"] .slime-follow { translate: var(--slime-gaze-x, 0px) var(--slime-gaze-y, 0px); }');
 });
 
-test("a picker's choice looks only while the pointer is on it; a face anywhere else follows the pointer wherever it is", () => {
+test("a picker's choice looks only while the pointer is on it, and a face anywhere else follows the pointer wherever it is", () => {
   vi.useFakeTimers({ toFake: ["requestAnimationFrame"] });
   try {
     document.body.innerHTML = `<div class="mb-slime-characters">${slimeCharactersHTML(null, same, "", "red")}</div><div id="elsewhere">${slimeSVG({ character: "horns-red" }, { now: plain.now })}</div><p id="away">外面</p>`;

@@ -23,8 +23,10 @@ npm run look -- chat --theme both --width 1120,720
 loads the real `index.html`, modules and CSS, and closes both after capture. Each
 scene has an isolated fixture and each run has its own browser profile. No running
 native app, credentials, real database or separate preview server is needed.
-Readiness means Raphael's conversation (or onboarding Next button / overlay progress)
-is visible: the app opens on it, as it does for the owner.
+Readiness means the conversation page (or onboarding Next button / overlay progress)
+is visible: the app opens on the chief of staff's conversation, or on Raphael's when there is no slime, as it does for the owner.
+The runner then enters Raphael's space through the account menu's own entry before a scene's steps (the fixture's conversation and
+its quick questions are Raphael's), unless the scene's fixture says `start: "app"` and begins at the app's own start.
 Every other page is reached through the real app, the account menu at the sidebar's foot,
 followed by the scene's own prerequisite and resulting-state waits.
 

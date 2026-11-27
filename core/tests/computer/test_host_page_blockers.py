@@ -148,6 +148,15 @@ def staged(browser, guid, data=b"page data"):
 GUID = "0f5c2a1e-7d64-4b8a-9a51-3c2e8f6d1b70"
 
 
+async def downloads_placed(browser):
+    """Wait until every download Chrome finished is placed and recorded for its member (what `take_downloads` reads).
+    A transfer task is done one loop turn before its done callbacks record the file, and `gather` of a task that is
+    already done returns without yielding (Python 3.12): a bare `gather` can return in that gap, with the file on disk
+    and nothing recorded yet. The file appearing is no sign of it either: it is created before it is written."""
+    await asyncio.gather(*browser.transfers)
+    await asyncio.sleep(0)
+
+
 def test_a_download_lands_in_raphaels_own_folder_never_at_the_projects_root(tmp_path):
     # A page can start a download with no click; at a project's root, conftest.py or a Makefile runs with its next build.
     browser = HostBrowser(tmp_path / "profile")
@@ -298,9 +307,8 @@ async def test_a_member_is_told_where_each_download_was_placed(tmp_path):
     staged(browser, GUID)
     browser._event("Browser.downloadWillBegin", {"guid": GUID, "frameId": "frame", "suggestedFilename": "report.txt"}, None)
     browser._event("Browser.downloadProgress", {"guid": GUID, "state": "completed"}, None)
-    await asyncio.gather(*browser.transfers)
-    await asyncio.sleep(0)
-    assert browser.take_downloads(3) == [".raphael/downloads/report.txt"] and browser.take_downloads(3) == []
+    await downloads_placed(browser)
+    assert browser.take_downloads(3) == [project / ".raphael" / "downloads" / "report.txt"] and browser.take_downloads(3) == []
 
 
 PAGE = b"""<title>Blockers</title>

@@ -83,6 +83,12 @@ Modified ports and adaptations, with upstream file names:
   captured from the driver in Raphael's computer image (Cua Driver, MIT, below). Which
   tools are offered follows OpenMausBot's selection.
 
+- `core/src/raphael_core/members/skill_github.py`: the way a skill source is read as the files of one pinned commit,
+  written in Python after `server/skill-fetch.ts` and `server/skill-folder.ts` (a commit named first, a folder listing,
+  each file downloaded from the raw host and checked against the hash the listing names, the `tree`, `blob` and raw link
+  forms, skills.sh pages matched to a skill by the slug of its folder or of the name in its document, generated folders
+  left out), with Raphael's own refusals, causes and reference handling.
+
 - `core/src/raphael_core/computer/vm_tools.py`: Python adaptation of the desktop
   lease and workspace-file tool contracts from `server/local-vm-lease.ts` and
   `server/drivers/agents-catalog.ts`, integrated with Raphael's tool gate.
@@ -179,6 +185,16 @@ Upstream: https://github.com/NousResearch/hermes-agent, revision `c419cf7c`.
   the stale-stream timeouts of `agent/chat_completion_helpers.py` and
   `agent/reasoning_timeouts.py`.
 
+
+## Hermes Agent, delegated sub-workers (MIT)
+
+Upstream: https://github.com/NousResearch/hermes-agent, revision `0431192d`. No code is copied.
+`core/src/raphael_core/agent/delegate.py` and the sub-worker path of `background/service.py` follow the design of
+`tools/delegate_tool.py`, `delegate_tool_toolsets.py` and `delegate_tool_child_run.py`: a tool that takes one task or a
+batch, children that get only a goal and context, one level of nesting, a fixed set of tools a child never has
+(delegation, questions to the user, memory writes, messages out, scheduling) and a structured result for each child. Raphael
+runs them on its own background runner, gate and providers, with its own limits.
+The upstream copyright and MIT license are reproduced in `core/packaging/licenses/hermes-agent-MIT.txt`.
 
 ## Hermes Agent, memory files (MIT)
 

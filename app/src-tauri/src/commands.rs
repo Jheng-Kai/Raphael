@@ -624,6 +624,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "members.skills.delete",
     "skills.library.list",
     "skills.library.import",
+    "skills.library.convert",
     "skills.library.update",
     "skills.library.delete",
     "members.commands.list",
@@ -1127,7 +1128,7 @@ pub fn typed_attachments(attachments: Option<Vec<Value>>) -> Result<Vec<Value>, 
     Ok(attachments)
 }
 
-/// Whether a typed question names the quick conversation: the only destination the page may name.
+/// Whether a question names the quick destination (`agent.ask {destination: "quick"}`): the only one it may name. The page's typed words never do.
 pub fn typed_quick(destination: Option<&str>) -> Result<bool, String> {
     match destination {
         None => Ok(false),
@@ -1161,7 +1162,7 @@ pub fn typed_quote(quote: Option<Value>) -> Result<Option<Value>, String> {
 /// the source `app`). It goes the way a spoken one goes once its words are heard (`agent.ask` with
 /// the source `app`; the overlay shows the answer and any YES/NO question), and the call settles
 /// when the turn is over, its answer in the history or its failure shown. `destination` is
-/// `"quick"` for a question typed in Raphael's quick conversation, and nothing else. Refused while
+/// `"quick"` or none (the page names none: Raphael has one conversation, and the quick ask is the key's). Refused while
 /// Raphael is busy with a recording or another question.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)] // Tauri receives each named argument separately from IPC.
@@ -3094,6 +3095,7 @@ mod tests {
             "members.skills.delete",
             "skills.library.list",
             "skills.library.import",
+            "skills.library.convert",
             "skills.library.update",
             "skills.library.delete",
             "members.commands.list",

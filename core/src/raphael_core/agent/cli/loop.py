@@ -298,7 +298,9 @@ class CliLoop:
         self.system = system + "\n" + CLI_PROGRESS_RULES + language_rule(owner_language) + f"\nUse only {mcp_names} MCP tools for actions and lookups. "
         # The model catalogue gives Codex its own sub-agent tools whatever its feature flags say (0.167: spawn_agent, followup_task);
         # asked to hand work to a colleague, a member reached for them, they refused the colleague's name and nothing was handed on.
-        self.system += "A colleague gets work only through handoff, never spawn_agent, followup_task or another sub-agent tool. "
+        # A part of the member's own job goes to delegate_task (found with find_tools), which runs under the same gate (R-DELEGATE-01).
+        self.system += ("A colleague gets work only through handoff, parts of your job through delegate_task, never "
+                        "spawn_agent, followup_task or another sub-agent tool. ")
         # When a second message is due and how it is marked is MESSAGE_RULES' (in CLI_PROGRESS_RULES above), said once.
         self.system += ("Reply in plain text (Markdown is fine). Preserve the complete answer. Never split one thought or pad to fill. "
                         "Never output a JSON reply envelope.")
@@ -976,6 +978,9 @@ class CliLoop:
                 workspace = member_root / name if name == "claude" else member_root / str(self.conversation_id) / name
                 workspace.mkdir(parents=True, exist_ok=True)
                 await secure_directory(workspace)
+                # A member with a chosen project starts the CLI in it, as Claude Code is started in the folder it is given: the
+                # CLI names its own working directory to the model. The private workspace above keeps the CLI's own state.
+                self._project = getattr(self.brains, "work_folder", lambda member: None)(self.member_id)
                 async with RaphaelMcp(self._mcp_tools, self._tool) as server:
                     self._session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session and self._session_current() else None
                     if self.context_sections:
@@ -1220,6 +1225,7 @@ class CliLoop:
                 **({"no_tools": True} if self.no_tools else {}),
                 token=server.token, session=session, permission=self._native_permission,
                 **({"computer_endpoint": server.computer_url} if server.computer_url else {}),
+                **({"project": self._project} if getattr(self, "_project", None) else {}),
                 cwd=str(workspace), images=await self._native_images(name))) as stream, \
                 aclosing(self._events(stream) if self.stall_s else stream) as events:
             async for event in events:

@@ -40,7 +40,6 @@ const flush = async (): Promise<void> => { for (let i = 0; i < 12; i++) await Pr
 const CODEX = (models: object[]) => ({ id: "codex", name: "Codex", installed: true, logged_in: true, disconnected: false, available: true, login_command: [], models });
 const RUNNABLE = { id: "cli:codex:gpt-6.1", name: "GPT-6.1", is_default: true, reasoning_efforts: ["low", "high"], default_effort: "low" };
 const CHATGPT = () => state.model("gpt", "GPT", { provider_id: "chatgpt", provider_name: "ChatGPT", provider: "OpenAI" });
-const QUICK: ComposerBrainHost = { quick: () => true };
 const q = <T extends HTMLElement>(selector: string): T | null => document.querySelector<T>(selector);
 
 function mount(member: Member = { id: 0, name: "Raphael", model: "" } as Member, host: ComposerBrainHost = {}) {
@@ -326,48 +325,30 @@ test("a member with no model yet shows what it answers on, and choosing gives it
   expect(name()).toBe("Mine");
 });
 
-test("a quick conversation shows the quick model at the quick depth", async () => {
+test("Raphael's one conversation shows and writes the answer model; the quick model is Settings' alone", async () => {
   state.quick_model = "@p:wide";
   state.quick_effort = "high";
-  const { name, slot } = await opened(undefined, QUICK);
-  expect(name()).toBe("Wide");
-  expect(slot.querySelector(".cb-depth")!.textContent).toBe("高");
-  expect(q(".cb-pick-name span")!.textContent).toBe("Wide");
-  expect(q('[data-effort="high"]')!.getAttribute("data-on")).toBe("true");
-});
-
-test("a quick conversation with no quick model of its own shows the answer model at the quick depth", async () => {
-  state.quick_effort = "high";
-  const { name, slot } = await opened(undefined, QUICK);
+  const { name } = await opened();
   expect(name()).toBe("Global");
-  expect(slot.querySelector(".cb-depth")!.textContent).toBe("高");
-  expect(q('[data-effort="high"]')!.getAttribute("data-on")).toBe("true");
-});
-
-test("choosing in a quick conversation writes the quick model and its depth, and leaves the answer model alone", async () => {
-  state.quick_effort = "high";
-  const { name } = await opened(undefined, QUICK);
-  toModels();
-  choose("@p:wide");
-  await flush();
-  expect(api.settingsSet.mock.calls).toEqual([["quick_model", "@p:wide"], ["quick_effort", "high"]]);
-  expect(name()).toBe("Wide");
-  api.settingsSet.mockClear();
   toModels();
   choose("@p:mine");
   await flush();
-  expect(api.settingsSet.mock.calls).toEqual([["quick_model", "@p:mine"]]);
+  expect(api.settingsSet.mock.calls).toEqual([["agent_model", "@p:mine"]]);
   expect(name()).toBe("Mine");
-  expect(state.agent_model).toBe("@p:global");
+  expect(state.quick_model).toBe("@p:wide");
 });
 
-test("a depth chosen in a quick conversation is written the way a model is", async () => {
-  state.quick_model = "@p:wide";
-  const { slot } = await opened(undefined, QUICK);
-  slideTo("xhigh");
+test("whether an answer model is chosen is unknown until the settings are read, and tells the page when they are", async () => {
+  state.agent_model = "";
+  const changed = vi.fn();
+  const view = mount(undefined, { changed });
+  expect(view.brain.answerChosen()).toBeUndefined();
   await flush();
-  expect(api.settingsSet.mock.calls).toEqual([["quick_model", "@p:wide"], ["quick_effort", "xhigh"]]);
-  expect(slot.querySelector(".cb-depth")!.textContent).toBe("極高");
+  expect(view.brain.answerChosen()).toBe(false);
+  expect(changed).toHaveBeenCalled();
+  state.agent_model = "@p:mine";
+  view.emit("SettingsChanged"); await flush();
+  expect(view.brain.answerChosen()).toBe(true);
 });
 
 test("a depth chosen in a member's conversation is written the way a model is", async () => {

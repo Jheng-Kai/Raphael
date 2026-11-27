@@ -10,7 +10,10 @@ import { iconHTML } from "./service-mark";
 import { serviceIconOf } from "./service-icons";
 import { ownerFaceHTML, ownerName, setOwnerProfile } from "./owner-avatar";
 import { roomAvatarHTML } from "./group-chats";
-import type { Member } from "./types";
+import type { Member, MembersList } from "./types";
+
+// R-PERF-25: the width a pointer drags is written to the grid that holds the panes, not to the root every element inherits from.
+const live = (): string => document.body.style.getPropertyValue("--side-live");
 
 test("the foot is one row, the owner's face and the Connections pill, and refreshes only changed app marks", async () => {
   const inventory = { state: "complete", count: 4, apps: [
@@ -127,22 +130,24 @@ test("the pill always shows three marks: the connected apps' own first, the star
 
 test("the chief is an ordinary row until it is pinned, then a larger centered face above its name", () => {
   const el = document.createElement("div");
-  el.innerHTML = columnHTML({ list: null, current: 0, folded: new Set(), fresh: new Set(), previews: new Map([[0, "Latest report"]]) });
+  const roster = (pinned: boolean) => ({ members: [{ id: 0, name: "Raphael", raphael: true }, { id: 4, name: "Mochi", chief: true, pinned, preview: "Latest report" }] as Member[], groups: [], team_context: { primary_id: 4, members: [] } as unknown as MembersList["team_context"] });
+  el.innerHTML = columnHTML({ list: roster(false), current: 4, folded: new Set(), fresh: new Set(), previews: new Map([[4, "Latest report"]]) });
   expect(el.querySelector('.mb-chief .mb-row-p')?.textContent).toBe("Latest report");
   expect(el.querySelector('.mb-chief > .av')?.getAttribute("style")).toBe("--av:40px");
   expect(el.querySelector('.mb-pinned')).toBeNull();
-  const chief = { id: 0, name: "Raphael", pinned: true } as Member;
-  el.innerHTML = columnHTML({ list: { members: [chief], groups: [] }, current: 0, folded: new Set(), fresh: new Set(), previews: new Map([[0, "Latest report"]]) });
+  el.innerHTML = columnHTML({ list: roster(true), current: 4, folded: new Set(), fresh: new Set(), previews: new Map([[4, "Latest report"]]) });
   expect(el.querySelector('.mb-pinned .mb-tile.mb-chief > .av')?.getAttribute("style")).toBe("--av:64px");
-  expect(el.querySelector('.mb-tile > b')?.textContent).toBe("Raphael");
+  expect(el.querySelector('.mb-tile > b')?.textContent).toBe("Mochi");
   expect(el.querySelector('.mb-tile .mb-row-p')).toBeNull();
-  expect(el.querySelectorAll('[data-member="0"]')).toHaveLength(1);
+  expect(el.querySelectorAll('[data-member="4"]')).toHaveLength(1);
+  // Raphael is in neither drawing.
+  expect(el.querySelector('[data-member="0"]')).toBeNull();
 });
 
 test("the sidebar has no brand and no fold button, names its face by the owner in each language, and its edge drags it to a rail and back", () => {
   localStorage.clear();
   document.documentElement.removeAttribute("data-sidebar-collapsed");
-  document.documentElement.style.removeProperty("--sidebar-width");
+  document.body.style.removeProperty("--side-live");
   document.body.innerHTML = '<div class="window-chrome"></div><nav id="nav"></nav><main id="main"></main>';
   const nav = document.getElementById("nav")!;
   const column = document.createElement("aside");
@@ -168,13 +173,13 @@ test("the sidebar has no brand and no fold button, names its face by the owner i
     edge.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
   };
   drag(296, 360);
-  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("360px");
+  expect(live()).toBe("360px");
   expect(localStorage.getItem("raphael.sidebar.width")).toBe("360");
   drag(360, 520);
-  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("400px");
+  expect(live()).toBe("400px");
   drag(400, 220, 120);
   expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(true);
-  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("");
+  expect(live()).toBe("");
   expect(add.parentElement!.className).toBe("side-foot");
   // The rail has no search: only the plus stands in its foot.
   expect(pair()).toEqual(["add"]);
@@ -183,7 +188,7 @@ test("the sidebar has no brand and no fold button, names its face by the owner i
   expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(true);
   drag(72, 260);
   expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(false);
-  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("260px");
+  expect(live()).toBe("260px");
   expect(add.parentElement!.className).toBe("mb-top");
   expect(pair()).toEqual(["search", "add"]);
   edge.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
@@ -191,15 +196,15 @@ test("the sidebar has no brand and no fold button, names its face by the owner i
   window.dispatchEvent(new Event("raphael:toggle-sidebar"));
   expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(false);
   edge.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
-  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("276px");
-  document.documentElement.style.removeProperty("--sidebar-width");
+  expect(live()).toBe("276px");
+  document.body.style.removeProperty("--side-live");
   document.documentElement.removeAttribute("data-sidebar-collapsed");
 });
 
 test("a slow drag through the fold point folds the list once and opens it once, never flickering between", () => {
   localStorage.clear();
   document.documentElement.removeAttribute("data-sidebar-collapsed");
-  document.documentElement.style.removeProperty("--sidebar-width");
+  document.body.style.removeProperty("--side-live");
   document.body.innerHTML = '<div class="window-chrome"></div><nav id="nav"></nav><main id="main"></main>';
   const nav = document.getElementById("nav")!;
   const column = document.createElement("aside");
@@ -230,7 +235,7 @@ test("a slow drag through the fold point folds the list once and opens it once, 
   for (const x of [161, 159, 162, 158, 160]) { edge.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientX: 300, bubbles: true })); edge.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: x, bubbles: true })); count(); }
   expect(flips).toBeLessThanOrEqual(3);
   edge.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
-  document.documentElement.style.removeProperty("--sidebar-width");
+  document.body.style.removeProperty("--side-live");
   document.documentElement.removeAttribute("data-sidebar-collapsed");
 });
 
@@ -258,21 +263,21 @@ test("a window under 860 px shows the rail of faces: no menu button or drawer, a
 
 test("the list has the stylesheet's own width until it is dragged, and a dragged width keeps winning", () => {
   localStorage.clear();
-  document.documentElement.style.removeProperty("--sidebar-width");
+  document.body.style.removeProperty("--side-live");
   document.body.innerHTML = '<div class="window-chrome"></div><nav id="nav"></nav><main id="main"></main>';
   const nav = document.getElementById("nav")!, column = document.createElement("aside");
   column.innerHTML = '<div class="mb-top"><button data-col="search"></button><button data-col="add"></button></div>';
   createSidebar(nav, column);
-  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("");
+  expect(live()).toBe("");
   expect(readFileSync("src/main/styles.css", "utf8")).toContain("--sidebar-width: min(348px, calc(100vw - 604px));");
   const edge = nav.querySelector<HTMLElement>(".side-edge")!;
   edge.setPointerCapture = vi.fn(); edge.hasPointerCapture = () => true; edge.releasePointerCapture = vi.fn();
   edge.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientX: 348, bubbles: true }));
   edge.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: 300, bubbles: true }));
   edge.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
-  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("300px");
+  expect(live()).toBe("300px");
   expect(localStorage.getItem("raphael.sidebar.width")).toBe("300");
-  document.documentElement.style.removeProperty("--sidebar-width");
+  document.body.style.removeProperty("--side-live");
   document.documentElement.removeAttribute("data-sidebar-collapsed");
 });
 

@@ -45,9 +45,11 @@ async def test_speech_cost_counts_toward_exchange_cap_and_deleted_rooms_leave_no
 
 
 async def team(rig, **patch):
+    # The chief of staff leads the room as the first slime made; `rig.lead` is its id.
+    rig.lead = (await rig.call("members.create", {"name":"Lead", "role":"Chief of staff"}))["member"]["id"]
     ids = [(await rig.call("members.create", {"name":name, "role":role}))["member"]["id"]
            for name, role in (("Alice","PM"), ("Bob","CTO"))]
-    return (await rig.call("rooms.create", {"name":"Plans", "member_ids":[0,*ids], **patch}))["room"], ids
+    return (await rig.call("rooms.create", {"name":"Plans", "member_ids":[rig.lead,*ids], **patch}))["room"], ids
 
 
 async def send(rig, room, text, key="one", **patch):
@@ -101,7 +103,7 @@ async def test_speech_reads_only_the_origin_thread(rig, exchange):
 async def test_everyone_speaks_on_one_snapshot_and_an_addressed_pass_is_a_status_line(rig, exchange):
     room, ids = await team(rig)
     await send(rig, room, "@everyone report")
-    assert [row['member_id'] for row in rig.background.submitted] == [0,*ids]
+    assert [row['member_id'] for row in rig.background.submitted] == [rig.lead,*ids]
     snapshots = [row['seen_through'] for row in (await history(rig,room))['exchange']['active_turns']]
     assert len(set(snapshots)) == 1
     await finish(rig, exchange, "Alice owns testing")
@@ -113,10 +115,10 @@ async def test_everyone_speaks_on_one_snapshot_and_an_addressed_pass_is_a_status
     assert all(m['kind'] != 'wrapup' for m in result['messages'])
     assert result['exchange']['turns_taken'] == 3
     assert [(i['recipient_id'], i['state'], i['reason']) for i in result['exchange']['reply_intents']] == [
-        (0, 'done', ''), (ids[0], 'blocked', 'no_reply'), (ids[1], 'done', '')]
+        (rig.lead, 'done', ''), (ids[0], 'blocked', 'no_reply'), (ids[1], 'done', '')]
 
 async def test_a_removed_default_responder_is_presented_as_auto_for_room_editing(rig, exchange):
-    room, ids = await team(rig, default_responder="member:1")
+    room, ids = await team(rig, default_responder="member:2")
     await rig.call("members.delete", {"id":ids[0]})
     [view] = (await rig.call("rooms.list", {}))["rooms"]
     assert view["default_responder"] == "auto"
@@ -192,14 +194,14 @@ async def test_cost_and_restart_preserve_completed_speech(rig, exchange):
 async def test_six_explicit_recipients_all_answer(rig, exchange):
     room, ids = await team(rig)
     extra = [(await rig.call("members.create", {"name":f"Person{i}"}))["member"]["id"] for i in range(3)]
-    await rig.call("rooms.update", {"room_id":room["id"], "member_ids":[0,*ids,*extra]})
+    await rig.call("rooms.update", {"room_id":room["id"], "member_ids":[rig.lead,*ids,*extra]})
     await send(rig, room, "@everyone report")
     for _ in range(6):
         await finish(rig, exchange, "Progress confirmed")
     result = await history(rig, room)
     assert result["exchange"]["state"] == "done" and result["exchange"]["turns_taken"] == 6
     assert len(rig.background.submitted) == 6
-    assert {i['recipient_id'] for i in result['exchange']['reply_intents'] if i['state']=='done'} == {0,*ids,*extra}
+    assert {i['recipient_id'] for i in result['exchange']['reply_intents'] if i['state']=='done'} == {rig.lead,*ids,*extra}
 
 
 async def test_every_brain_reads_the_room_in_a_real_turn_on_its_own_model(rig, exchange):
@@ -213,7 +215,7 @@ async def test_every_brain_reads_the_room_in_a_real_turn_on_its_own_model(rig, e
     await send(rig, room, "Status")
     await finish(rig, exchange, "All green.")
     assert [(row["member_id"], row["model"]) for row in rig.background.submitted] == [
-        (0, "cli:codex:gpt-5.6-terra"), (ids[0], "cli:claude:fixture"), (ids[1], "fake/api")]
+        (rig.lead, "cli:codex:gpt-5.6-terra"), (ids[0], "cli:claude:fixture"), (ids[1], "fake/api")]
     for responder in ("member:999", "wrong", True):
         with pytest.raises(RpcError):
             await rig.call("rooms.update", {"room_id":room["id"], "default_responder":responder})

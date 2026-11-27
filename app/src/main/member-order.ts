@@ -4,6 +4,7 @@
 // will write (the same numbering as members/store.py `_move`), draws that, and sends one request. Pure, so the numbering can be
 // tested against the core's own without a browser.
 
+import { RAPHAEL_ID } from "./members";
 import type { Member, MemberGroup, MembersList } from "./types";
 
 const byPlace = (a: { position: number; id: number }, b: { position: number; id: number }): number => a.position - b.position || a.id - b.id;
@@ -11,8 +12,8 @@ const byId = (a: { id: number }, b: { id: number }): number => a.id - b.id;
 
 /** The list as the core gives it: Raphael first, then the others, pinned ones before the rest, each by place. */
 const asListed = (members: readonly Member[]): Member[] => [
-  ...members.filter(member => member.id === 0),
-  ...members.filter(member => member.id !== 0).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || byPlace(a, b)),
+  ...members.filter(member => member.id === RAPHAEL_ID),
+  ...members.filter(member => member.id !== RAPHAEL_ID).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || byPlace(a, b)),
 ];
 
 /** A move that is made: the list that will be drawn and the place to send (the core's `position`). */
@@ -24,13 +25,13 @@ export interface Moved { list: MembersList; position: number }
  * this does. Null when the member would stand where it stands, or when there is no such member or folder.
  */
 export function movedMember(list: MembersList, id: number, groupId: number | null, beforeId?: number): Moved | null {
-  const moving = list.members.find(member => member.id === id && id !== 0);
+  const moving = list.members.find(member => member.id === id && id !== RAPHAEL_ID);
   if (!moving) return null;
   const known = new Set(list.groups.map(group => group.id));
   // A member of a folder the list does not have stands in 未分組, as the column draws it.
   const folderOf = (member: Member): number | null => (member.group_id !== null && known.has(member.group_id) ? member.group_id : null);
   if (groupId !== null && !known.has(groupId)) return null;
-  const all = list.members.filter(member => member.id !== 0).sort(byPlace);
+  const all = list.members.filter(member => member.id !== RAPHAEL_ID).sort(byPlace);
   const others = all.filter(member => member.id !== id);
   const last = others.reduce((found, member, index) => (folderOf(member) === groupId ? index : found), -1);
   let at = beforeId === undefined ? -1 : others.findIndex(member => member.id === beforeId);
@@ -38,7 +39,7 @@ export function movedMember(list: MembersList, id: number, groupId: number | nul
   const order = [...others.slice(0, at), moving, ...others.slice(at)];
   if (folderOf(moving) === groupId && order.map(member => member.id).join() === all.map(member => member.id).join()) return null;
   const place = new Map(order.map((member, index) => [member.id, index]));
-  const members = list.members.map(member => (member.id === 0 ? member : { ...member, position: place.get(member.id)!, ...(member.id === id ? { group_id: groupId } : {}) }));
+  const members = list.members.map(member => (member.id === RAPHAEL_ID ? member : { ...member, position: place.get(member.id)!, ...(member.id === id ? { group_id: groupId } : {}) }));
   return { list: { ...list, members: asListed(members) }, position: at };
 }
 

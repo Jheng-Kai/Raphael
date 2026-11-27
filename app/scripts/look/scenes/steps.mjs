@@ -11,6 +11,8 @@ export const drag = (selector, dx, options = {}) => ({ action: "drag", selector,
 // A step for the full list only: the rail of faces on a narrow window has no folder headings (driver.mjs `perform`).
 export const wide = step => ({ ...step, wide: true });
 export const type = (selector, text) => ({ action: "type", selector, text });
+// Typed through the real keyboard: strings letter by letter, `{Shift+Enter}`, `{Tab}`, `{Backspace}` as the key pressed (driver.mjs `typing`).
+export const typing = (selector, ...parts) => ({ action: "typing", selector, parts });
 // `timeout` (ms) for what the app itself waits for before it shows it (the screen's 6 s to confirm a take-over).
 export const wait = (selector, timeout) => ({ action: "wait", selector, ...(timeout ? { timeout } : {}) });
 export const waitGone = selector => ({ action: "wait-gone", selector });
@@ -46,8 +48,8 @@ export const pressOpener = selector => ({ action: "press-opener", selector });
 // The owner's face at the sidebar's foot opens the account menu (R-SIDE-01); `item` presses one of its rows: dictation, calendar, settings, or
 // usage (when no subscription window is known). The face is the same button in the list and on the rail.
 export const accountMenu = item => ({ action: "account-menu", ...(item ? { item } : {}) });
-// The conversation is the member's row; every other page is a row of the account menu (the calendar opens on today).
-export const page = name => name === "agent" ? click(".mb-chief") : accountMenu(name === "automations" ? "calendar" : name);
+// Raphael's conversation and every other page are rows of the account menu (the calendar opens on today).
+export const page = name => name === "agent" ? accountMenu("raphael") : accountMenu(name === "automations" ? "calendar" : name);
 // 連結應用程式 is no tab of Settings: its one way in is the sidebar's button, which opens it as a dialog of its own (R-UI-111).
 // Appearance is a section of 一般 (the six settings tabs): its scenes open 一般 at that section. Messaging has no section
 // there any more: the bots are set up in each member's panel and conversation, so no scene opens it in Settings.

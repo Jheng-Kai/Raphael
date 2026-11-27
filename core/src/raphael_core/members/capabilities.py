@@ -9,9 +9,6 @@ import json
 import re
 import sqlite3
 from pathlib import Path
-from urllib.parse import quote, unquote, urlsplit
-
-import httpx
 
 from .store import MemberError, MemberStore, _text
 from ..bots.homes import HomeError, digest, redact_secrets
@@ -29,148 +26,26 @@ _COMMAND = re.compile(r"[a-z][a-z0-9_-]{0,31}")
 _SLASH_WORD = re.compile(r"(?<!\S)/(\S+)")
 
 
-def safe_source_part(part: str) -> bool:
-    return bool(part and part not in (".", "..") and not any(
-        char in "/\\" or ord(char) < 32 or ord(char) == 127 for char in part
-    ))
+async def download_skills(source: object, *, plugins=False):
+    """The skills of a GitHub or skills.sh source, each with its folder (members/skill_github.py); with `plugins`, the whole plugin
+    when the source is one (skill_layouts.PluginTree)."""
+    from .skill_github import fetch
+
+    return await fetch(source, plugins=plugins)
 
 
-def skill_urls(source: object) -> tuple[str, list[str]]:
-    """Normalize a supported source without permitting arbitrary network destinations."""
-    if not isinstance(source, str):
-        raise MemberError("source", "a skill needs a GitHub repository or SKILL.md URL")
-    source = source.strip()
-    parts = source.split("/")
-    if "://" in source:
-        try:
-            url = urlsplit(source)
-        except ValueError:
-            raise MemberError("source", "invalid skill source URL") from None
-        try:
-            port = url.port
-        except ValueError:
-            raise MemberError("source", "invalid skill source port") from None
-        if url.scheme != "https" or url.username or url.password or port or url.query or url.fragment:
-            raise MemberError("source", "skill URLs must be plain HTTPS URLs")
-        parts = [unquote(part) for part in url.path.strip("/").split("/")]
-        if url.hostname in ("github.com", "www.github.com"):
-            if len(parts) == 2:
-                parts[1] = parts[1].removesuffix(".git")
-                paths = ["main/SKILL.md", "master/SKILL.md"]
-            else:
-                if len(parts) < 5 or parts[2] not in ("blob", "raw") or parts[-1] != "SKILL.md":
-                    raise MemberError("source", "the GitHub URL must name a repository or SKILL.md file")
-                parts = parts[:2] + parts[3:]
-                paths = ["/".join(parts[2:])]
-        elif url.hostname == "raw.githubusercontent.com":
-            if len(parts) < 4 or parts[-1] != "SKILL.md":
-                raise MemberError("source", "the URL must name a SKILL.md file")
-            paths = ["/".join(parts[2:])]
-        elif url.hostname in ("skills.sh", "www.skills.sh") and len(parts) == 3:
-            skill = parts[2]
-            paths = [f"{branch}/{folder}SKILL.md" for branch in ("main", "master")
-                     for folder in (f"skills/{skill}/", f"{skill}/", "")]
-        else:
-            raise MemberError("source", "only GitHub and skills.sh skill sources are supported")
-    else:
-        if len(parts) != 2:
-            raise MemberError("source", "a repository is owner/repo")
-        paths = ["main/SKILL.md", "master/SKILL.md"]
-    if not all(safe_source_part(part) for part in parts):
-        raise MemberError("source", "invalid skill source path")
-    repo = "/".join(quote(part, safe="") for part in parts[:2])
-    return source, [f"https://raw.githubusercontent.com/{repo}/{quote(path, safe='/')}" for path in paths]
-
-
-async def download_skill(source: object) -> tuple[str, str]:
-    return await _download_skill(source, asyncio.get_running_loop().time() + DOWNLOAD_SECONDS)
-
-
-async def _download_skill(source: object, deadline: float) -> tuple[str, str]:
-    source, urls = skill_urls(source)
-    try:
-        async with asyncio.timeout_at(deadline), httpx.AsyncClient(timeout=DOWNLOAD_STALL_SECONDS, follow_redirects=False, trust_env=False) as client:
-            for url in urls:
-                async with client.stream("GET", url, headers={"Accept": "text/plain"}) as response:
-                    if response.status_code == 404:
-                        continue
-                    response.raise_for_status()
-                    if response.is_redirect:
-                        raise MemberError("source", "skill redirects are not accepted")
-                    data = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        data.extend(chunk)
-                        if len(data) > MAX_SKILL_BYTES:
-                            raise MemberError("size", "skill document is too large")
-                    text = bytes(data).decode("utf-8-sig")
-                    if not text.strip() or "\x00" in text:
-                        raise MemberError("skill", "skill must be a UTF-8 Markdown document")
-                    return source, text
-    except MemberError:
-        raise
-    except (httpx.HTTPError, UnicodeError, ValueError, TimeoutError):
-        raise MemberError("download", "could not download the skill Markdown document") from None
-    raise MemberError("not_found", "no SKILL.md found at that source")
-
-
-async def _bounded_get(client: httpx.AsyncClient, url: str, limit: int) -> bytes:
-    async with client.stream("GET", url) as response:
-        response.raise_for_status()
-        if response.is_redirect:
-            raise MemberError("source", "skill redirects are not accepted")
-        data = bytearray()
-        async for chunk in response.aiter_bytes():
-            data.extend(chunk)
-            if len(data) > limit:
-                raise MemberError("size", "skill source is too large")
-        return bytes(data)
-
-
-async def download_skills(source: object) -> list[tuple[str, dict]]:
-    """Download one bounded GitHub snapshot, then open only the selected skill folders."""
-    from .skill_library import MAX_PACKAGE_BYTES
-    from .skill_sources import read_archive
-
-    normalized, candidates = skill_urls(source)
-    parsed = urlsplit(normalized)
-    segments = urlsplit(candidates[0]).path.strip("/").split("/")
-    repo = "/".join(segments[:2])
-    explicit = parsed.path.rstrip("/").endswith("/SKILL.md")
-    wanted = unquote(parsed.path.strip("/").split("/")[-1]) if parsed.hostname in ("skills.sh", "www.skills.sh") else None
-    try:
-        async with asyncio.timeout(DOWNLOAD_SECONDS), httpx.AsyncClient(timeout=DOWNLOAD_STALL_SECONDS, follow_redirects=False, trust_env=False) as client:
-            if explicit:
-                ref = unquote(segments[2])
-                folder = "/".join(unquote(part) for part in segments[3:-1])
-            else:
-                metadata = json.loads(await _bounded_get(client, f"https://api.github.com/repos/{repo}", 128 * 1024))
-                ref = metadata.get("default_branch") if isinstance(metadata, dict) else None
-                folder = None
-            if not isinstance(ref, str) or not all(safe_source_part(part) for part in ref.split("/")):
-                raise MemberError("source", "invalid repository branch metadata")
-            branch = quote(ref, safe="")
-            raw = await _bounded_get(client, f"https://codeload.github.com/{repo}/zip/{branch}", MAX_PACKAGE_BYTES)
-            files = await asyncio.to_thread(read_archive, "repository.zip", raw, subpath=folder, repository=True, wanted=wanted)
-            return [(f"https://github.com/{repo}/blob/{branch}/{quote(skill.folder, safe='/')}SKILL.md", skill)
-                    for skill in files]
-    except MemberError:
-        raise
-    except httpx.HTTPStatusError as error:
-        if error.response.status_code == 404:
-            raise MemberError("not_found", "no skill at that GitHub source") from None
-        raise MemberError("download", "could not download the GitHub skill package") from None
-    except (httpx.HTTPError, UnicodeError, ValueError, TimeoutError):
-        raise MemberError("download", "could not download the GitHub skill package") from None
-
-
-def skill_metadata(text: str, *, writing=False, previous_name=None) -> tuple[str, str]:
-    """Read only plain metadata; YAML tags and object constructors are never interpreted."""
+def skill_metadata(text: str, *, writing=False, previous_name=None, path="") -> tuple[str, str]:
+    """Read only plain metadata; YAML tags and object constructors are never interpreted. A document whose description
+    cannot be read is refused with the line to look at (`path` names its file when it has one)."""
     lines = text.splitlines()
     values: dict[str, str] = {}
+    at: dict[str, int] = {}
+    closing = 0
     if lines and lines[0].strip() == "---":
         field = None
-        for line in lines[1:]:
+        for number, line in enumerate(lines[1:], 2):
             if line.strip() == "---":
+                closing = number
                 break
             if field and line[:1].isspace():
                 values[field] += " " + line.strip()
@@ -178,6 +53,7 @@ def skill_metadata(text: str, *, writing=False, previous_name=None) -> tuple[str
             field = None
             key, sep, value = line.partition(":")
             if sep and key in ("name", "description"):
+                at[key] = number
                 value = value.strip()
                 if value in ("|", ">", "|-", ">-"):
                     values[key] = ""
@@ -190,7 +66,13 @@ def skill_metadata(text: str, *, writing=False, previous_name=None) -> tuple[str
         name = normalize_skill_name(raw_name)
     else:
         name = raw_name or normalize_skill_name(raw_name)
-    description = _text(values.get("description", ""), "description", 1000, blank=False)
+    description = " ".join(values.get("description", "").split())
+    if not description:
+        from .skill_errors import front_matter
+        problem = "none" if not lines or lines[0].strip() != "---" else "unclosed" if not closing else "no_description"
+        raise front_matter(problem, at.get("description") or closing or 1, path)
+    # A long description is cut to what a list can hold, never a reason to refuse a skill someone else wrote.
+    description = _text(description if len(description) <= 1000 else description[:999].rstrip() + "…", "description", 1000, blank=False)
     return name, description
 
 
@@ -205,6 +87,10 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         self.homes = SkillHomes(folder.parent)
         self.skill_home = Path.home()
         self.homes.migrate()
+        self.unify_library()
+        # Where the library is in the computer a member works in (`guest_library`: its guest path for a Docker computer that
+        # mounts the library, None for this PC): the app sets it, and a skill tells the path its commands can run (R-SKILL-29).
+        self.guest_library = None
         self._skill_cache = {}
         self._skill_cache_revision = None
         # Triggers cover management, migrations' cascades and direct SQL writes alike.
@@ -215,8 +101,26 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
                              f"AFTER {action} ON main.{table} BEGIN "
                              "UPDATE skill_cache_revision SET revision=revision+1; END")
 
+    def library_folder(self) -> Path:
+        """The one folder the team's skills and plugins are kept in, which the Docker computers mount as it is."""
+        return self.homes.home(SHARED) / "skills"
+
+    def where(self, member_id, path) -> str:
+        """`path` as the commands of `member_id` reach it: below the mounted library when its computer is a Docker one that mounts
+        it (the guest path), else the path on this PC, always written with `/`."""
+        path = Path(path)
+        guest = self.guest_library(member_id) if self.guest_library is not None and member_id is not None else None
+        if guest:
+            try:
+                relative = path.relative_to(self.library_folder()).as_posix()
+            except ValueError:
+                relative = None
+            if relative is not None:
+                return guest if relative == "." else guest + "/" + relative
+        return str(path).replace("\\", "/")
+
     def skill_revision(self):
-        version = self.conn.execute("PRAGMA data_version").fetchone()[0]
+        version =self.conn.execute("PRAGMA data_version").fetchone()[0]
         revision = self.conn.execute("SELECT revision FROM skill_cache_revision").fetchone()[0]
         return version, revision
 
@@ -477,20 +381,38 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         self._mirror(member_id)
         return bool(cursor.rowcount)
 
+    def _reference_target(self, member_id, inputs, reference):
+        """`(its parts, the folder they are in)` for a file a skill's document names: a path in the skill's own folder, `plugin:` and a
+        path in its plugin, or the whole path the document gave (on this PC or in the member's computer)."""
+        _, _, path, plugin = inputs
+        folder, root = path.parent, (Path(plugin["root"]) if plugin else None)
+        text = reference.strip().replace("\\", "/") if isinstance(reference, str) else reference
+        if isinstance(text, str) and text.startswith("plugin:"):
+            if root is None:
+                raise MemberError("reference", "this skill belongs to no plugin: give a path in the skill's own folder")
+            return self._reference_parts(text[7:]), root
+        if isinstance(text, str):
+            shown = [(self.where(member_id, real), real) for real in (folder, root) if real is not None]
+            shown += [(str(real).replace("\\", "/"), real) for real in (folder, root) if real is not None]
+            for prefix, real in sorted(shown, key=lambda item: -len(item[0])):
+                if text.startswith(prefix + "/"):
+                    return self._reference_parts(text[len(prefix) + 1:]), real
+        return self._reference_parts(reference), folder
+
     def read_skill_file(self, member_id: int, name: object, reference: object) -> str:
         """A text file that lies in the folder of an enabled skill (a page template, a data file, a script's source) by
         its path in that folder: what a run reads to do what the skill says, through the tool meant for it
         (`skill_read`) and not through a command, which the data floor does not let touch Raphael's own folders.
         The folder of ONE skill, UTF-8 text only, no secret-looking name, no link out: the database, the vault, keys and
         `.env` are never in it, and a path that leaves it is refused. MemberError names what is wrong."""
-        parts, inputs = self._named_reference(member_id, name, reference)
-        return self._read_reference(parts, inputs[2].parent)
+        parts, folder = self._named_reference(member_id, name, reference)
+        return self._read_reference(parts, folder)
 
     async def read_skill_file_async(self, member_id, name, reference):
         while True:
             revision = self.skill_revision()
-            parts, inputs = self._named_reference(member_id, name, reference)
-            text = await asyncio.to_thread(self._read_reference, parts, inputs[2].parent)
+            parts, folder = self._named_reference(member_id, name, reference)
+            text = await asyncio.to_thread(self._read_reference, parts, folder)
             if revision == self.skill_revision():
                 return text
 
@@ -500,7 +422,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         inputs = self._named_skill(member_id, name)
         if inputs is None:
             raise MemberError("not_found", "no enabled skill has that name")
-        return self._reference_parts(reference), inputs
+        return self._reference_target(member_id, inputs, reference)
 
     def _read_reference(self, parts, folder):
         target = folder.joinpath(*parts)
@@ -521,7 +443,8 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         try:
             text = target.read_text(encoding="utf-8")
         except UnicodeError:
-            raise MemberError("skill", "that file is not UTF-8 text") from None
+            raise MemberError("skill", "that file is not UTF-8 text, so it cannot be read here: a program or a binary is run by its "
+                                       "path with the command tool, never read") from None
         except (FileNotFoundError, NotADirectoryError):
             raise MemberError("not_found", "the skill's folder has no such file") from None
         except OSError:
@@ -551,7 +474,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
 
     def read_skill(self, member_id: int, name: object) -> str | None:
         inputs = self._named_skill(member_id, name) if isinstance(name, str) else None
-        return self._read_skill_text(inputs) if inputs else None
+        return self._read_skill_text(inputs, member_id) if inputs else None
 
     async def read_skill_async(self, member_id, name):
         if not isinstance(name, str):
@@ -561,18 +484,27 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             inputs = self._named_skill(member_id, name)
             if inputs is None:
                 return None
-            text = await asyncio.to_thread(self._read_skill_text, inputs)
+            text = await asyncio.to_thread(self._read_skill_text, inputs, member_id)
             if revision == self.skill_revision():
                 return text
 
-    def _read_skill_text(self, inputs):
+    def _read_skill_text(self, inputs, member_id=None):
+        """The skill's document with what a model needs to reach the rest of it: where its folder is in the member's own computer,
+        the references that are short, and the other files by name and size (skill_index.py)."""
+        from .skill_index import plugin_entry_points, skill_files
+
         owner, skill, path, plugin = inputs
         path = self.homes.safe(path)
         if path.stat().st_size > MAX_SKILL_BYTES:
             return None
         text = path.read_text(encoding="utf-8")
+        here = self.where(member_id, path.parent)
+        root = self.where(member_id, self.homes.safe(plugin["root"])) if plugin else None
+        for variable in ("${CLAUDE_SKILL_DIR}", "${SKILL_DIR}", "${HERMES_SKILL_DIR}"):
+            text = text.replace(variable, here)
         if plugin:
-            text = text.replace("${CLAUDE_PLUGIN_ROOT}", str(self.homes.safe(plugin["root"])).replace("\\", "/"))
+            text = text.replace("${CLAUDE_PLUGIN_ROOT}", root)
+        inlined = []
         for reference in sorted((path.parent / "references").rglob("*")):
             if not reference.is_file() or reference.suffix not in (".md", ".txt", ".json"):
                 continue
@@ -584,8 +516,21 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
                     continue
                 relative = reference.relative_to(self.homes.home(owner)).as_posix()
                 text += "\n\n<reference name=" + json.dumps(relative) + ">\n" + content + "\n</reference>"
-        if skill["source"].startswith("local:") or skill["source"] == "upload" or plugin:
-            text += "\n\nSkill folder: " + str(path.parent) + "\nRead the other files of this folder (a page template, data) with skill_read and reference, not with a command. Run scripts only through the local command tool and its ordinary approval rules. Import and guidance grant no execution permission."
+                inlined.append(reference.relative_to(path.parent).as_posix())
+        files = skill_files(path.parent, inlined)
+        if files or skill["source"].startswith("local:") or skill["source"] == "upload" or plugin:
+            runs = ("vm_exec in your Docker computer" if self.guest_library is not None and member_id is not None
+                    and self.guest_library(member_id) and here.startswith(self.guest_library(member_id)) else "the local command tool")
+            text += "\n\nSkill folder: " + here
+            if files:
+                text += "\nFiles of this skill (a binary is run, never read):\n" + "\n".join(files)
+            if plugin:
+                text += (f'\n\nThis skill belongs to the plugin "{plugin["plugin"]}", whose folder is {root}. What else it holds:\n'
+                         + "\n".join(plugin_entry_points(self.homes.safe(plugin["root"])))
+                         + '\nRead a text file of the plugin with skill_read and reference "plugin:<path>" (such as plugin:actions/run.md).')
+            text += ("\nRead the other text files of the skill (a page template, data) with skill_read and reference, not with a command. "
+                     f"Run scripts and programs by their path through {runs} and its ordinary approval rules. "
+                     "Import and guidance grant no execution permission.")
         return text
 
     def commands(self, member_id: int) -> list[dict]:
@@ -626,7 +571,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         request, inputs = self._plan_slash(member_id, text)
         if inputs is None:
             return request, False
-        result, error = self._load_slash(request, inputs)
+        result, error = self._load_slash(request, inputs, member_id)
         if on_failure is not None and error is not None:
             on_failure(inputs[1]["slash_name"], error)
         return result, error is None
@@ -637,7 +582,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             if inputs is None:
                 return request, False
             revision = self.skill_revision()
-            result, error = await asyncio.to_thread(self._load_slash, request, inputs)
+            result, error = await asyncio.to_thread(self._load_slash, request, inputs, member_id)
             if revision == self.skill_revision():
                 if on_failure is not None and error is not None:
                     on_failure(inputs[1]["slash_name"], error)
@@ -682,13 +627,14 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             return rest, inputs
         return text, None
 
-    def _load_slash(self, request, inputs):
-        from .skill_library import package
+    def _load_slash(self, request, inputs, member_id=None):
+        from .skill_library import fingerprint
 
         _, skill, path, _ = inputs
         try:
-            package(self.homes.safe(path).parent, installed=True)
-            document = self._read_skill_text(inputs)
+            # The folder is looked at, not read: a skill with large assets costs no more to call than one without.
+            fingerprint(self.homes.safe(path).parent)
+            document = self._read_skill_text(inputs, member_id)
             if document is None:
                 raise MemberError("not_found", "skill document is unavailable")
         except (MemberError, HomeError, OSError, UnicodeError) as error:

@@ -54,7 +54,7 @@ See [Member computer](member-computer.md#deleting-a-member-removes-its-computer)
 question is the small box (name, one sentence, Cancel and Delete) and asks nothing about a computer; the core
 removes the computer afterwards in the background and never starts Docker for it. Selected scenes:
 member-delete-ask, member-delete-ask-computer, member-delete, press-through-delete-dialog, room-delete and
-quick-clear-confirm, both themes at 1120,720,1920x1080.
+raphael-clear-confirm, both themes at 1120,720,1920x1080.
 
 ## Subscription quota warning
 
@@ -89,7 +89,7 @@ journey is `start-newer-data` under [Member computer](member-computer.md#where-t
 ## Toast feedback
 
 R-UI-177 uses the visible result as feedback for local changes. `member-delete`, `room-delete`,
-`quick-cleared`, `automations-delete-own` and `skill-library-imported` exercise deletion, clearing and import.
+`raphael-cleared`, `automations-delete-own` and `skill-library-imported` exercise deletion, clearing and import.
 The window's toast allowlist covers unseen results, failures and recovery actions, including Undo.
 
 ## Settings by purpose
@@ -317,7 +317,7 @@ the account menu's 行事曆 owns calendar navigation. Owner avatar upload reuse
 existing picker/crop component and presets; footer and owner messages share identity.
 
 Selected acceptance: sidebar, sidebar-folders, sidebar-folded, sidebar-many,
-sidebar-unread, sidebar-drawer, sidebar-air, sidebar-air-foot, sidebar-rail-menu, sidebar-drag-row, sidebar-reorder-members, sidebar-reorder-across, sidebar-reorder-folder, sidebar-metrics, sidebar-search, sidebar-search-rail, sidebar-chief-pinned, sidebar-rail, sidebar-plus, sidebar-group-avatar,
+sidebar-unread, sidebar-drawer, sidebar-air, sidebar-air-foot, sidebar-rail-menu, sidebar-drag-row, sidebar-drag-nowhere, sidebar-drag-folder, sidebar-reorder-members, sidebar-reorder-across, sidebar-reorder-folder, sidebar-reorder-before-primary, sidebar-metrics, sidebar-search, sidebar-search-rail, sidebar-chief-pinned, sidebar-rail, sidebar-plus, sidebar-group-avatar,
 sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-upload, sidebar-owner-crop, sidebar-owner-crop-held, chat, details, profile, plugins-installed,
 the calendar scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800. Check these scenes in black at 1120,720,1920x1080 too.
 Run `npm run verify -- --contract`, then the selected look matrix and inspect every
@@ -421,7 +421,7 @@ from format.ts, with explicit zh-TW, ja and en expectations.
 
 The existing details-alignment, conversation-scroll-edge,
 dictation-overview, dictation-layout, skill-learned-notice and growing-skills checks
-cover these contracts. toast-clearance covers quick-cleared, composer-learn
+cover these contracts. toast-clearance covers raphael-cleared, composer-learn
 and member-delete. Native deletion audit uses the same
 rendered clearance check at every member checkpoint. Native skill-growth rejects a
 notice before its producing reply and checks the learned skill's Chinese date.
@@ -429,8 +429,8 @@ No brain, tool, core or Rust behavior changed.
 
 ```powershell
 npm run verify
-npm run look -- details member-conversation-sections connector-reconnected dictation-overview quick-cleared member-text details-skills raphael-skills centred-system-events composer-learn conversation-delete-main member-delete --theme both --width 1120,720,1920x1080
-npm run look -- quick-cleared --theme both --width 1280x800
+npm run look -- details member-conversation-sections connector-reconnected dictation-overview raphael-cleared member-text details-skills raphael-skills centred-system-events composer-learn conversation-delete-main member-delete --theme both --width 1120,720,1920x1080
+npm run look -- raphael-cleared --theme both --width 1280x800
 $env:RAPHAEL_MODELS_DIR = '<a folder holding the local speech models>'
 npm run native -- skill-growth readable-layout locale-sweep voice-conversation delete-conversation
 ```
@@ -453,7 +453,7 @@ behavior the fixture cannot prove.
 | [Navigation](navigation.md) | The app's start on Raphael's conversation, the sidebar's foot (the face and the Connections pill), the account menu with its usage submenu, the rail's foot and the shortcuts that used to lead to Home |
 | [Conversation](conversation.md) | Threads, details panel, replies, progress status, search, composer and the cards a task pauses on (an app, a key, the owner's turn at the computer, the owner's yes) and an email draft they edit and send |
 | [Member computer](member-computer.md) | Optional Docker sandbox, curated tools pinned outside the plugin cap, shared/per-bot tools without per-action approval, outward-action approval contract, owner-control lease, side-panel live desktop and native fake-brain journey |
-| [Members](members.md) | Identity, resources, voice, the primary contact's star and its chooser, Raphael's approved sidebar administration, and the right click that opens the ⋯ menu of any row (R-UI-44) |
+| [Members](members.md) | Identity, resources, voice, Raphael apart from the slimes (its account-menu entry and its own space, R-RAPHAEL-UI-01 to R-RAPHAEL-UI-06), the chief of staff and its chooser, and the right click that opens the ⋯ menu of any row (R-UI-44) |
 | [Automations](automations.md) | Day/week calendar opened from the account menu, schedules, advanced options and deletion |
 | [Group chats and folders](team-and-rooms.md) | Sidebar folders, Everyone room, group identity and mentions |
 | [Dictation](dictation.md) | Overview, history, dictionary, shortcuts, microphone and paste |
@@ -622,7 +622,7 @@ checks turn-one recall on turn 25 and an entry in only that member's MEMORY.md. 
 
 ## Calendar chips, the sidebar shell and onboarding abilities
 
-The affected journeys include onboarding-abilities (beside onboarding-tools and onboarding-services), details-quick-once and conversation-scroll-edge. The sidebar is covered by the sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
+The affected journeys include onboarding-abilities (beside onboarding-tools and onboarding-services) and conversation-scroll-edge. The sidebar is covered by the sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
 
 ## Connect and Docker acceptance
 

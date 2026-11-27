@@ -159,3 +159,19 @@ async def test_a_task_without_files_is_listed_the_same_tools_and_refused_the_rea
     assert rig.run.snapshot.definitions == with_files.run.snapshot.definitions
     assert {"read_attachment", "web_read"} <= {d["function"]["name"] for d in rig.run.snapshot.definitions}
     assert (await rig.tool("read_attachment", {"index": 1}))["kind"] == "bad_arguments"
+
+
+async def test_a_refused_read_of_a_file_says_which_case_it_is(web_rig):
+    # The model reads why: no files at all, a number out of range (with the files it can read), or a bad window.
+    empty = await web_rig().tool("read_attachment", {"index": 1})
+    assert empty["kind"] == "bad_arguments" and "no attachments" in empty["instruction"]
+    rig = web_rig([checked("photo.png", "image/png", PNG), checked("notes.txt", "text/plain", b"a b")])
+    out_of_range = (await rig.tool("read_attachment", {"index": 3}))["instruction"]
+    assert "2 attachments" in out_of_range and "1 to 2" in out_of_range
+    assert "1. photo.png" in out_of_range and "2. notes.txt" in out_of_range
+    not_a_number = (await rig.tool("read_attachment", {"index": "1"}))["instruction"]
+    assert "whole number" in not_a_number and "1 to 2" in not_a_number
+    window = (await rig.tool("read_attachment", {"index": 2, "offset": 0}))["instruction"]
+    assert "offset" in window and "whole number" in window
+    span = (await rig.tool("read_attachment", {"index": 2, "start": 5, "end": 5}))["instruction"]
+    assert "end" in span and "after" in span

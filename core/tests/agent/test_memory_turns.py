@@ -230,7 +230,7 @@ async def test_a_turn_that_asks_twice_reads_one_snapshot(rig, client, memory):
 
 async def test_the_summary_comes_before_the_turns_and_the_time_after_them(rig, client, memory):
     rig.seed("上一句", "上一個回答")
-    rig.service._conversation_of(0, rig.service.conversations.quick())._save("Ongoing:\n- 規劃墾丁之旅", 0)
+    rig.service._conversation_of(0, rig.service.conversations.main(0))._save("Ongoing:\n- 規劃墾丁之旅", 0)
     client.decisions.append(decision("discuss"))
     client.replies.append(reply("好。", prefix="答"))
     await rig.ask("繼續")
@@ -258,7 +258,7 @@ async def test_a_search_finds_a_turn_the_context_no_longer_holds(rig, client, me
     rig.seed("Conversation opening", "Hello.")
     rig.seed("Project opening", "Ready.")
     old = rig.seed("上次的會議在哪裡", "在三樓的會議室。")
-    rig.service._conversation_of(0, rig.service.conversations.quick())._save("Earlier project discussion.", old)
+    rig.service._conversation_of(0, rig.service.conversations.main(0))._save("Earlier project discussion.", old)
     for n in range(40):
         rig.seed(f"別的事 {n}", "好。")
     client.decisions.append(decision("chat"))

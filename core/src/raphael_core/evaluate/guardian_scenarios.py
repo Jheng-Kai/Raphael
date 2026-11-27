@@ -37,7 +37,7 @@ BASE = (
     ("Group privacy", "在群組與私人對話分別討論不同代號。", "history_scope,context_scope,search_scope,cli_session_scope", "P01/P07/P14/P13/P19"),
     ("Connect in chat", "請連接 Gmail 與 Instagram，完成登入後繼續原任務。", "connector_card,auth_callback,resume_once,tool_receipt", "P08a-d/P15a/P02a/P09"),
     ("Secrets and computer", "需要金鑰時請提供安全儲存，需要登入時請讓我接管，完成後繼續。", "secure_save,no_secret_transcript,human_lease,done_once,stop", "P08b-c/P07/P09"),
-    ("Quick question", "請在快問回答本次代號，不要寫入正式聊天。", "quick_destination,quick_actual_model,formal_unchanged,concurrent_scope", "P19/P01/P04"),
+    ("Quick question", "請在快問回答本次代號；快問與文字對話是拉斐爾的同一個對話。", "quick_destination,quick_actual_model,conversation_unchanged,one_conversation", "P19/P01/P04"),
     ("Failure honesty", "缺少連接或權限時請用一句話說明需要什麼，不要假報完成。", "failure_honesty", "P00"),
     ("Catalog apps", "請從完整目錄連接指定服務，登入後繼續任務。", "complete_catalog,auth_callback,resume_once,tool_receipt", "P20a/P08a-b/P15a/P02a/P22"),
     ("Custom MCP", "請以我提供的網址或指令建立可編輯 MCP 草稿，測試後等我確認啟用。", "editable_config,test_digest,tool_groups,no_early_enable,secret_vault", "P20b/P08b-c/P15a/P22"),

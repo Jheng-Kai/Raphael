@@ -1,16 +1,15 @@
-// The members of the 拉斐爾 page, as data: Raphael (member 0, who is no row of the core) and the
-// members the owner made, in their groups. Everything here is pure, so its rules can be tested
+// The members of the 拉斐爾 page, as data: the slimes the owner made, in their groups, and Raphael (member 0), who is
+// the app's guide and keeper, not a slime of the list. Everything here is pure, so its rules can be tested
 // without a browser: which members the column lists under which group for a search, what a row's
 // preview says, how a routine's schedule is said, what a member's picture is, and what a group's
 // 看的地方 are made of.
 //
-// A member's face is a slime (slime.ts), whatever an older build stored for it. The first member's is the slime the
-// owner dressed it in (first-bot.ts), or its picture (avatar.ts).
+// A member's face is a slime (slime.ts), whatever an older build stored for it. Raphael's is always the first blue
+// slime (raphael.ts), never a picture.
 
 import { zoneLabel } from "./timezones";
-import { presenceAttrs, slimeFaceHTML } from "./slime";
-import { avatarHTML, currentAvatar } from "./avatar";
-import { firstBotName, firstBotSlime } from "./first-bot";
+import { slimeFaceHTML } from "./slime";
+import { RAPHAEL_SLIME, raphaelName } from "./raphael";
 import { catalogs, t } from "./i18n";
 import { esc, ico } from "./ui";
 import { formatClock, formatDate } from "./format";
@@ -45,15 +44,14 @@ export function firstUnreadTurn(threads: NonNullable<Member["unread_threads"]>):
   return first;
 }
 
-/** Raphael's id among the members: member 0 everywhere in the core's API. */
+/** Raphael's id among the members: member 0 everywhere in the core's API. It is Raphael only, never a slime or the chief. */
 export const RAPHAEL_ID = 0;
 
-/** The unique chief has a localized role label; other members retain their profile role. */
+/** The unique chief has a localized role label; other members retain their profile role (Raphael has none). */
 export const memberRole = (member: { id: number; role?: string; chief?: boolean }): string =>
-  (member.chief ?? member.id === RAPHAEL_ID) ? t("rooms.chief") : member.role ?? "";
+  member.chief ? t("rooms.chief") : member.role ?? "";
 
-/** The longest name, role, instructions and group name the core takes (members.* and groups.*); the first member's name is shorter. */
-export const FIRST_BOT_NAME_MAX = 16;
+/** The longest role, instructions and group name the core takes (members.* and groups.*). */
 export const ROLE_MAX = 24;
 export const PERSONALITY_MAX = 2000;
 export const GROUP_NAME_MAX = 24;
@@ -64,14 +62,10 @@ export const memberPlaceholder = (name: string): string => t("members.placeholde
 /** A one-line field (a member's name or role, or a group's name) as the core stores it: trimmed, with inner whitespace collapsed. */
 export const cleanName = (value: string): string => value.trim().replace(/\s+/g, " ");
 
-/**
- * Whether `name` is already taken by another member or matches Raphael's reserved name in any language. The first member
- * (`first`) may keep or take Raphael's name: the app and its voice are called so, and the first slime was until the owner
- * named it.
- */
-export function isMemberNameTaken(name: string, taken: readonly string[], first = false): boolean {
+/** Whether `name` is already taken by another member or matches Raphael's reserved name in any language. */
+export function isMemberNameTaken(name: string, taken: readonly string[]): boolean {
   const key = cleanName(name).toLocaleLowerCase();
-  const reserved = first ? [] : Object.values(catalogs).map((c) => cleanName(c["nav.agent"]).toLocaleLowerCase());
+  const reserved = Object.values(catalogs).map((c) => cleanName(c["nav.agent"]).toLocaleLowerCase());
   return reserved.includes(key) || taken.some((other) => cleanName(other).toLocaleLowerCase() === key);
 }
 
@@ -92,28 +86,28 @@ export interface MemberSection {
 }
 
 /**
- * The column under its first member (Raphael by default): groups in their order, then 未分組, with members in the
- * order the core lists them. With a search, only the members that answer it, and only the sections
- * that keep one; without, every group, an empty one too (so that it can be filled), and 未分組 only
- * when it holds someone. A member whose group is gone is 未分組.
+ * The column under the chief of staff (`firstId`, who stands above it, or nobody): groups in their order, then 未分組,
+ * with the slimes in the order the core lists them. Raphael is no slime of the list and is never in it. With a search, only the
+ * members that answer it, and only the sections that keep one; without, every group, an empty one too (so that it can be
+ * filled), and 未分組 only when it holds someone. A member whose group is gone is 未分組.
  */
-export function memberSections(list: MembersList, query = "", firstId = RAPHAEL_ID): MemberSection[] {
+export function memberSections(list: MembersList, query = "", firstId: number | null = null): MemberSection[] {
   const searching = query.trim() !== "";
   const groups = [...list.groups].sort((a, b) => a.position - b.position || a.id - b.id);
   const known = new Set(groups.map((group) => group.id));
-  const people = list.members.filter((member) => member.id !== firstId && !member.hidden && memberMatches(member, query));
+  const people = list.members.filter((member) => member.id !== RAPHAEL_ID && member.id !== firstId && !member.hidden && memberMatches(member, query));
   const sections: MemberSection[] = groups.map((group) => ({ group, members: people.filter((member) => member.group_id === group.id) }));
   sections.push({ group: null, members: people.filter((member) => member.group_id === null || !known.has(member.group_id)) });
   return sections.filter((section) => (searching || section.group === null ? section.members.length > 0 : true));
 }
 
-/** The first member as the list gives it, or a stand-in with the name of the last list before this one is read. */
+/** Raphael as the list gives it, or a stand-in with its name before the list is read. */
 export function raphaelOf(list: MembersList | null): Member {
   const found = list?.members.find((member) => member.id === RAPHAEL_ID);
   return (
     found ?? {
-      id: RAPHAEL_ID, name: firstBotName(), role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null,
-      position: -1, created: 0, unread: false, waiting: false, preview: "", last_at: null,
+      id: RAPHAEL_ID, name: raphaelName(), role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null,
+      position: -1, created: 0, unread: false, waiting: false, preview: "", last_at: null, raphael: true,
     }
   );
 }
@@ -123,45 +117,41 @@ export const memberOf = (list: MembersList | null, id: number): Member | undefin
   id === RAPHAEL_ID ? raphaelOf(list) : list?.members.find((member) => member.id === id);
 
 /**
- * The member the owner chose as their primary contact: Raphael until another is chosen. It is read from the
- * roster the core gives with the list (`team_context.primary_id`), the one place it is kept, and it is
- * Raphael if the roster names nobody the list has. This member also holds the unique chief capability.
+ * The slime that is the owner's chief of staff, or null when there is none (no slime yet). It is read from the roster the
+ * core gives with the list (`team_context.primary_id`), the one place it is kept, and it is never Raphael or someone the
+ * list does not have. This member also holds the unique chief capability.
  */
-export function primaryIdOf(list: MembersList | null): number {
+export function primaryIdOf(list: MembersList | null): number | null {
   const id = list?.team_context?.primary_id;
-  return typeof id === "number" && list!.members.some((member) => member.id === id) ? id : RAPHAEL_ID;
+  return typeof id === "number" && id !== RAPHAEL_ID && list!.members.some((member) => member.id === id) ? id : null;
 }
 
-/** Swap only display positions; identities and the core roster stay unchanged. */
-export function primaryFirst<T extends { id: number }>(members: readonly T[], primaryId: number): T[] {
-  const ordered = [...members], chief = ordered.findIndex(member => member.id === RAPHAEL_ID), primary = ordered.findIndex(member => member.id === primaryId);
-  if (chief >= 0 && primary >= 0) [ordered[chief], ordered[primary]] = [ordered[primary], ordered[chief]];
-  return ordered;
+/** The slimes of `members` with the chief first; Raphael is no slime and is left out. */
+export function chiefFirst<T extends { id: number }>(members: readonly T[], chiefId: number | null): T[] {
+  const slimes = members.filter(member => member.id !== RAPHAEL_ID), at = slimes.findIndex(member => member.id === chiefId);
+  return at > 0 ? [slimes[at], ...slimes.slice(0, at), ...slimes.slice(at + 1)] : slimes;
 }
 
-/** A view-only roster: the primary takes the top slot and Raphael takes its group slot; each keeps its own pin. */
-export function memberDisplayList(list: MembersList | null): MembersList {
-  const source = list ?? { members: [], groups: [] }, raphael = raphaelOf(list), primary = memberOf(list, primaryIdOf(list))!;
-  const members = primaryFirst([raphael, ...source.members.filter(member => member.id !== RAPHAEL_ID)], primary.id)
-    .map(member => member.id === RAPHAEL_ID && primary.id !== RAPHAEL_ID
-      ? { ...member, group_id: primary.group_id, position: primary.position } : member);
-  return { ...source, members };
-}
-
-/** Member pickers use the same top/group order as the board, without changing selection or routing. */
+/** The members the sidebar and the pickers list: the chief first, then the groups, Raphael never. */
 export function orderedMembers(list: MembersList | null): Member[] {
-  const display = memberDisplayList(list), top = display.members[0];
-  return [top, ...memberSections(display, "", top.id).flatMap(section => section.members)];
+  if (!list) return [];
+  const chiefId = primaryIdOf(list), chief = chiefId === null ? undefined : list.members.find(member => member.id === chiefId);
+  return [...(chief ? [chief] : []), ...memberSections(list, "", chiefId).flatMap(section => section.members)];
+}
+
+/** Where the open conversation goes when its member (`leaving`) goes: the chief, else the next slime, else Raphael. */
+export function fallbackMemberId(list: MembersList | null, leaving: number): number {
+  return orderedMembers(list).find(member => member.id !== leaving && !member.hidden)?.id ?? RAPHAEL_ID;
 }
 
 /**
  * Who 換成其他角色 on a pinned tile offers: the members
- * that are not pinned, in the column's order. Not Raphael (it is pinned by its own setting and holds the top slot), nobody
- * hidden from the sidebar, and not the primary, who already has the top slot and would stand there twice.
+ * that are not pinned, in the column's order. Nobody hidden from the sidebar, and not the chief, who already has the top slot
+ * and would stand there twice.
  */
 export function pinReplacements(list: MembersList | null): Member[] {
   const primary = primaryIdOf(list);
-  return orderedMembers(list).filter(m => m.id !== RAPHAEL_ID && m.id !== primary && !m.pinned && !m.hidden);
+  return orderedMembers(list).filter(m => m.id !== primary && !m.pinned && !m.hidden);
 }
 
 /**
@@ -202,24 +192,20 @@ export const isPictureUrl = (url: unknown): url is string => typeof url === "str
 /** The placeholder's character: the first of the name (a whole character, an emoji too), or nothing. */
 export const initialOf = (name: string): string => Array.from(name.trim())[0] ?? "";
 
-/** The slime a member wears: its own, the first member's being the one the owner dressed it in (first-bot.ts). */
+/** The slime a member wears: its own, Raphael's being the first blue slime always (raphael.ts). */
 export const memberSlime = (member: { id: number; avatar?: string | null }): string | null | undefined =>
-  member.id === RAPHAEL_ID ? firstBotSlime(member.avatar) : member.avatar;
+  member.id === RAPHAEL_ID ? RAPHAEL_SLIME : member.avatar;
 
 /**
- * A face at `size` px: a member's slime; for the first member the owner's own picture when one is chosen (avatar.ts),
- * else the slime the owner dressed it in, the first blue slime until then. Raphael's emblem shows only in voice (the
- * voice screen and its button, avatar.ts). Decorative: whoever shows it names it.
+ * A face at `size` px: a member's slime; Raphael's is the first blue slime, never a picture. Raphael's emblem shows only in
+ * voice (the voice screen and its button, avatar.ts). Decorative: whoever shows it names it.
  *
  * A face is a picture of the slime unless `moving`. Exactly two places move: a member's row in the left list, and the
  * conversation's thinking line.
  * They pass `moving`; nothing else does.
  */
 export function faceHTML(member: { id: number; name: string; avatar?: string | null; avatar_url?: string | null }, size: number, o: { moving?: boolean; cls?: string } = {}): string {
-  if (member.id === RAPHAEL_ID) {
-    if (currentAvatar()) return avatarHTML({ size, cls: o.cls, still: !o.moving }).replace("<span", `<span${presenceAttrs(member.id)}`);
-    return slimeFaceHTML({ ...member, avatar: firstBotSlime(member.avatar) }, size, o.cls, o.moving);
-  }
+  if (member.id === RAPHAEL_ID) return slimeFaceHTML({ ...member, avatar: RAPHAEL_SLIME }, size, o.cls, o.moving);
   // A generated member picture replaces the slime face.
   if (member.avatar?.startsWith("file:") && member.avatar_url?.startsWith("data:image/"))
     return `<span class="av mb-av mb-av-pic${o.cls ? ` ${o.cls}` : ""}" data-presence-member="${member.id}" style="--av:${Math.round(size)}px" aria-hidden="true">` +

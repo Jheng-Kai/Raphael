@@ -22,10 +22,13 @@ it("mechanical rules link existing named tests", () => {
   const once = (path: string): string => { if (!kept.has(path)) kept.set(path, read(path)); return kept.get(path)!; };
   for (const name of ["RULES", "ARCHITECTURE"]) {
     const spec = name === "RULES" ? ledger() : read(located(`.agents/product/${name}.md`));
-    const rows = spec.split("\n").filter(line => /^\| (?:R-[A-Z]+-\d+|A-\d+) \|/.test(line));
+    // An ID is unique across every file, a multi-part one (R-CLI-SIGNIN-06) included: a merge of two branches left a rule's
+    // old row beside its new one, and two rules took one ID, where only one-part IDs were compared.
+    const every = spec.split("\n").filter(line => /^\| (?:R-[A-Z]+(?:-[A-Z]+)*-\d+|A-\d+) \|/.test(line));
+    const ids = every.map(row => row.split("|")[1]!.trim());
+    expect(ids.filter((id, at) => ids.indexOf(id) !== at)).toEqual([]);
+    const rows = every; // the named-test check covers every row too, a multi-part ID (R-COMP-HOST-08) included
     expect(rows.length).toBeGreaterThan(10);
-    const ids = rows.map(row => row.split("|")[1]!.trim());
-    expect(new Set(ids).size).toBe(ids.length);
     for (const row of rows) {
       const checks = row.split("|")[name === "RULES" ? 4 : 3]!.split(",").map(check => check.trim());
       if (!checks.some(check => ["lint", "look", "pytest", "vitest"].includes(check))) continue;
@@ -42,6 +45,13 @@ it("mechanical rules link existing named tests", () => {
     }
   }
 }, 60_000);
+
+it("no rule row holds a control character, which breaks the row for the tools that read it", () => {
+  // A "\f" written through a script once became a form feed inside a row, and the design judge read half a row.
+  const broken = ledger().split("\n").filter(line => /^\| R-/.test(line) && /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\x85\u2028\u2029]/.test(line))
+    .map(line => line.split("|")[1]!.trim());
+  expect(broken).toEqual([]);
+});
 
 it("a rule named in the code is in the ledger", () => {
   const known = new Set([...ledger().matchAll(/^(?:\| )?(R-[A-Z]+(?:-[A-Z]+)*-\d+)(?: \||:)/gm)].map(match => match[1]));

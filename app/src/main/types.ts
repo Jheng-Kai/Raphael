@@ -309,6 +309,8 @@ export interface AgentTurn {
   reactions?: Record<string, string[]>;
   routine?: Pick<Routine, "id" | "schedule" | "when" | "app_name">;
   handoffs?: HandoffView[];
+  /** The sub-workers the member started in this turn with `delegate_task` (R-DELEGATE-03), in the order it asked for them. */
+  delegates?: DelegateView[];
   conversation_id?: number;
   quote?: MessageQuote | null;
   /**
@@ -376,7 +378,7 @@ export interface AgentTurn {
   connection_proposals?: ConnectionProposal[];
   /** The cards of the owner's turn at the computer this turn's task is paused on (`computer.handback`). */
   computers?: ComputerCard[];
-  computer_suggestion?: { reason: string; installed: boolean; state: "pending" | "switched" };
+  computer_suggestion?: { reason: string; installed: boolean; state: "pending" | "switched"; target: "host" | "docker" };
   /** For a turn that resumed a task once its keys were saved: the connections they are for. */
   resumed_secrets?: string[];
   /** For a turn that resumed a task once the owner gave the computer back: the apps they used. */
@@ -728,7 +730,6 @@ export interface BrainSettings {
   video_model?: string;
   computer_ssh_alias?: string;
   computer_vm_idle_minutes?: number;
-  chief_pinned?: boolean;
   owner_name?: string;
   owner_about?: string;
   project_folders?: string[];
@@ -764,6 +765,8 @@ export interface BrainSettings {
   agent_city?: string;
   /** The most one background task may spend, in US$: 0.1, 0.2, 0.5 or 1. */
   worker_cost_cap_usd?: number;
+  /** The places the sub-workers members start may fill at once: one for an API model, two for a subscription CLI. */
+  delegate_parallel?: number;
   /** The models starred in the pickers, per role, in the order they were added. */
   model_favorites?: Partial<Record<ModelRole, string[]>>;
   /** Who looks the web up: `openrouter` (its `web` plugin, today's way), `brave`, `tavily`, `exa` or `searxng`. */
@@ -1006,16 +1009,15 @@ export interface GroupDraft {
 }
 
 /**
- * A member as `members.list` lists it, Raphael first as member 0 (it is no row of the core).
- * `avatar_url` is a picture the page may show as it is (a `data:image/...` URL), absent for a member
- * with none; Raphael's is the owner's picture of it with its `avatar_crop`, absent while it is its
- * emblem. `unread`: a turn arrived while the owner was not reading its thread (until
+ * A member as `members.list` lists it: Raphael first as member 0 (`raphael: true`, the app's guide and keeper, no slime
+ * of the owner's list), then the slimes. `avatar_url` is a picture the page may show as it is (a `data:image/...` URL),
+ * absent for a member with none; Raphael never has one, its look is the first blue slime. `unread`: a turn arrived while the owner was not reading its thread (until
  * `members.read`); `waiting`: a question waits for the owner there. `preview` is the last line of
  * its thread (the core cuts it to one line), `last_at` when it was said.
  */
 export interface Member {
-  /** Whether the owner has confirmed the first Bot's profile (identity 0). */
-  profile_ready?: boolean;
+  /** Set on member 0 only: Raphael, who is not one of the owner's slimes. */
+  raphael?: true;
   id: number;
   name: string;
   role: string;
@@ -1033,10 +1035,8 @@ export interface Member {
   /** `""`, `"preset:<stem>"` or `"file:<stored name>"`. */
   avatar: string;
   avatar_url?: string;
-  /** What the picture is named by; the roster carries no picture, and `api.ts` fills `avatar_url` from `members.picture` (member-pictures.ts). */
+  /** What the picture is named by; the roster carries no picture, and `api.ts` fills `avatar_url` from `members.picture` (member-pictures.ts). Never on Raphael. */
   avatar_rev?: string;
-  /** Raphael's only: the cut of the owner's picture of it (avatar.ts `AvatarCrop`). */
-  avatar_crop?: { x: number; y: number; zoom: number };
   /** The cover of the member settings page: one of the window's patterns or the owner's picture; none is the dotted band. */
   /** A picture's `position` is how far down it is shown, in percent (50 when the owner never moved it). */
   cover?: { kind: "pattern"; id: string } | { kind: "image"; url: string; rev?: string; position?: number };
@@ -1089,7 +1089,8 @@ export interface MembersList {
 
 export interface TeamContextSnapshot {
   schema_version: number; revision: string; self_id: number; count: number;
-  primary_id: number; chief_id: number; inventory_state: string; room_member_ids: number[] | null;
+  /** The chief slime's id, or null when there is no slime (never 0, Raphael). */
+  primary_id: number | null; chief_id: number | null; inventory_state: string; room_member_ids: number[] | null;
   members: { id: number; name: string; role: string; blurb: string }[];
   /** The apps of the owner, as `integrations.inventory` lists them: the roster, the sidebar and the connections page read one inventory. */
   apps: InventoryApp[];
@@ -1180,6 +1181,23 @@ export interface RoomMessage {
   status: string; cost?: number; attachments?: TurnAttachment[];
   scope?: "room"; thread_id?: number;
   reply_reference?: { message_id: number; author_kind?: "owner" | "member"; author_member_id?: number | null; unavailable?: boolean } | null;
+}
+
+/** One sub-worker a member started: what it was asked, how it stands, the model it runs on and what it has used. */
+export interface DelegateView {
+  task_id: number; source_turn_id: number; member_id: number;
+  /** The first words of its goal, and the goal up to 300 characters. The context the member wrote for it is never sent. */
+  title: string; goal: string;
+  state: "queued" | "running" | "waiting" | "done" | "failed" | "limit" | "cancelled" | "interrupted";
+  reason: string | null;
+  /** The model it runs on (a reference), and what the owner calls it: "Codex CLI", "gpt-6-sol". */
+  model: string; model_name: string;
+  model_calls: number; tool_calls: number; cost_usd: number;
+  created_at_ms: number; started_at_ms: number | null; finished_at_ms: number | null;
+  /** 1 while it waits for the owner's yes at the member's own card. */
+  waiting_owner: number;
+  /** What it says it did, once it is done (600 characters at most). */
+  result: string;
 }
 
 export interface HandoffView {

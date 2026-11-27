@@ -43,6 +43,9 @@ REPOSITORY = IMAGE.split(":", 1)[0]
 IMAGE_CLEAN_S = 86_400
 GUEST = "/home/cua/workspace"
 SHARED = "/home/cua/team"
+# The team's skill library, the one folder of this PC that holds every shared skill and plugin: the computer mounts that
+# same folder, read-only, so a script of a skill runs there by its path with no copy of it anywhere (R-SKILL-29).
+SKILLS = "/home/cua/skills"
 MEMORY_GB = 3
 # The shared computer is sized from the engine it runs on (`sized`, `LocalVm.machine_size`). SHARED_SIZE is what it
 # keeps when the engine cannot be asked (what every layer before 13 was made with); the bounds are what any size stays in.
@@ -63,6 +66,9 @@ JOB_LOG_MAX = 256 * 1024  # bytes of combined stdout and stderr kept per detache
 # The owner's hold of a screen ends by itself after this long without a click or a key of theirs (a sign-in request that
 # waits for them and a recording are held until they say so): a lease nobody uses blocks every member.
 OWNER_IDLE_S = 300
+# How often a computer in use is looked at again, in memory only, for the moment it is idle and the owner's project
+# folders can be mounted (`refresh_mounts`).
+MOUNTS_RETRY_S = 3
 # The longest a command may be waited for, and the longest a job started in the background may run.
 FOREGROUND_S = 1800
 BACKGROUND_S = 21_600
@@ -204,6 +210,8 @@ class Target:
     # The guest paths of the project mounts that are writable. By design none is (R-COMP-PROJECT-01): this only records what a
     # container of an earlier release still has, until it is made again at an idle start.
     writable: tuple = field(default=(), compare=False)
+    # The skill library's folder on this PC, mounted read-only at SKILLS; none for a computer on another host.
+    library: Path | None = field(default=None, compare=False)
 
     @property
     def unit(self):
@@ -299,6 +307,8 @@ def run_args(target, owner, password, *, tz=None, size=None):
         "--cap-drop", "ALL", "--cap-add", "SETUID", "--cap-add", "SETGID", "--shm-size", "512m",
         "--mount", mount_arg(target.workspace, remote=bool(target.remote)),
         *(["--mount", mount_arg(target.shared, SHARED, remote=bool(target.remote))] if target.shared else []),
+        # The library is the same folder the app keeps the skills in: read-only, since a skill changes only through the library.
+        *(["--mount", mount_arg(target.library, SKILLS, readonly=True)] if target.library and not target.remote else []),
         # A project is read-only in the computer, whoever runs a command there (R-COMP-PROJECT-01): the one container is every
         # member's, so a mount that one member may write is one every member's command may write.
         *(arg for destination, source in target.projects
@@ -342,6 +352,23 @@ def exec_args(target, command, *, interactive=False, detached=False, env=()):
     return ["exec", *(["-i"] if interactive else []), *(["-d"] if detached else []), "-u", "cua", "-e", "HOME=/home/cua",
             "-e", "DISPLAY=:1", "-e", "CUA_DRIVER_INSTALL_CHANNEL=python_package",
             "-e", "CUA_DRIVER_RS_TELEMETRY_ENABLED=0", *(part for name in env for part in ("-e", name)), target.name, *command]
+
+
+def trust_args(target):
+    """The shell command that makes git trust the folders the computer mounts. A mounted project (and the skills library)
+    belongs to the PC's user, which the computer sees as root, while commands run as `cua`: git then refuses every
+    command in it ("detected dubious ownership"). `safe.directory` in cua's own `~/.gitconfig` is read by an app command
+    (`exec_args` sets `HOME`) and by the desktop's terminal alike, and it is written again on each preparation, so it
+    holds for a computer made again and reaches one made before this was. Named: each project's root, the skills folder
+    and each repository directly inside it. No wildcard, nothing outside the mounts; an entry already there is not added
+    twice."""
+    script = ('add() { git config --global --get-all safe.directory | grep -qxF -- "$1" '
+              '|| git config --global --add safe.directory "$1"; }; status=0; '
+              'for dir in "$@"; do add "$dir" || status=$?; done; '
+              f'for dir in {SKILLS}/*/; do if test -e "${{dir}}.git"; then add "${{dir%/}}" || status=$?; fi; done; '
+              'exit "$status"')
+    paths = [destination for destination, _ in target.projects]
+    return exec_args(target, ["sh", "-c", script, "sh", *([SKILLS] if target.library and not target.remote else []), *paths])
 
 
 def move_window_args(target, window_id):
@@ -393,7 +420,8 @@ def compatible(raw, target, owner, image_id):
 
 
 def mounts_match(mounts, configured, target):
-    expected = {GUEST: target.workspace, **({SHARED: target.shared} if target.shared else {}), **dict(target.projects)}
+    expected = {GUEST: target.workspace, **({SHARED: target.shared} if target.shared else {}),
+                **({SKILLS: target.library} if target.library and not target.remote else {}), **dict(target.projects)}
     if len(mounts) != len(expected) or len(configured) != len(expected):
         return False
     projects = dict(target.projects)
@@ -403,7 +431,7 @@ def mounts_match(mounts, configured, target):
         kind = "volume" if target.remote else "bind"
         if actual.get("Type") != kind or request.get("Type") != kind:
             return False
-        if destination in projects and destination not in target.writable:
+        if destination == SKILLS or destination in projects and destination not in target.writable:
             if actual.get("RW") is not False or request.get("ReadOnly", True) is not True:
                 return False
         elif actual.get("RW") is not True or request.get("ReadOnly"):
@@ -425,11 +453,14 @@ def previous_mounts(raw, target):
     configured = host.get("Mounts", raw.get("Mounts", []))
     if not isinstance(configured, list):
         return target
-    projects, writable = [], []
+    projects, writable, library = [], [], None
     for mount in configured:
         if not isinstance(mount, dict):
             return target
         guest = mount.get("Target", mount.get("Destination", ""))
+        if guest == SKILLS and isinstance(mount.get("Source"), str) and Path(mount["Source"]).is_absolute() and not target.remote:
+            library = Path(mount["Source"])  # what the computer has: a computer made before the library was mounted has none
+            continue
         if not isinstance(guest, str) or not guest.startswith(PROJECTS + "/"):
             continue
         name = guest[len(PROJECTS) + 1:]
@@ -442,7 +473,17 @@ def previous_mounts(raw, target):
         projects.append((guest, source))
         if mount.get("ReadOnly") is not True and mount.get("RW") is not False:
             writable.append(guest)
-    return replace(target, projects=tuple(projects), writable=tuple(writable))
+    return replace(target, projects=tuple(projects), writable=tuple(writable), library=library)
+
+
+def same_folder(one, other):
+    """Whether two folders (or two absences of one) are the same place, as the engine would see them."""
+    if one is None or other is None:
+        return one is other
+    try:
+        return one == other or one.resolve() == other.resolve()
+    except (OSError, RuntimeError):
+        return False
 
 
 def known_previous(raw, target, owner):
@@ -490,6 +531,9 @@ class LocalVm:
         # someone else's.
         self.machine = self.root if machine_dir is None else Path(machine_dir).resolve()
         self.homes, self.team = self.placed(HOMES), self.placed(TEAM)
+        # The folder the app keeps the team's skills and plugins in (members/skill_library.py, shared/skills). The computers mount
+        # this very folder: the app sets it when it makes the library elsewhere.
+        self.library = self.machine / "shared" / "skills"
         self.relocation = None
         self.host_work_busy = lambda: False
         self.enabled = enabled
@@ -504,6 +548,9 @@ class LocalVm:
         self.input_busy = lambda target: bool(self.active.get(target.key))
         self.timezone = lambda: None
         self.timezone_pending = False
+        # The owner's project folders changed and a computer may not show them yet (`refresh_mounts_soon`): `version` counts
+        # the changes, so one that comes while a pass is under way is never lost.
+        self.mounts_pending, self.mounts_version, self.mounts_task = False, 0, None
         from .desktop_host import DockerDesktop
         # Injected Docker runners never launch a real host application in tests.
         self._desktop = DockerDesktop() if runner is None else None
@@ -527,6 +574,7 @@ class LocalVm:
         self.status_engines = {}
         self.running = {}
         self.mounted_projects = {}
+        self.mounted_libraries = {}  # the library folder each computer was made with (none: before the library was mounted)
         self.dropped_project_mounts = {}
         self._installed = None
         self.engine_lock, self.build_lock = asyncio.Lock(), asyncio.Lock()
@@ -909,7 +957,7 @@ class LocalVm:
         return Target(key, name,
                       PurePosixPath(name + "-workspace") if host else self.homes / key,
                       PurePosixPath(f"raphael-computer-{self.owner}-team") if host else self.team,
-                      host, projects=self.projects() if not host else ())
+                      host, projects=self.projects() if not host else (), library=None if host else self.library)
 
     def projects(self):
         projects = self.settings.get("project_folders") if self.settings is not None else None
@@ -928,7 +976,8 @@ class LocalVm:
                      if allowed(source))
 
     def mounted_target(self, target):
-        return replace(target, projects=self.mounted_projects.get(target.physical, target.projects))
+        return replace(target, projects=self.mounted_projects.get(target.physical, target.projects),
+                       library=self.mounted_libraries.get(target.physical, target.library))
 
     def local_folders(self, member):
         target = (self.shared_target("", member, 0) if self.mode == "shared" and not self.remote
@@ -1247,17 +1296,21 @@ class LocalVm:
             # A failed inspect can mean the engine or image changed outside Raphael.
             self.invalidate(target)
             self.mounted_projects.pop(target.physical, None)
+            self.mounted_libraries.pop(target.physical, None)
             image_id = await self.image(target)
             return {"state": "missing", "image": bool(image_id), "ready": False}
         mounted = previous_mounts(raw, target)
         if not image_id or not compatible(raw, mounted, self.owner, image_id):
             self.invalidate(target)
             self.mounted_projects.pop(target.physical, None)
+            self.mounted_libraries.pop(target.physical, None)
             return {"state": "incompatible", "ready": False}
         self.mounted_projects[target.physical] = mounted.projects
+        self.mounted_libraries[target.physical] = mounted.library
         dropped = self.dropped_project_mounts.get(target.physical)
         mounts_stale = dict(mounted.projects) != dict(target.projects) and (
             mounted.projects or dropped != dict(target.projects)) or set(mounted.writable) != set(target.writable)
+        mounts_stale = mounts_stale or not same_folder(mounted.library, target.library)
         running = raw.get("State", {}).get("Running") is True
         ready = False
         screens_pending = False
@@ -1604,6 +1657,8 @@ class LocalVm:
             if not target.remote:
                 bound_folder(target.workspace)
                 bound_folder(target.shared)
+                if target.library:
+                    bound_folder(target.library)
             self.validate_storage(target)
             self.data.made(target)  # before the engine makes it: a computer unrecorded could never be removed
             result = await self.create(target, zone)
@@ -1630,6 +1685,7 @@ class LocalVm:
                     for name in ("context", "meetings", "projects"):
                         bound_folder(target.shared / name)
                 await self._wallpaper(target)
+                await self.trust_folders(target)
                 await self.clear_scratch(target)
                 return state
             if not repaired and state["state"] == "running" and not self.unit_held(target) and self.unit_active(target) <= 1 and not self.unit_active(target, excluding=target.key) and not self.unit_busy(target, excluding=target.key):
@@ -1656,7 +1712,8 @@ class LocalVm:
             return None
         previous = previous_mounts(raw, target)
         image_id = await self.image(target)
-        if ((previous.projects != target.projects or set(previous.writable) != set(target.writable))
+        if ((previous.projects != target.projects or set(previous.writable) != set(target.writable)
+             or not same_folder(previous.library, target.library))
                 and image_id and compatible(raw, previous, self.owner, image_id)):
             return previous
         return None
@@ -1674,7 +1731,8 @@ class LocalVm:
             host["PortBindings"] = {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": ""}]}
         # `previous` carries the remote binding repair, so an old remote computer of a previous layer still upgrades.
         prior = previous_mounts(previous, target)
-        mounts_changed = dict(prior.projects) != dict(target.projects) or set(prior.writable) != set(target.writable)
+        mounts_changed = (dict(prior.projects) != dict(target.projects) or set(prior.writable) != set(target.writable)
+                          or not same_folder(prior.library, target.library))
         mount_upgrade = mounts_changed and compatible(previous, prior, self.owner, image_id)
         image_upgrade = known_previous(previous, prior, self.owner) and (raw.get("Image") != image_id or target.container == "shared")
         if (not raw or not image_id or not (mount_upgrade or image_upgrade or legacy_remote and raw.get("Image") == image_id
@@ -1775,6 +1833,18 @@ class LocalVm:
             self.fitted[key] = size
         except (OSError, TimeoutError, VmError):
             logger.warning("The shared computer's size could not be checked")
+
+    async def trust_folders(self, target):
+        """Make git trust the mounted projects and skills (`trust_args`) each time the computer is prepared. A failure is
+        logged and never stops the computer."""
+        try:
+            result = await self.run_for(target, trust_args(target), timeout=30)
+            if result.code == 0:
+                return
+            detail = (result.stderr or "").strip()[-300:] or f"exit {result.code}"
+        except (OSError, TimeoutError, VmError) as error:
+            detail = str(error) or type(error).__name__
+        logger.warning("A computer's mounted folders could not be made trusted for git: %s", detail)
 
     async def clear_scratch(self, target):
         """Clear a running computer's old scratch (`scratch_args`) when it is prepared, and at most once a day after
@@ -1896,6 +1966,78 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
                     except (VmError, OSError, TimeoutError):
                         self.timezone_pending = True
                         continue  # Home remains usable while Docker is unavailable.
+
+    def refresh_mounts_soon(self):
+        """The owner added or removed a project folder: every running computer of this PC is made again with the new mounts,
+        in the background, as soon as nothing works in it (Docker cannot change the mounts of a running container). One pass
+        at a time: a change that comes while it runs is read by its next round."""
+        self.mounts_pending = True
+        self.mounts_version += 1
+        if self.mounts_task is None or self.mounts_task.done():
+            self.mounts_task = asyncio.create_task(self._refresh_mounts_task())
+        return self.mounts_task
+
+    async def _refresh_mounts_task(self):
+        waiting = None
+        while self.mounts_pending:
+            version = self.mounts_version
+            if waiting is None:
+                try:
+                    await self.recover()  # a computer made by an earlier run of the app is known now
+                except (VmError, OSError, TimeoutError):
+                    pass
+            blocked, failed = await self.refresh_mounts(waiting)
+            if version != self.mounts_version:
+                waiting = None  # the folders changed again: look at every computer once more
+                continue
+            if failed:
+                return  # still pending: the monitor tries again, and so does the next start of a computer
+            if not blocked:
+                self.mounts_pending = False
+                return
+            waiting = blocked
+            await asyncio.sleep(MOUNTS_RETRY_S)
+
+    async def refresh_mounts(self, only=None):
+        """Make each running computer of this PC again where its mounts are not the owner's project folders and nothing works in
+        it: no running task, no command in the background, no call, no hold of the owner. It goes through `start`, so the
+        locks that keep two makings (and a member's own start) from racing are the ones every start takes. A sleeping computer
+        is left alone and comes up with the folders at its next start; a computer in use keeps its mounts and is returned as
+        blocked, to be looked at again (`only` names those, so nothing but memory is asked while they wait). Returns (the state
+        keys of the computers still waiting for idle, whether the engine or the making failed)."""
+        blocked, failed = set(), False
+        if self.remote or not self.enabled:
+            return blocked, failed
+        projects = self.projects()
+        for unit in list(self.units()):
+            key = unit.state_key
+            if unit.remote or only is not None and key not in only:
+                continue
+            target = replace(unit, projects=projects)
+            try:
+                if only is None:
+                    state = await self.status(target, probe=False)
+                    if state["state"] == "unavailable":
+                        failed = True  # no engine to ask: it stays pending, and the monitor asks again
+                    if state["state"] != "running" or not state.get("mounts_stale"):
+                        continue
+                if self.unit_active(target) or self.unit_held(target) or self.mount_busy(target):
+                    blocked.add(key)
+                    continue
+                if only is not None:
+                    state = (await self.status(target, probe=False))["state"]
+                    failed = failed or state == "unavailable"
+                    if state != "running":
+                        continue  # put to sleep (or gone) while it waited: `start` would wake it, and it comes up with the folders anyway
+                await self.start(target)
+            except VmError as error:
+                if str(error) == "busy":
+                    blocked.add(key)
+                else:
+                    failed = True
+            except (OSError, TimeoutError):
+                failed = True
+        return blocked, failed
 
     async def stop(self, target, *, remove=False, captured_image=None):
         async with self.locks.setdefault(target.state_key, asyncio.Lock()):
@@ -2268,6 +2410,8 @@ print(base64.b64encode(data).decode())
                 await asyncio.sleep(30)
                 if self.timezone_pending:
                     await self.refresh_timezone()
+                if self.mounts_pending and (self.mounts_task is None or self.mounts_task.done()):
+                    self.refresh_mounts_soon()
                 await self.sweep()
                 self.data.settle_soon()
         except (OSError, TimeoutError, VmError):
@@ -2293,6 +2437,10 @@ print(base64.b64encode(data).decode())
             pending.cancel()
         await asyncio.gather(*self.image_tasks.values(), return_exceptions=True)
         self.image_tasks.clear()
+        if self.mounts_task is not None:
+            self.mounts_task.cancel()
+            await asyncio.gather(self.mounts_task, return_exceptions=True)
+            self.mounts_task = None
         if self.task:
             self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)

@@ -110,9 +110,9 @@ Non-speech journeys copy only the installed VAD into their model directory.
 The native model manager refuses all downloads. Only initialization
 writes fixture prerequisites to SQLite; assertions reopen that run's DB with `mode=ro`.
 Conversation deletion reports all tables with `conversation_id`, including turns,
-summaries, CLI sessions and cards. Quick history is cleared through its real sidebar
-menu and confirmation; its permanent conversation must remain with no dependent
-records or timeline rows.
+summaries, CLI sessions and cards. Raphael's one conversation is cleared through its
+header's ⋯ and the confirmation; its permanent conversation must remain with what was
+typed there gone.
 `delete-conversation` also creates two members and a room through the UI. One member
 consults Raphael and the other member; explicit room mentions generate real reports
 for both recipients. It deletes their private conversations and the source member,
@@ -330,7 +330,9 @@ conversations, work/replies/attachments, team/rooms, schedules/runs, usage/CLI a
 MCP servers, providers/models and dictation data. Browser dates are fixed to the fixture's
 `now`, in Asia/Taipei. Change data in that file, not in a second mock.
 
-The normal entry opens Raphael's conversation and waits for its header. Every other page is reached
+The normal entry waits for the conversation's header (the app opens on the chief of staff's conversation, or Raphael's when the fixture has
+no slime), and the runner then goes into Raphael's space the way the owner does, by the account menu's own entry, unless the scene's fixture
+says `start: "app"`. Every other page is reached
 through the real account menu at the sidebar's foot (`accountMenu` / `page()` in scenes/steps.mjs, the driver's `account-menu` action),
 and the foot scenes (scenes/foot.mjs) cover the face, the pill, the menu, its usage submenu, the rail and the hover.
 
@@ -342,8 +344,8 @@ can replace collections; `running`, `problem`, `onlyRaphael`, `usageEmpty` (noth
 and `onboarding` select boundary variants; `usageOwner` is a mix of every source (Codex live at 65% used, Claude whose reported window has reset, the ChatGPT sign-in, an OpenRouter key with its own usage); `permissionCard`, `memberDraftFirst`, `mailDraft` and `mailOffer` seed the permission and email cards of a chat (the Conversation feature map, P08c). `overlayEvents` replays the native overlay
 channel contract; `advance-time` advances the shared fixed clock for production timers. Scenes run with reduced motion,
 so nothing moves in a still frame; a scene about something that moves sets `motion: true` and holds every animation at
-one time with `freeze-motion` (`at` in ms), the same frame each run. A scene starts once Raphael's conversation (or the overlay's
-caption) is up; one that waits for something else names it in `ready` (`overlay-long-answer` waits for its subtitle).
+one time with `freeze-motion` (`at` in ms), the same frame each run. A scene starts once the conversation (or the overlay's
+caption) is up, in Raphael's space unless it says `start: "app"`; one that waits for something else names it in `ready` (`overlay-long-answer` waits for its subtitle).
 All scenarios appear in `--list`.
 
 Use `check(name)` for browser assertions that need rendered geometry. The shared
@@ -359,12 +361,12 @@ Coverage merges auto's automation/team/room matrix, nav's settings/MCP/usage mat
 polish's composers/skins, layout's dictation/notices/onboarding and narrate's chat states.
 Conversation management opens through the title-controlled details panel. Usage
 retains aggregate summaries, grouping, allowances and CSV; per-run navigation is removed. The deliberately removed owner menu/photo controls have no
-scenes. `npm run look -- --list` prints the current scenes, one per line; a full run covers each of them across light/dark and 1120, 720, 1920x1080. The member-column scenes cover the primary top slot, its exchange with Raphael, collapse, face tooltips and re-expansion; primary scenes also cover member/conversation/room/routine pickers, calendar tools and mentions without stars; dictation tabs use horizontal keyboard navigation. Team mentions and slash commands align to their text character and prefer the space above it, without an empty icon/check column. Calendar checks prohibit horizontal scrolling, keep every displayed day visible at readable widths and exercise responsive month/member/keep-awake controls. Team headers share the page padding and align Add with the title. Geometry checks cover all three sizes. The default Team scene also enforces R-UI-01: group panels size to their own members while chief/group containers share a capped column; no area minimum or sibling-height stretching. Opening starts at 100%; overflowing groups remain pannable, and reopening preserves the chosen session zoom. Fit is explicit. The chief uses the same compact card track and inset as group members. Group members wrap across the available panel width into at most three columns, while a one-member panel retains empty card tracks. Drop previews grow and shrink column capacity and rerun collision resolution. The seven canvas scenes use the one-person 學習/eight-person 未分組 CLI roster in `fixture.json.teamBoard`. Checks reject stretched panels and raw CLI refs, and require the whole chief on opening and after fit (at the 50% floor a tall roster may continue below the canvas). The opening and primary-board screenshots do not press Fit; `team-zoom` reopens the page and checks session zoom retention. Raphael roles use `memberRole` and the existing three-language `rooms.chief` key across member views. Model-choice scenes cover cloud/local row spacing, themed borders, readable metadata, scroll access and keyboard selection without downloading.
+scenes. `npm run look -- --list` prints the current scenes, one per line; a full run covers each of them across light/dark and 1120, 720, 1920x1080. The member-column scenes cover the chief's top slot (Raphael is never a row), collapse, face tooltips and re-expansion; primary scenes also cover member/conversation/room/routine pickers, calendar tools and mentions without stars; dictation tabs use horizontal keyboard navigation. Team mentions and slash commands align to their text character and prefer the space above it, without an empty icon/check column. Calendar checks prohibit horizontal scrolling, keep every displayed day visible at readable widths and exercise responsive month/member/keep-awake controls. Team headers share the page padding and align Add with the title. Geometry checks cover all three sizes. The default Team scene also enforces R-UI-01: group panels size to their own members while chief/group containers share a capped column; no area minimum or sibling-height stretching. Opening starts at 100%; overflowing groups remain pannable, and reopening preserves the chosen session zoom. Fit is explicit. The chief uses the same compact card track and inset as group members. Group members wrap across the available panel width into at most three columns, while a one-member panel retains empty card tracks. Drop previews grow and shrink column capacity and rerun collision resolution. The seven canvas scenes use the one-person 學習/eight-person 未分組 CLI roster in `fixture.json.teamBoard`. Checks reject stretched panels and raw CLI refs, and require the whole chief on opening and after fit (at the 50% floor a tall roster may continue below the canvas). The opening and primary-board screenshots do not press Fit; `team-zoom` reopens the page and checks session zoom retention. Raphael roles use `memberRole` and the existing three-language `rooms.chief` key across member views. Model-choice scenes cover cloud/local row spacing, themed borders, readable metadata, scroll access and keyboard selection without downloading.
 Team administration scenes cover full, long and eight-member batch approvals, held deletion approval,
 live member selection after approval, and an unchanged roster after rejection.
 The right-click scenes (`scenes/context-menu.mjs`, R-UI-44) press the real right button with the `right-click` step, which keeps its point in `window.__look.pointer`, and their `context-menu` check asserts that the menu is open, starts at the pointer, does not cover it and has the items of the menu a click on the ⋯ opens; `context-menu-key` presses Shift+F10 on a focused row. Every scene's audit also asks `context-menu.ts` for the ⋯ buttons that no row of its table reaches (`R-UI-44`).
 The primary-contact scenes (`primary-contact-menu`, `primary-contact-picker`, `primary-contact-set`, `primary-contact-strip`, `primary-room-chief`) choose the owner's primary contact through the real member menu and
-picker; the IPC double keeps `primaryId` (the fixture key `primaryMember` seeds it) and answers `members.set_primary` and the list's `team_context.primary_id` as the core does.
+picker; the IPC double keeps `primaryId` (the fixture key `primaryMember` seeds it: the first slime by default, `null` for none) and answers `members.set_primary` and the list's `team_context.primary_id` as the core does (Raphael, member 0, is listed flagged `raphael: true` with no role, picture or place, and refused by `members.set_primary`, `members.delete` and the fixed fields of `members.update`; `onlyRaphael` and the guide's fixture have no slime).
 The apps and skills scenes (`scenes/apps.mjs`) enter through the sidebar's connected-apps entry.
 The IPC double derives the inventory and the roster's count from the fixture's connections as the
 core does, and the `apps-count` check compares the sidebar badge, the tab's number, the rows under it

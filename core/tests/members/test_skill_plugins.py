@@ -44,18 +44,22 @@ def local(cap, tmp_path, version="1.0.0", **kwargs):
 
 
 async def test_downloads_allow_a_full_hour_and_wait_two_minutes_for_data(monkeypatch):
-    from raphael_core.members.capabilities import DOWNLOAD_SECONDS, download_skill
+    from raphael_core.members.capabilities import DOWNLOAD_SECONDS, download_skills
+    from .github_fake import FakeGitHub
 
+    github = FakeGitHub(monkeypatch)
+    github.add("owner/skills", {"SKILL.md": b"---\nname: x\ndescription: y\n---\nBody"})
     timeouts = []
-    original = httpx.AsyncClient
+    patched = httpx.AsyncClient
+
     def http(**kwargs):
         timeouts.append(kwargs["timeout"])
-        return original(transport=httpx.MockTransport(lambda request: httpx.Response(200, text="Skill document")), **kwargs)
+        return patched(**kwargs)
 
     monkeypatch.setattr(httpx, "AsyncClient", http)
     assert DOWNLOAD_SECONDS == 3600
-    assert await download_skill("owner/skills") == ("owner/skills", "Skill document")
-    assert timeouts == [120]
+    [(url, files)] = await download_skills("owner/skills")
+    assert files["SKILL.md"].startswith(b"---") and timeouts == [120]
 
 
 async def test_a_plugin_imports_one_hundred_twenty_skills(rig, tmp_path):
@@ -128,6 +132,26 @@ async def test_set_reimport_preserves_skill_ids_and_grants_and_removal_cascades(
     await rig.call("members.skills.delete", {"member_id": 0, "shared": True, "set_id": first["id"]})
     assert cap.skills(0) == [] and cap.plugin_sets() == []
     assert not rig.service.packages.list()
+
+
+async def test_a_version_folder_that_is_named_imports_exactly_that_version(rig, tmp_path):
+    cap = rig.service.capabilities
+    older = local(cap, tmp_path, "1.0.0")
+    newer = local(cap, tmp_path, "2.0.0")
+    result = await cap.import_plugin("local:" + str(older), access="all")
+    assert result["version"] == "1.0.0" and result["source"] == "local:" + str(older)
+    assert cap.skills(0)
+    # Only an update follows the cache to its newest version.
+    again = await cap.import_plugin(set_id=result["id"])
+    assert again["id"] == result["id"] and again["version"] == "2.0.0" and again["source"] == "local:" + str(newer)
+
+
+async def test_a_plugin_folder_of_the_cache_without_a_version_imports_its_newest_version(rig, tmp_path):
+    cap = rig.service.capabilities
+    older = local(cap, tmp_path, "1.0.0")
+    newer = local(cap, tmp_path, "2.0.0")
+    result = await cap.import_plugin("local:" + str(older.parent), access="all")
+    assert result["version"] == "2.0.0" and result["source"] == "local:" + str(newer)
 
 
 async def test_invalid_set_update_leaves_existing_documents_and_grants(rig, tmp_path):
@@ -236,7 +260,7 @@ async def test_download_bounds_and_listed_version_mismatch_are_fail_closed(rig, 
     assert not data["plugins"][0]["installable"]
     assert "version differs" in data["plugins"][0]["reason"]
     monkeypatch.setattr(plugins, "MAX_PACKAGE_BYTES", 4)
-    with pytest.raises(MemberError, match="too large"):
+    with pytest.raises(MemberError, match="more than 4 B"):
         await plugins.download_plugin({"repo": "owner/repo", "commit": SHA, "path": "plugins/desk"})
     assert rig.service.capabilities.plugin_sets() == []
 

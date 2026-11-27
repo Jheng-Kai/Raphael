@@ -144,3 +144,30 @@
 .hljs-string, .hljs-attr, .hljs-title { color: var(--ok); }
 .hljs-number, .hljs-literal, .hljs-symbol { color: var(--warn); }
 .hljs-comment, .hljs-meta { color: var(--text-3); }
+
+/* An equation: in the line it is one unit, on a line of its own it stands centred and scrolls sideways when it is wide. */
+.message-text .math-display { margin: 0.5em 0; overflow-x: auto; text-align: center; }
+.message-text .math-display:first-child { margin-top: 0; }
+.message-text .math-source { font-family: var(--mono); font-size: var(--fs-xs); }
+
+/* A toggle in a reply is a card, the summary the line that opens it. */
+.rich-block.message-details > summary { padding: var(--sp-2) var(--sp-3); font-weight: var(--weight-medium); cursor: pointer; }
+.rich-block.message-details[open] > summary { border-bottom: 1px solid var(--edge); }
+.rich-block.message-details > .details-body { padding: var(--sp-2) var(--sp-3) var(--sp-3); }
+.rich-block.message-details .details-body > :first-child { margin-top: 0; }
+.rich-block.message-details .details-body .message-text + .message-text, .rich-block.message-details .details-body .rich-block { margin-top: var(--sp-2); }
+
+/* The owner's own Markdown in the bubble, drawn in the bubble's colours: no card, no panel fill, the words' own colour with a tint. */
+.owner-message .message-text code { background: color-mix(in srgb, currentColor 16%, transparent); color: inherit; }
+.owner-message .message-text blockquote { color: inherit; border-inline-start-color: color-mix(in srgb, currentColor 55%, transparent); }
+.owner-message .message-text hr { border-top-color: color-mix(in srgb, currentColor 40%, transparent); }
+.owner-message .message-task input { accent-color: currentColor; }
+.owner-message .message-text .owner-code { margin: 0.4em 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); background: color-mix(in srgb, currentColor 14%, transparent); font: var(--fs-xs)/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.owner-message .message-text .owner-code code { padding: 0; background: transparent; font: inherit; }
+.owner-message .message-text .owner-table { max-width: 100%; margin: 0.4em 0; overflow-x: auto; }
+.owner-message .message-text .owner-table table { border-collapse: collapse; }
+.owner-message .message-text .owner-table :is(th, td) { padding: 0.15em 0.7em; border: 1px solid color-mix(in srgb, currentColor 30%, transparent); text-align: start; vertical-align: top; }
+.owner-message .message-text .owner-table th { font-weight: var(--weight-semibold); background: color-mix(in srgb, currentColor 12%, transparent); }
+.owner-message .message-text .owner-details { margin: 0.4em 0; }
+.owner-message .message-text .owner-details > summary { font-weight: var(--weight-medium); cursor: pointer; }
+.owner-message .message-text .owner-details > .details-body { padding-inline-start: 1.2em; }

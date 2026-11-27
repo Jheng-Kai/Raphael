@@ -1,4 +1,3 @@
-.conversation-list { min-width: 0; }
 .pending-questions { flex: none; width: min(var(--pa-colw), 100%); align-self: center; padding: var(--sp-2); box-sizing: border-box; }
 .pending-questions[hidden] { display: none; }
 .pending-questions .pending-question { display: flex; gap: var(--sp-2); width: 100%; min-width: 0; border-color: transparent; background: var(--surface-2); border-radius: var(--r-pill); }
@@ -7,27 +6,11 @@
 .pending-question-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
 .pending-question-mark { flex: none; color: var(--text-2); font-size: var(--fs-xs); }
 .pending-questions [role=alert] { margin: var(--sp-1) 0 0; color: var(--err); }
-.mb-det .conversation-list { border: 0; border-radius: 0; overflow: hidden; }
-.mb-det .conversation-open { border: 0; background: transparent; }
-.mb-det .conversation-open:hover { background: var(--hover); }
-/* The open row of the two carries a soft fill, like the selected row in the sidebar. */
-.mb-det .conversation-open[aria-current="true"] { background: color-mix(in srgb, var(--text) 6%, transparent); }
-.conversation-tools { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-2) 0; }
-.conversation-tools input { min-width: 0; min-height: var(--h-ctl); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); outline: none; }
-.conversation-tools input { width: 0; flex: 1; }
-:root[data-keys] .conversation-tools input:focus { border-color: var(--focus); box-shadow: 0 0 0 2px var(--accent-ring); }
-.conversation-rows { max-height: 340px; overflow-y: auto; padding: var(--sp-1) 0; }
-.conversation-row { display: flex; align-items: center; border-radius: var(--r-sm); }
-.conversation-row:hover { background: var(--hover); }
-.conversation-row .conversation-open { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); text-align: left; padding: var(--sp-2) var(--sp-2); }
-.conversation-open span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.conversation-open small { color: var(--text-3); font-size: var(--fs-2xs); }
-.conversation-more { flex: 0 0 auto; margin-right: var(--sp-1); }
 .conversation-search { width: min(390px, calc(100vw - 24px)); max-width: calc(100vw - 24px); }
 .conversation-head { display: flex; justify-content: center; min-width: 0; }
 .page.page-agent .page-head.mb-head { grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr); }
 .mb-head-l { display: flex; align-items: center; gap: var(--sp-1); }
-/* The pill is held at the top of its button, so that its centre stays 30 px from the window's top whether or not a quick question's caption hangs under it (the button's border
+/* The pill is held at the top of its button, so that its centre stays 30 px from the window's top (the button's border
    and padding take 6 px, and the pill stands 2 px lower than the plain sum: measured). */
 .mb-head-c { width: 100%; align-self: start; margin-top: calc((var(--pa-top) - 40px) / 2 - var(--sp-1) - 2px); }
 .page-agent .btn.conversation-trigger { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); min-width: 0; width: 100%; max-width: min(320px, 100%); height: auto; min-height: 52px; padding: var(--sp-1) var(--sp-3); border-color: transparent; background: transparent; box-shadow: none; border-radius: var(--r-sm); }
@@ -50,8 +33,6 @@
 .page-agent[data-det="open"] .btn.conversation-trigger:is(:hover, :focus-visible) .mb-pill::before { inset: 0 calc(16px + var(--sp-2)) 0 0; }
 @media (prefers-reduced-motion: reduce) { .mb-pill-go, .conversation-trigger .mb-pill::before { transition: none; } }
 .conversation-trigger .mb-pill .av { --av: var(--pa-pill-av) !important; flex-shrink: 0; }
-.conversation-trigger .conversation-caption:empty { display: none; }
-.conversation-trigger .conversation-caption { flex: none; min-height: 1.5em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-xs); font-weight: 400; line-height: 1.5; }
 .mb-chat { position: relative; }
 /* The thread passes under the header, which is the window's top row (members.css): what scrolls up fades out as it reaches the row,
    and at rest the first message stands clear of it (`--row-lead`, the row's height). The pill and the round buttons stay on their own

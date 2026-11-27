@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { createRequire } from "node:module";
@@ -17,6 +17,9 @@ import { coveredByTrafficLights, drawTrafficLights, trafficLights } from "./traf
 
 /** Product, model, unit, key names and external menu paths that stay in Latin letters in every language. */
 // Integrated model and service names, and bundled license attributions, stay in Latin letters.
+/** Where the installed packages really are: a worktree's `node_modules` may be a junction to another checkout's, and the dev server serves a package's own files (KaTeX's fonts) from there. */
+const modulesRoot = app => { try { return realpathSync(join(app, "node_modules")); } catch { return app; } };
+
 export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "ChatGPT", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Telegram", "Slack", "Discord", "Notion", "GitHub", "Mobbin", "MCP", "API", "URL", "CLI", "SSH", "STT", "PDF", "WAV", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Tailscale", "Funnel", "Cloudflare", "Tunnel", "ngrok", "Webhook", "HMAC", "SHA", "Signature", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Opus", "Sonnet", "Antigravity", "KEY=value", "Settings → Project Settings → API Keys"];
 
 LATIN_NAMES.push("1Password");
@@ -170,7 +173,7 @@ export async function run(options) {
         });
       } };
     }
-    server = await createServer({ configFile: false, root: app, cacheDir: join(directory, "vite-cache"), plugins: hostFeed ? [hostFeed] : [], server: { host: "127.0.0.1", port: 0, hmr: false, watch: null, fs: { allow: [app] } } });
+    server = await createServer({ configFile: false, root: app, cacheDir: join(directory, "vite-cache"), plugins: hostFeed ? [hostFeed] : [], server: { host: "127.0.0.1", port: 0, hmr: false, watch: null, fs: { allow: [app, modulesRoot(app)] } } });
     await server.listen();
     await warmupEntries(server, options.selected.map(scene => scene.entry || "index.html"), entry => readFile(join(app, entry), "utf8"));
     const address = server.httpServer.address();
@@ -291,6 +294,14 @@ export async function run(options) {
         if (cpuSlowdown > 1) await storage.send("Emulation.setCPUThrottlingRate", { rate: cpuSlowdown });
         // Keep the emulation session attached until page.close() ends the stress run.
         if (cpuSlowdown === 1) await storage.detach();
+        // A scene that measures a pane's resize counts every ResizeObserver callback of the page (`window.__resizeRuns`, resize-probe.mjs).
+        if (scene.steps.some(step => step.action === "resize-probe")) {
+          await page.evaluateOnNewDocument(() => {
+            const Real = window.ResizeObserver;
+            window.__resizeRuns = 0;
+            window.ResizeObserver = class extends Real { constructor(callback) { super((entries, observer) => { window.__resizeRuns++; callback(entries, observer); }); } };
+          });
+        }
         if (scene.steps.some(step => step.measure)) {
           await page.evaluateOnNewDocument(() => {
             window.__lookLongTasks = [];
@@ -310,6 +321,13 @@ export async function run(options) {
         // for unrelated polling and reloads, which do not establish readiness.
         await page.goto(`${origin}/${scene.entry ?? ""}`, { waitUntil: "domcontentloaded", timeout: 20000 });
         await page.waitForSelector(scene.ready ?? (scene.entry === "overlay.html" ? "#progress:not([hidden])" : scene.fixture.onboarding ? '#ob:not([hidden]) [data-ob="next"]' : '.page-agent:not([hidden]) .conversation-trigger'), { visible: true, timeout: 10000 });
+        // The app opens on its chief of staff's conversation (Raphael's own when no slime exists yet). Scenes begin in Raphael's
+        // space, where the fixture's conversation and its quick questions are, reached as the owner reaches it: the account menu's
+        // entry. A scene that must see the app's own start says `start: "app"` in its fixture.
+        if (!scene.entry && !scene.fixture.onboarding && scene.fixture.start !== "app") {
+          await perform(page, { action: "account-menu", item: "raphael" }, directory);
+          await page.waitForFunction(() => !document.querySelector('.mb-col [aria-current="true"]'), { timeout: 10000 });
+        }
         for (const step of scene.steps) {
           const trace = process.env.LOOK_TRACE === "1" && step.measure
             ? `${scene.name}-${theme}-${width}-${step.measure.name}.trace.json` : null;

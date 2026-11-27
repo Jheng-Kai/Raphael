@@ -19,7 +19,7 @@ The RPC methods (the main window only, through the shell's allow-list):
 - `members.greet {id}` -> `{turn_id}`: start another hidden greeting before any owner message,
   replacing failed greetings. Only the member's own interactive brain answers it, and the one tool
   it may call is the question card that asks what to take on first (`agent.service.begin_setup`
-  carries on from the owner's answer).
+  carries on from the owner's answer). `id` 0 is Raphael: its empty conversation begins its guided tour.
 - `members.update {id, name?, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, position?}`
   -> `{member}`. `avatar` here is "" or a slime, "slime:<character>" or "slime:color:<color>". Raphael (0) is not changed here: its picture is the app's to change.
 - `members.delete {id}` -> `{deleted}`: the member, its conversation (and the exchanges of other
@@ -108,7 +108,10 @@ from ..router import Router
 from ..slime_ids import current_avatar
 from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError, checked, sniff_ok
 from .capabilities import MemberCapabilities, download_skills
+from .skill_layouts import PluginTree
 from .skill_packages import SkillPackages
+from .skill_convert import Conversions, needs_conversion, routed
+from .skill_paths import as_local
 from . import skill_sources
 from .schedule import Schedule, first_eligible_slot, next_run
 from .covers import Covers, selection as cover_selection
@@ -138,9 +141,10 @@ PREVIEW_CHARS = 80
 # The folders of the pictures, in the app's local folder.
 AVATARS_DIR = "avatars"
 SLIME = "slime:"
+# What of a profile Raphael keeps: its name is the language's own and its look the first blue slime, fixed.
+RAPHAEL_PROFILE_FIELDS = ("personality", "instructions")
 MEMBERS_DIR = "members"
 # Raphael's own picture, kept by the shell (app/src-tauri/src/avatar.rs): read here, never written.
-RAPHAEL_AVATAR_DIR = "avatar"
 _EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
 # The template of the routine offered to a member of a group with places to look.
 TEMPLATE_TIME = "09:00"
@@ -173,6 +177,10 @@ def unread_kind(turns: Sequence[tuple]) -> str:
     return "failed" if failed else "done" if done else "message"
 
 
+class ConvertInstead(Exception):
+    """The direct import found material that is no skill yet: a slime converts it (skill_convert.py)."""
+
+
 def _rpc_error(error: MemberError) -> RpcError:
     """A refusal of the store as a bad request whose data names the field."""
     return RpcError(INVALID_PARAMS, f"Invalid params: {error}", {"kind": error.kind})
@@ -182,7 +190,20 @@ def _library_error(error: MemberError) -> RpcError:
     """A refusal of the team skill library: its kind leads the message too, since the shell passes the window the message
     and not the data, and the window says each kind in words (skill-library.ts `failureText`). `library` tells the
     agent that the kind is the library's own answer (taken, not_found, ...) and not a wrong argument of its call."""
-    return RpcError(INVALID_PARAMS, f"Invalid params: {error.kind}: {error}", {"kind": error.kind, "library": True})
+    text = f"Invalid params: {error.kind}: {error}"
+    # What the window needs to say the cause in the owner's language rides at the end of the message, as the window reads
+    # only the message: a file, a size, a limit, a line (skill-library.ts `failureText`).
+    if getattr(error, "detail", None):
+        text += " [[" + json.dumps(error.detail, ensure_ascii=False, separators=(",", ":")) + "]]"
+    return RpcError(INVALID_PARAMS, text, {"kind": error.kind, "library": True})
+
+
+def _io_error(error: BaseException, what: str) -> MemberError:
+    """A disk that would not read or write a skill's file, with the file and the system's own words (a path too long for
+    Windows, a full disk, a file another program holds)."""
+    name = os.path.basename(str(getattr(error, "filename", "") or ""))
+    why = str(getattr(error, "strerror", "") or error)
+    return MemberError("io", f"could not {what}{f' ({name})' if name else ''}: {why}", reason="disk", file=name, why=why)
 
 
 def _uploaded_picture(params, kind):
@@ -318,6 +339,8 @@ class MembersService:
         self.store = MemberStore(conn, now_ms)
         self.capabilities = MemberCapabilities(conn, local_dir / "member-skills", self.store)
         self.packages = SkillPackages(self.capabilities)
+        self.attachments = None  # where the material of a conversion is kept (use_attachment_store)
+        self.conversions = Conversions(self)
         self.greeting = None  # Bound by the interactive AgentService, never the routine worker.
         self._delivered: set[tuple[int, int, str]] = set()
         self._conn = conn
@@ -344,7 +367,6 @@ class MembersService:
         self._tz = tz
         self._tick_s = tick_s
         self._avatars = local_dir / AVATARS_DIR
-        self._raphael_avatar = local_dir / RAPHAEL_AVATAR_DIR
         self._pictures: dict[Path, _Picture] = {}
         self._covers = Covers(self._avatars / "covers", self._picture, self._pictures.pop)
         self._viewing: int | None = None
@@ -393,6 +415,7 @@ class MembersService:
         methods = {
             "skills.library.list": self._packages_list,
             "skills.library.import": self._packages_import,
+            "skills.library.convert": self.conversions.status,
             "skills.library.update": self._packages_update,
             "skills.library.delete": self._packages_delete,
             "members.skills.list": self._skills_list,
@@ -440,16 +463,12 @@ class MembersService:
     def speaker(self, member_id: int) -> Speaker | None:
         if member_id == 0:
             tools = self._settings.get("raphael_tools")
-            profile = {field: text for field, text in self.first_bot_profile().items() if field != "avatar"}
+            # Raphael is the guide, not a slime: its name and look are fixed (`speaker.RAPHAEL_NAMES`), it keeps a personality
+            # and instructions, and it is never the chief of staff.
+            profile = {field: text for field, text in self.first_bot_profile().items() if field in RAPHAEL_PROFILE_FIELDS}
             return Speaker(**profile, draft_first=self._settings.get("raphael_draft_first"),
-                           tools=None if tools is None else frozenset(tools),
-                           capabilities=frozenset({"chief"}) if self.store.is_chief(member_id) else frozenset())
+                           tools=None if tools is None else frozenset(tools))
         return self.store.speaker(member_id)
-
-    def _chief_pinned(self) -> bool:
-        from ..brain.settings import SettingsStore
-
-        return bool(SettingsStore(self._conn).get("chief_pinned"))
 
     def first_bot_profile(self) -> dict:
         from ..brain.settings import SettingsStore
@@ -459,7 +478,7 @@ class MembersService:
     def find(self, name: str) -> Speaker | None:
         if not isinstance(name, str) or not name.strip():
             return None
-        if is_raphael_name(name) or name.casefold() == self.first_bot_profile().get("name", "").casefold():
+        if is_raphael_name(name):
             return self.speaker(0)
         member = self.store.by_name(name)
         return None if member is None else self.speaker(member.id)
@@ -471,9 +490,8 @@ class MembersService:
         if not folded:
             return []
         found = []
-        # The first Bot by the name the owner gave it (its built-in names are `names_raphael`'s).
-        first = self.first_bot_profile().get("name", "")
-        for member_id, name in ([(0, first)] if first else []) + [(member.id, member.name) for member in self.store.members()]:
+        # Raphael is reached by its own names (`names_raphael`), not by a name in the roster.
+        for member_id, name in [(member.id, member.name) for member in self.store.members()]:
             name = name.casefold()
             if _ASCII_WORD.fullmatch(name):
                 hit = re.search(rf"(?<![a-z0-9]){re.escape(name)}(?![a-z0-9])", folded)
@@ -486,18 +504,20 @@ class MembersService:
     def has_members(self) -> bool:
         return self._conn.execute("SELECT 1 FROM members LIMIT 1").fetchone() is not None
 
-    def roster(self) -> list[Speaker]:
-        """Public inventory never carries another member's private persona or brain."""
+    def roster(self, *, with_raphael: bool = False) -> list[Speaker]:
+        """The slimes, in the sidebar's order. Public inventory never carries another member's private persona or brain.
+        Raphael, the app's guide, is no slime and not in it; a group chat that has it as a participant asks for it
+        (`with_raphael`), never as the chief."""
         primary = self.primary_id()
-        first = self.first_bot_profile()
-        rows = [{"id": 0, **{field: first.get(field, "") for field in ("name", "role", "blurb")}}]
-        rows.extend(self._conn.execute("SELECT id,name,role,blurb FROM members ORDER BY pinned DESC,position,id"))
-        return [Speaker(id=row["id"], name=row["name"], role=row["role"], blurb=row["blurb"],
-                        capabilities=frozenset({"chief"}) if row["id"] == primary else frozenset())
-                for row in rows]
+        rows = self._conn.execute("SELECT id,name,role,blurb FROM members ORDER BY pinned DESC,position,id")
+        people = [Speaker(id=row["id"], name=row["name"], role=row["role"], blurb=row["blurb"],
+                          capabilities=frozenset({"chief"}) if row["id"] == primary else frozenset())
+                  for row in rows]
+        return [Speaker(id=0, name=RAPHAEL_NAMES[normalize_language(self._language())]), *people] if with_raphael else people
 
     def primary_id(self) -> int:
-        """The owner's primary contact (0 for Raphael): the one place the roster, the window and the prompts read it from."""
+        """The owner's primary contact, the chief of staff (0 while there is no slime: Raphael is never it): the one place
+        the roster, the window and the prompts read it from."""
         return self.store.primary_id()
 
     def team_context(self, self_id=0, language="zh-TW", room_member_ids=None):
@@ -685,19 +705,6 @@ class MembersService:
         kind, _, name = avatar.partition(":")
         return self._picture(self._avatars / MEMBERS_DIR / name) if kind == "file" and name else None
 
-    def _raphael_picture(self) -> tuple[_Picture, dict] | None:
-        """Raphael's picture of the owner's own and its crop, as the shell keeps them; None while it
-        is its emblem."""
-        try:
-            meta = json.loads((self._raphael_avatar / "picture.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return None
-        picture = self._picture(self._raphael_avatar / "picture")
-        crop = meta.get("crop") if isinstance(meta, dict) else None
-        if picture is None or not isinstance(crop, dict):
-            return None
-        return picture, {key: crop.get(key) for key in ("x", "y", "zoom")}
-
     def _remove_picture(self, avatar: str) -> None:
         kind, _, name = avatar.partition(":")
         if kind != "file" or not name:
@@ -757,10 +764,10 @@ class MembersService:
         last = latest.get(0)
         activity, activity_label = self.activity.describe(0, waiting, tasks=tasks)
         view: dict[str, Any] = {
-            "blurb": "", "reply_style": "full",
-            "notify": self._settings.get("raphael_notify"), "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
+            "blurb": "", "reply_style": "full", "raphael": True,
+            "notify": self._settings.get("raphael_notify"), "ask_before_members": False, "pinned": False, "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
             "id": 0,
-            "chief": self.store.is_chief(0),
+            "chief": False,
             "name": RAPHAEL_NAMES[language],
             "role": "",
             "personality": "",
@@ -780,12 +787,7 @@ class MembersService:
             "preview": "" if last is None else _preview(last, self._said(latest) if said is None else said),
             "last_at": None if last is None else last.created_at_ms,
         }
-        picture = self._raphael_picture()
-        profile = self.first_bot_profile()
-        view.update(profile)
-        view["profile_ready"] = bool(profile)
-        if picture is not None:
-            view["avatar_rev"], view["avatar_crop"] = picture[0].rev, picture[1]
+        view.update({field: text for field, text in self.first_bot_profile().items() if field in RAPHAEL_PROFILE_FIELDS})
         if cover := self._covers.view(0):
             view["cover"] = cover
         return view
@@ -929,6 +931,8 @@ class MembersService:
     async def _skills_import(self, params: dict) -> dict:
         member_id = self._skill_scope(params)
         args = {k: v for k, v in params.items() if k not in ("shared", "member_id")}
+        if "source" in args:
+            args["source"] = as_local(args["source"])
         if member_id != -1 and set(args) == {"source"} and isinstance(args["source"], str) and args["source"].startswith("local:"):
             # Keep version discovery and reimport semantics of an installed private skill.
             try:
@@ -940,7 +944,7 @@ class MembersService:
             except MemberError as error:
                 raise _rpc_error(error) from None
             except (OSError, UnicodeError) as error:
-                raise _rpc_error(MemberError("io", "could not read or keep skill files")) from error
+                raise _rpc_error(_io_error(error, "read or keep the skill files")) from error
         _, ids, plugin, skipped = await self._import_package(member_id, args)
         left_out = {"skipped": skipped} if skipped else {}
         if plugin:
@@ -972,33 +976,67 @@ class MembersService:
 
     async def _packages_list(self, params):
         self._package_fields(params, ())
-        return {"packages": await self.packages.list_async(), "members": [{"id": m.id, "name": m.name} for m in self.store.members()]}
+        # A conversion that ended while the window was elsewhere is imported now, so that its work is never lost.
+        await self.conversions.settle()
+        return {"packages": await self.packages.list_async(), "members": [{"id": m.id, "name": m.name} for m in self.store.members()],
+                "converting": self.conversions.waiting()}
+
+    def use_attachment_store(self, store) -> None:
+        """Keep the material of a conversion where a conversation keeps what the owner attaches (app.py)."""
+        self.attachments = store
 
     async def _packages_import(self, params):
-        key, _, _, skipped = await self._import_package(-1, params, new_package=True)
+        """The one box of Team skills: whatever is a skill or a plugin imports directly, with no model; what is not in a
+        skill's format because of its format is converted by the primary contact (skill_convert.py)."""
+        params = routed(params)
+        if "files" in params:
+            self._package_fields(params, ("files", "access", "name"))
+        try:
+            key, _, _, skipped = await self._import_package(-1, params, new_package=True)
+        except ConvertInstead:
+            try:
+                return await self.conversions.start(params)
+            except MemberError as error:
+                raise _library_error(error) from None
         # What was left out because its name is taken is named with who holds it (#313): the rest is in the library.
         return {"package": await self.packages.view_async(key), **({"skipped": skipped} if skipped else {})}
 
-    async def _package_documents(self, params):
+    async def _package_documents(self, params, plugins=False):
+        """What a source holds, as the documents to install: `(documents, source, origin, name)`. With `plugins`, a source that is
+        a plugin of any kind (skill_layouts.py) is its `PluginTree` instead, so that the whole of it is kept."""
         if "text" in params:
             text = params["text"]
             if not isinstance(text, str):
                 raise invalid_params("text must be Markdown")
             return [("paste", {"SKILL.md": text.encode()})], "pasted text", "paste", ""
         if "file" in params:
-            files, name = await asyncio.to_thread(skill_sources.uploaded, params["file"])
-            return [("upload", f) for f in files], name, "upload", name
+            files, name = await asyncio.to_thread(skill_sources.uploaded, params["file"], plugins)
+            return files if plugins and isinstance(files, PluginTree) else ([("upload", f) for f in files], name, "upload", name)
+        if "files" in params:
+            files, name = await asyncio.to_thread(skill_sources.uploaded_tree, params["files"], plugins)
+            return files if plugins and isinstance(files, PluginTree) else ([("upload", f) for f in files], name, "upload", name)
         source = params["source"]
         if not isinstance(source, str) or not source.strip():
             raise invalid_params("source must be a nonempty string")
         if source.startswith("local:"):
-            files, name = await asyncio.to_thread(skill_sources.local, source)
-            return [(source, f) for f in files], source, "source", name
-        documents = await download_skills(source)
-        return documents, source, "source", source.rstrip("/").split("/")[-1]
+            files, name = await asyncio.to_thread(skill_sources.local, source, plugins)
+            return files if plugins and isinstance(files, PluginTree) else ([(source, f) for f in files], source, "source", name)
+        documents = await (download_skills(source, plugins=True) if plugins else download_skills(source))
+        if isinstance(documents, PluginTree):
+            return documents
+        from .skill_github import label
+
+        try:
+            name = label(source)
+        except MemberError:
+            name = source.rstrip("/").split("/")[-1]
+        return documents, source, "source", name
 
     async def _import_package(self, member, params, *, new_package=False):
-        self._package_fields(params, ("source", "text", "file", "access", "name", "plugin", "set_id", "marketplace"))
+        self._package_fields(params, ("source", "text", "file", "files", "access", "name", "plugin", "set_id", "marketplace"))
+        if "source" in params:
+            # A path written any way is a folder on this computer, never a GitHub source.
+            params = {**params, "source": as_local(params["source"])}
         if "access" in params:
             if member != -1:
                 raise invalid_params("access is for shared packages")
@@ -1010,36 +1048,52 @@ class MembersService:
             raise invalid_params("plugin must be true or false")
         plugin, skipped = None, []
         try:
-            if params.get("plugin") or "marketplace" in params or "set_id" in params:
-                if member != -1 or "text" in params or "file" in params:
+            as_plugin = bool(params.get("plugin") or "marketplace" in params or "set_id" in params)
+            if as_plugin:
+                if member != -1 or "text" in params or "file" in params or "files" in params:
                     raise invalid_params("a plugin needs a shared plugin source")
                 if (not any(k in params for k in ("set_id", "marketplace", "source"))
                         or "set_id" in params and "marketplace" in params
                         or "marketplace" in params and "name" not in params):
                     raise invalid_params("choose one installed plugin, marketplace entry or local source")
                 identifier = _whole(params, "set_id", least=1) if "set_id" in params else None
-                plugin = await self.capabilities.import_plugin(params.get("source"), set_id=identifier,
-                    marketplace=params.get("marketplace"), name=params.get("name"), access=params.get("access"),
-                    require_new=new_package and identifier is None)
+                try:
+                    plugin = await self.capabilities.import_plugin(params.get("source"), set_id=identifier,
+                        marketplace=params.get("marketplace"), name=params.get("name"), access=params.get("access"),
+                        require_new=new_package and identifier is None)
+                except MemberError as error:
+                    # The plugin option on a source that is no plugin (no manifest) imports its skills as a package.
+                    if not (error.detail.get("reason") == "no_manifest" and "source" in params
+                            and identifier is None and "marketplace" not in params):
+                        raise
+                    as_plugin = False
+            data = None
+            if not as_plugin:
+                if sum(k in params for k in ("source", "text", "file", "files")) != 1:
+                    raise invalid_params("choose exactly one source, text or file")
+                # The one box takes a plugin of any kind whole (skill_layouts.py); `plugin: false` asks for its skills only.
+                data = await self._package_documents(params, plugins=new_package and member == -1 and params.get("plugin") is not False)
+                if isinstance(data, PluginTree):
+                    plugin, as_plugin = await self.capabilities.import_tree(data, access=params.get("access")), True
+            if as_plugin:
                 skipped = plugin.pop("skipped", [])
                 key = f"set:{plugin['id']}"
                 ids = [s["id"] for s in (await self.packages.view_async(key))["skills"]]
             else:
-                if sum(k in params for k in ("source", "text", "file")) != 1:
-                    raise invalid_params("choose exactly one source, text or file")
-                data = await self._package_documents(params)
                 key, ids = await self.packages.install(member, *data, access=params.get("access"), name=params.get("name"),
                                                          skipped=skipped)
         except MemberError as error:
+            if new_package and member == -1 and "plugin" not in params and needs_conversion(error):
+                raise ConvertInstead from None
             raise (_library_error if member == -1 else _rpc_error)(error) from None
         except (OSError, UnicodeError) as error:
-            raise (_library_error if member == -1 else _rpc_error)(MemberError("io", "could not read or keep skill files")) from error
+            raise (_library_error if member == -1 else _rpc_error)(_io_error(error, "read or keep the skill files")) from error
         self._changed("members.skills.changed", max(member, 0))
         self._changed()
         return key, ids, plugin, skipped
 
     async def _packages_update(self, params):
-        self._package_fields(params, ("key", "enabled", "access", "skill", "refresh"))
+        self._package_fields(params, ("key", "enabled", "access", "skill", "refresh", "rename"))
         key = params.get("key")
         revision = self.capabilities.skill_revision()
         try:
@@ -1054,6 +1108,10 @@ class MembersService:
             raise invalid_params("refresh must be true")
         if "access" in params:
             self._cap(self.packages.validate_access, params["access"])
+        rename = params.get("rename")
+        if "rename" in params and (not isinstance(rename, dict) or set(rename) != {"id", "name"} or type(rename["id"]) is not int
+                                   or not isinstance(rename["name"], str)):
+            raise invalid_params("give the skill to rename and its new name")
         skill = params.get("skill")
         if "skill" in params:
             if (not isinstance(skill, dict) or set(skill) != {"id", "enabled"} or type(skill["id"]) is not int
@@ -1063,6 +1121,8 @@ class MembersService:
             if revision != self.capabilities.skill_revision():
                 raise MemberError("not_found", "the skill library changed during update")
             changes = {"access": params.get("access"), "enabled": params.get("enabled"), "skill": skill}
+            if rename:
+                self.packages.rename_skill(key, rename["id"], rename["name"])
             if params.get("refresh"):
                 if not package["updatable"]:
                     raise MemberError("source", "this package has no available update source")
@@ -1070,7 +1130,7 @@ class MembersService:
                 if key.startswith("set:"):
                     await self.capabilities.import_plugin(set_id=int(key[4:]), required_skill=required, **changes)
                 else:
-                    data = await self._package_documents({"source": package["source"]})
+                    data = await self._refresh_documents(key, package)
                     if revision != self.capabilities.skill_revision():
                         raise MemberError("not_found", "the skill library changed during refresh")
                     await self.packages.install(-1, *data, key=key, required_skill=required, **changes)
@@ -1080,10 +1140,20 @@ class MembersService:
         except MemberError as error:
             raise _library_error(error) from None
         except (OSError, UnicodeError) as error:
-            raise _library_error(MemberError("io", "could not refresh skill files")) from error
+            raise _library_error(_io_error(error, "refresh the skill files")) from error
         self._changed("members.skills.changed", 0)
         self._changed()
         return {"package": await self.packages.view_async(key)}
+
+    async def _refresh_documents(self, key, package):
+        """What a package is made again from: its source, or for a group (skills joined one by one) each skill's own."""
+        if self._conn.execute("SELECT origin FROM skill_packages WHERE key=?", (key,)).fetchone()["origin"] != "group":
+            return await self._package_documents({"source": package["source"]})
+        documents = []
+        for source in dict.fromkeys(row["source"] for row in self._conn.execute(
+                "SELECT source FROM member_skills WHERE package_key=? ORDER BY id", (key,))):
+            documents += (await self._package_documents({"source": source}))[0]
+        return documents, package["source"], "group", package["name"]
 
     async def _packages_delete(self, params):
         self._package_fields(params, ("key", "skill"))
@@ -1097,7 +1167,7 @@ class MembersService:
         except MemberError as error:
             raise _library_error(error) from None
         except OSError as error:
-            raise _library_error(MemberError("io", "could not remove the skill files")) from error
+            raise _library_error(_io_error(error, "remove the skill files")) from error
         self._changed("members.skills.changed", 0)
         self._changed()
         return {"deleted": True, **({"package": package} if package else {})}
@@ -1326,7 +1396,8 @@ class MembersService:
         return {"member": self.view_of(member), "routine_offer": offer}
 
     async def _greet(self, params: dict) -> dict:
-        member_id = self._member_id(params)
+        # Raphael (0) greets too: its empty conversation begins its guided tour (`AgentService.start_greeting`).
+        member_id = 0 if _whole(params, "id") == 0 else self._member_id(params)
         owner = self._conn.execute(
             "SELECT 1 FROM agent_turns WHERE member_id=? AND scope='private' AND trim(question)<>'' "
             "AND source NOT IN ('greeting','member','routine','resumed') LIMIT 1", (member_id,),
@@ -1372,7 +1443,7 @@ class MembersService:
             cover = self._covers.reposition(member_id, params["cover_position"])
         return cover
 
-    def _update_raphael(self, params: dict, *, profile_fields=("name", "avatar", "personality", "instructions")) -> dict:
+    def _update_raphael(self, params: dict, *, profile_fields=RAPHAEL_PROFILE_FIELDS) -> dict:
         from ..brain.settings import checked
 
         preferences = {"tools": "raphael_tools", "notify": "raphael_notify", "draft_first": "raphael_draft_first"}
@@ -1384,8 +1455,6 @@ class MembersService:
         try:
             if changes:
                 key, profile = checked("first_bot_profile", {**self.first_bot_profile(), **changes})
-                if profile.get("name") and any(member.name.casefold() == profile["name"].casefold() for member in self.store.members()):
-                    raise invalid_params("duplicate first Bot name")
                 values[key] = profile
             for field, setting in preferences.items():
                 if field in params:
@@ -1528,8 +1597,7 @@ class MembersService:
         if kind == "cover":
             picture = self._covers.picture(member_id)
         elif member is None:
-            found = self._raphael_picture()
-            picture = None if found is None else found[0]
+            picture = None  # Raphael's look is fixed: the first blue slime, never a picture
         else:
             picture = self._avatar_picture(member.avatar)
         return {"rev": None, "url": None} if picture is None else {"rev": picture.rev, "url": picture.url}
@@ -1561,23 +1629,8 @@ class MembersService:
 
     async def _set_avatar(self, params: dict) -> dict:
         member_id = _whole(params, "id")
-        if member_id:
-            self._member_id(params)
+        self._member_id(params)  # Raphael's look is fixed: 0 is refused here
         picture = _uploaded_picture(params, "avatar")
-        if member_id == 0:
-            def write_first_picture():
-                self._raphael_avatar.mkdir(parents=True, exist_ok=True)
-                for filename, content in (("picture", picture.data), ("picture.json", json.dumps({
-                        "mime": picture.mime, "crop": {"x": 0.5, "y": 0.5, "zoom": 1}}).encode("utf-8"))):
-                    pending = self._raphael_avatar / (filename + ".part")
-                    pending.write_bytes(content)
-                    pending.replace(self._raphael_avatar / filename)
-            try:
-                await asyncio.to_thread(write_first_picture)
-            except OSError:
-                raise invalid_params("avatar (io)") from None
-            self._changed()
-            return {"member": self._raphael_view(self._language(), {}, set(), {})}
         folder = self._avatars / MEMBERS_DIR
         stored = f"{member_id}-{secrets.token_hex(6)}.{_EXTENSIONS[picture.mime]}"
 
@@ -2015,7 +2068,8 @@ class MembersService:
                     current = SimpleNamespace(name=RAPHAEL_NAMES[self._language()], role="", personality="", instructions="",
                                               blurb="", avatar="", group_id=None)
                     for field, value in self.first_bot_profile().items():
-                        setattr(current, field, value)
+                        if field in RAPHAEL_PROFILE_FIELDS:
+                            setattr(current, field, value)
                 current_group = self.store.group(current.group_id) if current and current.group_id else None
                 group_val = arguments.get("group", current_group.name if current_group else "")
                 group_name = group_val.strip() if isinstance(group_val, str) else ""
@@ -2273,22 +2327,22 @@ class MembersService:
             if name == "member_update" and params.get("id") == 0:
                 from ..brain.settings import checked
 
-                preferences = {"model": "agent_model", "pinned": "chief_pinned"}
+                preferences = {"model": "agent_model"}
                 # Profile drafts include these empty fields for ordinary members.
-                for field in ("blurb", "group", "avatar_preset"):
+                for field in ("blurb", "group", "avatar_preset", "role"):
                     if params.get(field) == "":
                         params.pop(field)
-                # The first Bot wears a slime as every member does, kept in its profile.
-                if "avatar_preset" in params:
-                    params["avatar"] = params.pop("avatar_preset")
-                if set(params) - {"id", "name", "role", "personality", "instructions", "avatar", "cover", "cover_position", "tools", "notify", "draft_first", *preferences}:
-                    raise invalid_params("This field is not editable for the first Bot")
+                # ...and Raphael's own name, which the draft shows and cannot change.
+                if isinstance(params.get("name"), str) and is_raphael_name(params["name"]):
+                    params.pop("name")
+                if set(params) - {"id", "personality", "instructions", "cover", "cover_position", "tools", "notify", "draft_first", *preferences}:
+                    raise RpcError(INVALID_PARAMS, "This field is not editable for Raphael", {"kind": "raphael"})
                 # Validate the whole request before any profile/preference write.
                 for field, setting in preferences.items():
                     if field in params:
                         checked(setting, params[field])
                 self._update_raphael({key: value for key, value in params.items() if key not in preferences},
-                                     profile_fields=("name", "role", "personality", "instructions", "avatar"))
+                                     profile_fields=RAPHAEL_PROFILE_FIELDS)
                 for field, setting in preferences.items():
                     if field in params:
                         await self._management_rpc("settings.set", {"key": setting, "value": params[field]})
@@ -2370,15 +2424,28 @@ class MembersService:
         turn = self._history.get(turn_id)
         if turn is None or turn.status in ("running", "confirm"):
             return
+        summary = _line(turn.text or turn.detail or "")
+        if turn.status == "error":
+            # A run that broke in our own code says where (an exception type and our frames, never a value), so that the
+            # owner can read it and the next occurrence can be found; any other failure keeps its own words alone.
+            cause = self._conn.execute("SELECT reason, report_detail FROM worker_tasks WHERE turn_id=? ORDER BY id DESC LIMIT 1", (turn_id,)).fetchone()
+            if cause is not None and (cause[0] or "").startswith("worker_") and cause[1]:
+                summary = f"{summary} ({' '.join(cause[1].split())[:160]})"
         with self._conn:
             self._conn.execute(
                 "UPDATE routine_runs SET finished = ?, status = ?, summary = ?, cost = ? WHERE id = ?",
-                (self._now_ms(), turn.status, _line(turn.text or turn.detail or ""), turn.cost_usd, run["id"]),
+                (self._now_ms(), turn.status, summary, turn.cost_usd, run["id"]),
             )
-            if turn.status in ("error", "expired"):
+            # Only the routine's newest run speaks for it: an older one that ends late neither sets a reason over a newer run
+            # nor leaves its own after a newer run worked.
+            newest = self._conn.execute("SELECT 1 FROM routine_runs WHERE routine_id=? AND id>? LIMIT 1", (run["routine_id"], run["id"])).fetchone() is None
+            if newest and turn.status in ("error", "expired"):
                 # The routine says its last run did not work, and why in a sentence: its view shows it.
                 self._conn.execute("UPDATE routines SET last_error=? WHERE id=?",
                                    (_line((turn.text or turn.detail or "").strip().split("\n\n")[0]), run["routine_id"]))
+            elif newest and turn.status == "done":
+                # A run that worked ends what an earlier failure said (a run started again does not clear it when it starts).
+                self._conn.execute("UPDATE routines SET last_error='' WHERE id=?", (run["routine_id"],))
         routine = self.store.routine(run["routine_id"])
         if routine is not None:
             self._changed("routines.changed", routine.member_id)
@@ -2764,4 +2831,5 @@ class MembersService:
         if polling is not None:
             polling.cancel()
             await asyncio.gather(polling, return_exceptions=True)
+        await self.conversions.close()
         await self.webhooks.close()

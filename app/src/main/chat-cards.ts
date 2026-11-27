@@ -14,7 +14,7 @@ import { connectionMarkHTML } from "./secret-card";
 import { slimeFaceHTML } from "./slime";
 import type { AgentTurn, PairingCard, TemplateCard } from "./types";
 import { btn, copyButton, esc, ico, toaster } from "./ui";
-import { firstBotName } from "./first-bot";
+import { raphaelName } from "./raphael";
 
 const PLATFORM = { telegram: "Telegram", slack: "Slack", discord: "Discord" } as const;
 /** Where each bot is made: fixed here, never taken from a card (commands.rs allows only these). */
@@ -72,12 +72,14 @@ export function chatCardsHTML(turn: AgentTurn): string {
   const suggestion = turn.computer_suggestion;
   const pending = suggestion?.state === "pending";
   const attrs = ` data-suggestion-turn="${esc(turn.id)}"`;
+  // A member on the virtual machine proposes this PC: the one action switches back, and there is nothing to install.
+  const toHost = suggestion?.target === "host";
   const computer = suggestion ? cardHTML({
-    title: t("memberComputer.suggestionTitle"), status: pending ? "waiting" : "done",
+    title: t(toHost ? "memberComputer.suggestionTitleHost" : "memberComputer.suggestionTitle"), status: pending ? "waiting" : "done",
     statusText: pending ? t("cards.needsYou") : undefined, statusInHeading: true,
     content: `<p class="card-body">${esc(suggestion.reason)}</p>`,
     close: waitingCloseHTML(` data-act="computer-suggestion-dismiss"${attrs}`, t("common.close")),
-    actions: pending ? btn(`<span>${esc(suggestion.installed ? t("memberComputer.suggestionSwitch") : t("memberComputer.suggestionInstall", { p0: firstBotName() }))}</span>${ico("right")}`,
+    actions: pending ? btn(`<span>${esc(toHost ? t("memberComputer.suggestionSwitchHost") : suggestion.installed ? t("memberComputer.suggestionSwitch") : t("memberComputer.suggestionInstall", { p0: raphaelName() }))}</span>${ico("right")}`,
       "sm computer-suggestion-action", ` data-act="computer-suggestion-${suggestion.installed ? "switch" : "setup"}"${attrs}`) : "",
     cls: "computer-suggestion-card",
   }) : "";

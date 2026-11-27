@@ -196,7 +196,7 @@ async def test_refresh_rechecks_package_after_worker_writes(rig, tmp_path, monke
     manifest.write_text('{"name":"fixture","version":"1.0.0"}', encoding="utf-8")
     package = (await rig.call("skills.library.import", {"plugin": True, "source": f"local:{folder}"}))["package"]
     key = package["key"]
-    root = cap.homes.home(-1) / "skill-sets"
+    root = cap.homes.home(-1) / "skills"
     original = set(root.iterdir())
     loop = asyncio.get_running_loop()
     entered, release = asyncio.Event(), Event()

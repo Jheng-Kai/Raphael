@@ -4,8 +4,8 @@ The apps in it, their states and `connected` (how many of them can be called now
 inventory as `integrations.inventory` lists it for the window: one definition of connected
 (`integrations.inventory`), so a model, the sidebar and the connections page give the same number.
 
-`primary_id` is the owner's primary contact (the member store's own: Raphael, 0, until the owner chooses
-another) and `chief_id` the same role holder, also the room coordinator. Both are in the
+`primary_id` is the owner's primary contact (the member store's own: the first slime made until the owner chooses
+another, None while there is no slime: Raphael is never it) and `chief_id` the same role holder, also the room coordinator. Both are in the
 content the `revision` is made of, so choosing another primary is a new revision, and each prompt reads
 them here, fresh, on every turn: no brain is told the primary from anywhere else.
 """
@@ -24,8 +24,8 @@ class TeamContextSnapshot:
     revision: str
     self_id: int
     count: int
-    primary_id: int
-    chief_id: int
+    primary_id: int | None
+    chief_id: int | None
     members: list
     apps: list
     inventory_state: str
@@ -44,7 +44,7 @@ def snapshot(team, self_id, language, room_member_ids=None):
                for s in team.roster()]
     # Only public metadata of each app is copied, never provider configuration or credentials.
     inventory = read_inventory(team._connections)
-    primary_id = team.primary_id()
+    primary_id = team.primary_id() or None
     rooms = getattr(team, 'rooms', None)
     meetings = []
     if rooms is not None:

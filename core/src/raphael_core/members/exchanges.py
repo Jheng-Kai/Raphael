@@ -290,7 +290,7 @@ class RoomExchanges:
     def transcript(self, room, thread_id=None, *, since=0, through=None, newest=None):
         """The thread's messages after `since` up to `through`, oldest first (with `newest`, only that many of the latest
         rows are read: a long thread is not projected whole to take its end)."""
-        people = {s.id:s for s in self.rooms._members.roster()}
+        people = {s.id:s for s in self.rooms._members.roster(with_raphael=True)}
         result = []
         thread_id = self.rooms._thread(room, thread_id)
         parent = self.conn.execute('SELECT m.* FROM room_threads t JOIN room_messages m ON m.id=t.parent_message_id AND m.room_id=t.room_id WHERE t.id=? AND t.room_id=?', (thread_id, room['id'])).fetchone()

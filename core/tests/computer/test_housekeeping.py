@@ -431,7 +431,7 @@ async def made_again_once(vm, target, runtime):
     assert [(args[0], args[1] if len(args) > 1 else "") for args, _ in runtime.calls if args[0] in ("stop", "rm", "run")] == [
         ("stop", "--time"), ("rm", target.name), ("run", "-d")]
     run = next(args for args, _ in runtime.calls if args[0] == "run")
-    expected_mounts = [module.mount_arg(held["Source"], held["Destination"]) for held in mounts]
+    expected_mounts = [module.mount_arg(held["Source"], held["Destination"], readonly=held["Destination"] == module.SKILLS) for held in mounts]
     assert [run[index + 1] for index, flag in enumerate(run) if flag == "--mount"] == expected_mounts
     assert all(sentinel.read_text(encoding="utf-8") == "kept" for sentinel in kept)
     runtime.calls.clear()
@@ -501,3 +501,70 @@ def test_the_dockerfile_comment_about_root_is_true_and_the_layer_is_the_one_the_
     assert "Nothing in a computer is root" not in text and "sudo without a password" in text
     assert f'org.raphael.computer.layer="{module.IMAGE_LABELS[LABEL + ".layer"]}"' in text
     assert module.IMAGE.endswith("-v" + module.IMAGE_LABELS[LABEL + ".layer"])
+
+
+# --- 4. git trusts the mounted folders ----------------------------------------------------------------------------------
+
+
+def test_git_is_told_to_trust_exactly_the_mounted_projects_and_the_skills_folder(desktop):
+    from dataclasses import replace
+    _, target, _ = desktop
+    target = replace(target, library=Path("/library"), projects=(("/home/cua/projects/Repo", Path("/a")),
+                                                                  ("/home/cua/projects/Repo (2)", Path("/b"))))
+    command = module.trust_args(target)[len(exec_args(target, [])):]
+    assert module.trust_args(target)[:len(exec_args(target, []))] == exec_args(target, [])
+    assert command[:2] == ["sh", "-c"] and command[3] == "sh"
+    assert command[4:] == [module.SKILLS, "/home/cua/projects/Repo", "/home/cua/projects/Repo (2)"]
+    assert "git config --global --add safe.directory" in command[2] and "'*'" not in command[2]
+    # A computer without projects or a library names only what is there; the remote one has no skills mount.
+    assert module.trust_args(replace(target, projects=(), library=None))[len(exec_args(target, [])) + 4:] == []
+    assert module.trust_args(replace(target, remote="host", library=Path("/library"), projects=()))[len(exec_args(target, [])) + 4:] == []
+
+
+@pytest.mark.skipif(SHELL is None or shutil.which("git") is None, reason="A POSIX shell and git are required")
+def test_the_trust_command_writes_each_folder_once_and_keeps_names_with_spaces(desktop, tmp_path):
+    from dataclasses import replace
+    _, target, _ = desktop
+    target = replace(target, library=None, projects=(("/home/cua/projects/Repo", Path("/a")),
+                                                     ("/home/cua/projects/My Repo (2)", Path("/b"))))
+    script = module.trust_args(target)[len(exec_args(target, [])) + 2]
+    folders = [destination for destination, _ in target.projects]
+    # Each repository directly inside the skills folder is named too; a folder without one is not.
+    skills = tmp_path / "skills"
+    (skills / "pack" / ".git").mkdir(parents=True)
+    (skills / "plain").mkdir()
+    script = script.replace(module.SKILLS, skills.as_posix())
+    home = tmp_path / "home"
+    home.mkdir()
+    environment = {**os.environ, "HOME": str(home), "USERPROFILE": str(home), "GIT_CONFIG_NOSYSTEM": "1", "MSYS_NO_PATHCONV": "1", "XDG_CONFIG_HOME": str(home / "xdg")}
+    for _ in range(2):
+        result = subprocess.run([SHELL, "-c", script, "sh", *folders], env=environment, capture_output=True, encoding="utf-8", timeout=30)
+        assert result.returncode == 0, result.stderr
+    listed = subprocess.run(["git", "config", "--global", "--get-all", "safe.directory"], env=environment,
+                            capture_output=True, encoding="utf-8").stdout.splitlines()
+    assert listed == [*folders, (skills / "pack").as_posix()]
+
+
+async def test_a_computer_is_made_to_trust_its_folders_each_time_it_is_prepared_and_a_failure_never_stops_it(desktop, caplog):
+    vm, target, runtime = desktop
+    original = vm.run
+
+    async def run(args, **kwargs):
+        if args == module.trust_args(target):
+            return Result(1, "", "error: could not lock config file")
+        return await original(args, **kwargs)
+    vm.run = run
+    with caplog.at_level(logging.WARNING):
+        assert (await vm.start(target))["ready"]
+    assert "made trusted for git: error: could not lock config file" in caplog.text
+    vm.run = original
+    runtime.calls.clear()
+    vm.running.clear()
+    assert (await vm.start(target))["ready"]
+    assert [args for args, _ in runtime.calls if args == module.trust_args(target)] == [module.trust_args(target)]
+
+
+def test_trusting_folders_changes_neither_the_container_shape_nor_what_an_existing_computer_is_judged_by(desktop):
+    vm, target, runtime = desktop
+    assert not any("GIT_CONFIG" in arg or "safe.directory" in arg for arg in run_args(target, vm.owner, "private"))
+    assert compatible(runtime.raw, target, vm.owner, runtime.raw["Image"])

@@ -4,6 +4,7 @@ import { videoPlayerHTML } from "./media-player";
 import { computerCardsHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
 import { NAME, eventLineHTML, eventPeopleHTML } from "./event-line";
+import { delegateGroupHTML } from "./delegate-line";
 import { handoffGroupHTML } from "./handoff-line";
 import { reactionControlHTML, reactionRowHTML, withReactions } from "./message-metadata";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
@@ -34,7 +35,7 @@ import { messageExpandHTML } from "./message-preview";
 import { TYPED, VOICE, delegatedTurn, exchangeTurn, hasDetail, highlightHTML, sourceOf, type TurnPart } from "./conversation";
 import { receivedLineHTML } from "./exchange-line";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
-import { fileLinkStamp, linkedText, messageHTML, ownerTextHTML, replyContentHTML, type KnownFiles } from "./message-content";
+import { fileLinkStamp, linkedText, messageHTML, ownerMessageHTML, replyContentHTML, type KnownFiles } from "./message-content";
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
 import { mediaPicture, mediaVideo } from "./picture-message";
@@ -47,7 +48,7 @@ import { pluginLogoURL } from "./plugins-data";
 import { genericGlyph } from "./service-mark";
 import type { AgentStep, AgentTask, AgentTurn, CliBrainId, MainEvent, MediaPayload, MessageQuote, TurnAttachment } from "./types";
 import { btn, esc, ico, iconBtn } from "./ui";
-import { firstBotName } from "./first-bot";
+import { raphaelName } from "./raphael";
 
 /** The small turning ring of something under way. */
 const SPINNER = `<span class="spin" aria-hidden="true"></span>`;
@@ -1138,7 +1139,8 @@ function computerWokeEvent(text: string): string | null {
 
 function turnEventsHTML(turn: AgentTurn, look: TurnLook): string {
   return handoffGroupHTML((turn.handoffs ?? []).map(task => ({ task, face: look.memberFace?.(task.member_id) ?? "",
-    name: look.memberName?.(task.member_id) || task.member_name })));
+    name: look.memberName?.(task.member_id) || task.member_name }))) +
+    delegateGroupHTML(turn.delegates ?? []);
 }
 
 /**
@@ -1259,7 +1261,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   // What a colleague said to this member is one line that opens the two members' conversation (exchange-line.ts):
   // the request and the answer are read there, not under the line. Only a card that waits for the owner stays here.
   if (handed) {
-    const name = turn.member_id ? look.memberName?.(turn.member_id) : firstBotName();
+    const name = turn.member_id ? look.memberName?.(turn.member_id) : raphaelName();
     const cards = permissionCardsHTML(turn, look.answerable, true, name) + ownerQuestionsHTML(turn, true) + connectorCardsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + computerCardsHTML(turn) +
       permissionCardsHTML(turn, look.answerable, false, name) + ownerQuestionsHTML(turn, false);
     return `<li class="tn" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` + receivedLineHTML(turn, look) +
@@ -1271,7 +1273,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   // A draft handed to this chat (`route` "draft") is a card, and what it is told is for the model, not for the page.
   const textAnswer = turn.status === "confirm" || settledDraft || turn.route === "draft" || !turn.text.trim()
     ? "" : messageBlockHTML(turn, "reply", turn.text, turn.created_at_ms, query, state, true, regenerate, true, true, turn.id === look.signinTurnId);
-  const name = turn.member_id ? look.memberName?.(turn.member_id) : firstBotName();
+  const name = turn.member_id ? look.memberName?.(turn.member_id) : raphaelName();
   // Owner messages and exchanges that joined the work stand inside its line (threadItems): the turn's own words open its first stretch,
   // and only its last one holds what ends the turn.
   const part = look.part, first = part?.from === undefined && part?.owner !== "answer", ends = part?.until === undefined;
@@ -1295,7 +1297,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
       : asked
       ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
-        withReactions(bubbleHTML(said ? ownerTextHTML(turn.question.trim(), query, look.mentions ?? [], look.skills) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`)), queued ? queuedActionsHTML() : ""), turn.reactions?.owner) +
+        withReactions(bubbleHTML(said ? ownerMessageHTML(turn.question.trim(), query, look.mentions ?? [], look.skills) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`)), queued ? queuedActionsHTML() : ""), turn.reactions?.owner) +
         // The read-only earlier version has Copy. The current message's menu decides whether Edit is available.
         (earlierVersion(turn) ? messageActionsHTML(turn.created_at_ms, false, undefined, false)
           : messageActionsHTML(turn.created_at_ms, false, !queued && !secretCancel && cancellable ? "cancel" : "own")) +
@@ -1341,7 +1343,7 @@ export const dayHTML = (label: string): string => `<li class="day"><span>${esc(l
 export function pendingTurnHTML(question: string | null, _source: string, look: TurnLook, files: readonly TurnAttachment[] = [], request?: { id?: string; time: number; quote?: MessageQuote }, nowMs = Date.now(), expanded = false, showPresence = true, tail?: { progress?: string; words?: boolean }): string {
   void nowMs;
   const words =
-    question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : ownerTextHTML(question.trim(), "", look.mentions ?? [], look.skills);
+    question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : ownerMessageHTML(question.trim(), "", look.mentions ?? [], look.skills);
   return (
     `<li class="tn is-pending is-owner-only"${request?.id ? ` data-session="${esc(request.id)}"` : ""}>` +
     `<div class="me"><div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote, messageExpandHTML(question ?? "", expanded))}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
@@ -1362,5 +1364,6 @@ export function updateLiveTimes(root: ParentNode, nowMs = Date.now()): void {
 
 /** A loaded task or handoff belongs to this thread; unknown tasks are polled more slowly. */
 export function hasWorkerTask(turns: readonly AgentTurn[], taskId: number): boolean {
-  return turns.some(turn => turn.task?.id === taskId || turn.handoffs?.some(task => task.task_id === taskId));
+  return turns.some(turn => turn.task?.id === taskId || turn.handoffs?.some(task => task.task_id === taskId)
+    || turn.delegates?.some(task => task.task_id === taskId));
 }

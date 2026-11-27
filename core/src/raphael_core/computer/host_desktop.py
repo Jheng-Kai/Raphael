@@ -22,7 +22,8 @@ class ProcessInformation(c.Structure):
 
 
 class DesktopChrome:
-    def __init__(self, argv):
+    def __init__(self, argv, visible=False):
+        """`visible`: Chrome starts on the owner's own desktop instead, for the one step where they choose a certificate."""
         import _winapi as win
 
         self.win = win
@@ -40,11 +41,11 @@ class DesktopChrome:
         name = f"RaphaelChrome-{secrets.token_hex(8)}"
         # There is no Explorer shell on this desktop to show a taskbar button.
         # Keep the window visible to its compositor without touching the input desktop.
-        self.desktop = self.user.CreateDesktopW(name, None, None, 0, 0x10000000, None)  # GENERIC_ALL
-        if not self.desktop:
+        self.desktop = None if visible else self.user.CreateDesktopW(name, None, None, 0, 0x10000000, None)  # GENERIC_ALL
+        if not visible and not self.desktop:
             raise c.WinError(c.get_last_error())
         self.info = ProcessInformation()
-        startup = StartupInfo(cb=c.sizeof(StartupInfo), desktop=name)
+        startup = StartupInfo(cb=c.sizeof(StartupInfo), desktop=None if visible else name)
         command = c.create_unicode_buffer(subprocess.list2cmdline(argv))
         # Join the job before Chrome can spawn any children.
         flags = 0x00000004 | subprocess.CREATE_NO_WINDOW  # CREATE_SUSPENDED
@@ -83,4 +84,5 @@ class DesktopChrome:
             self.win.CloseHandle(self.info.thread)
         if self.info.process:
             self.win.CloseHandle(self.info.process)
-        self.user.CloseDesktop(self.desktop)
+        if self.desktop:
+            self.user.CloseDesktop(self.desktop)

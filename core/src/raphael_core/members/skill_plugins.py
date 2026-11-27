@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import tempfile
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote, urlsplit
@@ -20,11 +21,13 @@ import httpx
 
 from ..bots.homes import atomic
 from .store import MemberError
-from .skill_library import (SHARED, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, MAX_DISCOVERY_ENTRIES,
-                            linked, location, roots, stage_files, version_key, walk)
+from .skill_errors import oversized_file, oversized_package, too_many_files
+from .skill_library import (SHARED, MAX_ARCHIVE_ENTRIES, MAX_DISCOVERY_DEPTH, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES,
+                            MAX_DISCOVERY_ENTRIES, junk, linked, location, roots, stage_files, version_key, walk)
 
-MAX_MANIFEST_BYTES = 256 * 1024
-MAX_TREE_BYTES = 4 * 1024 * 1024
+# A manifest or a tree listing is JSON read whole: these only keep a reply that is no manifest from filling memory.
+MAX_MANIFEST_BYTES = 4 * 1024 * 1024
+MAX_TREE_BYTES = 64 * 1024 * 1024
 REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 SHA = re.compile(r"[a-fA-F0-9]{40}")
 
@@ -55,25 +58,35 @@ def local_files(folder):
     """Bound the entire set, including hidden manifests, without following links."""
     from .skill_sources import folder_snapshot
 
-    return folder_snapshot(folder, byte_limit=MAX_PACKAGE_BYTES, entry_limit=MAX_PACKAGE_FILES, depth_limit=12).files
+    # A link inside the plugin to a file of it is that file's copy; any other is named and left out, never followed.
+    return folder_snapshot(folder, byte_limit=MAX_PACKAGE_BYTES, entry_limit=MAX_PACKAGE_FILES, depth_limit=MAX_DISCOVERY_DEPTH,
+                           skill_links=True).finish(skill=False)
 
 
 def local_stamp(folder):
     entries, size, count = [], 0, 0
     for directory, dirs, names in os.walk(folder, followlinks=False):
+        dirs[:] = [name for name in dirs if not junk(name)]
+        names[:] = [name for name in names if not junk(name)]
         count += len(dirs) + len(names)
-        if count > MAX_DISCOVERY_ENTRIES or len(Path(directory).relative_to(folder).parts) > 12:
-            raise MemberError("size", "plugin scan limit reached")
+        if count > MAX_ARCHIVE_ENTRIES or len(Path(directory).relative_to(folder).parts) > MAX_DISCOVERY_DEPTH:
+            raise MemberError("size", f"{directory} holds more than a plugin can: pick the folder of the plugin itself",
+                              reason="scan")
+        # A link is never followed: it is part of the fingerprint by its name, so a link made or removed is a change.
         for name in [*dirs, *names]:
             if linked(Path(directory) / name):
-                raise MemberError("source", "linked plugin packages are not supported")
+                entries.append(((Path(directory) / name).relative_to(folder).as_posix() + " ->", 0, 0))
+        dirs[:] = [name for name in dirs if not linked(Path(directory) / name)]
+        names[:] = [name for name in names if not linked(Path(directory) / name)]
         for name in names:
             path = Path(directory) / name
             info = path.stat()
             size += info.st_size
             entries.append((path.relative_to(folder).as_posix(), info.st_size, info.st_mtime_ns))
-            if size > MAX_PACKAGE_BYTES or len(entries) > MAX_PACKAGE_FILES:
-                raise MemberError("size", "plugin package is too large")
+            if size > MAX_PACKAGE_BYTES:
+                raise oversized_package(entries[-1][0], size, MAX_PACKAGE_BYTES)
+            if len(entries) > MAX_PACKAGE_FILES:
+                raise too_many_files(len(entries), MAX_PACKAGE_FILES, entries[-1][0])
     return hashlib.sha256(json.dumps(sorted(entries)).encode()).hexdigest()
 
 
@@ -92,13 +105,17 @@ def directories(folder, remaining):
 
 def manifest_from(files):
     data = files.get(".claude-plugin/plugin.json")
-    if data is None or len(data) > MAX_MANIFEST_BYTES:
-        raise MemberError("source", "a plugin needs .claude-plugin/plugin.json")
+    if data is None:
+        raise MemberError("source", "a plugin needs .claude-plugin/plugin.json", reason="no_manifest")
+    if len(data) > MAX_MANIFEST_BYTES:
+        raise oversized_file(".claude-plugin/plugin.json", len(data), MAX_MANIFEST_BYTES)
     manifest = json_object(data)
     if not isinstance(manifest.get("name"), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", manifest["name"]):
         raise MemberError("source", "invalid plugin name")
-    if not isinstance(manifest.get("version"), str) or not manifest["version"] or len(manifest["version"]) > 100:
-        raise MemberError("source", "a plugin needs a version")
+    # A manifest need not name a version (Claude's own does not): such a plugin has none.
+    if not isinstance(manifest.get("version", ""), str) or len(manifest.get("version", "")) > 100:
+        raise MemberError("source", "the version of a plugin must be text of at most 100 characters")
+    manifest.setdefault("version", "")
     return manifest
 
 
@@ -156,7 +173,7 @@ def plugin_parts(files, *, existing_names=None):
         if kind is None:
             continue
         if len(data) > MAX_SKILL_BYTES:
-            raise MemberError("size", "skill document is too large")
+            raise oversized_file(path, len(data), MAX_SKILL_BYTES)
         try:
             text = data.decode("utf-8-sig")
         except UnicodeError:
@@ -318,8 +335,8 @@ async def download_plugin(target):
             repo, sha, prefix = target["repo"], target["commit"], target["path"]
             tree = json_object(await get_bytes(client, f"https://api.github.com/repos/{repo}/git/trees/{sha}?recursive=1", MAX_TREE_BYTES))
             entries = tree.get("tree")
-            if tree.get("truncated") or not isinstance(entries, list) or len(entries) > MAX_DISCOVERY_ENTRIES:
-                raise MemberError("size", "plugin tree is incomplete or too large")
+            if tree.get("truncated") or not isinstance(entries, list) or len(entries) > MAX_ARCHIVE_ENTRIES:
+                raise MemberError("size", "GitHub lists this plugin only in part: it holds too many files", reason="listing")
             files, size, folded = {}, 0, set()
             for entry in entries:
                 if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
@@ -333,10 +350,17 @@ async def download_plugin(target):
                     raise MemberError("source", "linked plugin packages are not supported")
                 key = relative_path(path[len(prefix) + 1:] if prefix else path)
                 declared = entry.get("size")
-                if type(declared) is not int or declared < 0 or declared > MAX_PACKAGE_BYTES - size or len(files) >= MAX_PACKAGE_FILES:
-                    raise MemberError("size", "plugin package is too large")
-                if key.casefold() in folded or len(key.split("/")) > 13:
-                    raise MemberError("source", "ambiguous or deeply nested plugin path")
+                if junk(key):
+                    continue
+                if type(declared) is not int or declared < 0:
+                    raise MemberError("source", f"GitHub gave no size for {key}")
+                if declared > MAX_PACKAGE_BYTES - size:
+                    raise oversized_package(key, size + declared, MAX_PACKAGE_BYTES)
+                if len(files) >= MAX_PACKAGE_FILES:
+                    raise too_many_files(len(files) + 1, MAX_PACKAGE_FILES, key)
+                if key.casefold() in folded or len(key.split("/")) > MAX_DISCOVERY_DEPTH + 1:
+                    raise MemberError("archive", f"{key} is named twice, or twice in letters of another case, or nested too deep",
+                                      reason="path", file=key)
                 folded.add(key.casefold())
                 data = await get_bytes(client, f"https://raw.githubusercontent.com/{repo}/{sha}/{quote(path, safe='/')}", MAX_PACKAGE_BYTES - size)
                 if len(data) != declared:
@@ -366,6 +390,7 @@ class PluginInstall:
     servers: list
     revision: tuple
     skipped: list = field(default_factory=list)
+    links: list = field(default_factory=list)
 
 
 class PluginSets:
@@ -374,6 +399,28 @@ class PluginSets:
         if row is None:
             raise MemberError("not_found", "no such plugin set")
         return self.homes.safe(self.homes.home(SHARED) / row[0])
+
+    def unify_library(self):
+        """Plugins made before the library was one folder lived in `skill-sets` beside `skills`: each moves into `skills`, and
+        its row follows it. A move that stopped half way is finished by the next call; nothing is copied."""
+        library = self.homes.home(SHARED)
+        old, new = library / "skill-sets", library / "skills"
+        if not old.is_dir() or not self.conn.execute("SELECT 1 FROM sqlite_master WHERE name='skill_sets'").fetchone():
+            return
+        new.mkdir(parents=True, exist_ok=True)
+        for row in self.conn.execute("SELECT id,folder FROM skill_sets WHERE folder LIKE 'skill-sets/%'").fetchall():
+            name = row["folder"].split("/", 1)[1]
+            source, target = old / name, new / name
+            if source.is_dir() and not target.exists():
+                try:
+                    self.homes.safe(source).rename(self.homes.safe(target))
+                except OSError:
+                    continue  # something holds the folder now: the plugin stays where it is, and the next start moves it
+            if target.is_dir():
+                with self.conn:
+                    self.conn.execute("UPDATE skill_sets SET folder=? WHERE id=?", (f"skills/{name}", row["id"]))
+        with suppress(OSError):
+            old.rmdir()
 
     def local_plugins(self):
         """Only manifests and skill documents are opened during discovery."""
@@ -453,14 +500,14 @@ class PluginSets:
         for row, info, latest, counts in inputs:
             if info.get("marketplace"):
                 changed = bool(latest and latest["installable"] and version_key(latest["version"]) > version_key(row["version"]))
-            else:
+            elif row["source"].startswith("local:"):
                 try:
-                    folder, root = location(self.skill_home, row["source"])
-                    versions = directories(folder.parent, [MAX_DISCOVERY_ENTRIES])
-                    latest = max(versions, key=lambda p: (version_key(p.name), p.stat().st_mtime_ns))
-                    changed = local_stamp(latest) != info.get("fingerprint")
+                    changed = local_stamp(self._newest_version(row["source"])) != info.get("fingerprint")
                 except (MemberError, OSError):
                     changed = None
+            else:
+                # A plugin from a GitHub link has no folder to compare: whether it moved on is asked of GitHub on an update.
+                changed = None
             result.append({"id": row["id"], "name": row["name"], "version": row["version"], "description": row["description"],
                            "source": row["source"], "skill_count": counts.get("skill", 0), "command_count": counts.get("command", 0),
                            "source_changed": changed, "marketplace": info.get("marketplace", ""), "mcp_servers": info.get("mcp_servers", [])})
@@ -495,13 +542,16 @@ class PluginSets:
         return {**view, **({"skipped": plan.skipped} if plan.skipped else {})}
 
     def _plan_set(self, source, files, *, marketplace="", target=None, access=None, expected_id=None,
-                  require_new=False, required_skill=None):
+                  require_new=False, required_skill=None, identity=None):
         from .skills import stored_skill_name
 
         manifest = manifest_from(files)
-        if len(files) > MAX_PACKAGE_FILES or sum(len(data) for data in files.values()) > MAX_PACKAGE_BYTES:
-            raise MemberError("size", "plugin package is too large")
-        identity = f"github:{marketplace}:{manifest['name']}" if marketplace else "local:" + str(Path(source[6:]).parent)
+        links = list(getattr(files, "skipped_links", []))
+        if len(files) > MAX_PACKAGE_FILES:
+            raise too_many_files(len(files), MAX_PACKAGE_FILES)
+        if sum(len(data) for data in files.values()) > MAX_PACKAGE_BYTES:
+            raise oversized_package("", sum(len(data) for data in files.values()), MAX_PACKAGE_BYTES)
+        identity = identity or (f"github:{marketplace}:{manifest['name']}" if marketplace else "local:" + str(Path(source[6:]).parent))
         previous = self.conn.execute("SELECT * FROM skill_sets WHERE identity=?", (identity,)).fetchone()
         if previous and require_new:
             raise MemberError("taken", f"a package named {previous['name']} already exists")
@@ -524,14 +574,14 @@ class PluginSets:
             if name.casefold() not in taken:
                 left.append(part)
                 continue
-            message, package = taken_by(self.conn, SHARED, name)
+            error, package = taken_by(self.conn, SHARED, name, manifest["name"], incoming_version=manifest["version"], incoming_source=source)
             if previous:
-                raise MemberError("taken", message)
-            refused = refused or message
+                raise error
+            refused = refused or error
             skipped.append({"name": name, "held_by": package})
             gone.append(part)
         if not left and refused:
-            raise MemberError("taken", refused)
+            raise refused
         if skipped:
             files = without_skipped(files, parts, gone)
             parts = left
@@ -559,10 +609,11 @@ class PluginSets:
                 raise MemberError("source", "reserved plugin metadata path")
             checked[path] = data
         return PluginInstall(identity, manifest, previous, old, retained, components, checked,
-                             source, marketplace, target, access, mcp_servers(files, manifest), self.skill_revision(), skipped)
+                             source, marketplace, target, access, mcp_servers(files, manifest), self.skill_revision(), skipped, links)
 
     def _write_set(self, plan):
-        root = self.homes.safe(self.homes.home(SHARED) / "skill-sets")
+        # A plugin lives in the one folder the library keeps its skills in, so one mount of it shows them all.
+        root = self.homes.safe(self.homes.home(SHARED) / "skills")
         root.mkdir(parents=True, exist_ok=True)
         folder = Path(tempfile.mkdtemp(prefix="set-", dir=root))
         try:
@@ -574,6 +625,7 @@ class PluginSets:
                 atomic(self.homes.safe(folder / key), data)
             servers = json.loads(json.dumps(plan.servers).replace("${CLAUDE_PLUGIN_ROOT}", str(folder).replace("\\", "/")))
             info = {"marketplace": plan.marketplace, "target": plan.target, "mcp_servers": servers,
+                    **({"skipped_links": plan.links} if plan.links else {}),
                     "fingerprint": local_stamp(Path(plan.source[6:])) if plan.source.startswith("local:") else None}
             return folder, info
         except BaseException:
@@ -625,7 +677,7 @@ class PluginSets:
     async def import_plugin(self, source=None, *, set_id=None, marketplace=None, name=None, access=None, require_new=False,
                             required_skill=None, enabled=None, skill=None):
         revision = self.skill_revision()
-        target = None
+        target = identity = None
         if set_id is not None:
             previous = self.conn.execute("SELECT * FROM skill_sets WHERE id=?", (set_id,)).fetchone()
             if previous is None:
@@ -648,23 +700,60 @@ class PluginSets:
             if manifest["name"] != plugin["name"] or manifest["version"] != plugin["version"]:
                 raise MemberError("source", "download differs from the listed plugin version")
             source, target = f"github:{marketplace}/{name}", plugin["target"]
+        elif isinstance(source, str) and source.startswith("local:"):
+            source, files, identity = await asyncio.to_thread(self._local_plugin_snapshot, source, set_id is not None)
         else:
-            source, files = await asyncio.to_thread(self._local_plugin_snapshot, source)
+            from .skill_github import fetch_plugin
+
+            files, identity = await fetch_plugin(source)
+            source = source.strip()
         if set_id is not None and revision != self.skill_revision():
             raise MemberError("not_found", "the plugin set changed during refresh")
         return await self._install_set_async(source, files, marketplace=marketplace or "", target=target, access=access,
                                              expected_id=set_id, require_new=require_new, required_skill=required_skill,
-                                             enabled=enabled, skill=skill)
+                                             enabled=enabled, skill=skill, identity=identity)
 
-    def _local_plugin_snapshot(self, source):
-        folder, root = location(self.skill_home, source)
-        if root.name != "cache" or len(folder.relative_to(root).parts) != 3:
-            raise MemberError("source", "choose an installed plugin folder")
-        versions = [p for p in directories(folder.parent, [MAX_DISCOVERY_ENTRIES]) if (p / ".claude-plugin/plugin.json").is_file()]
+    def _newest_version(self, source, *, update=True):
+        """The folder a local plugin is read from. The CLIs cache a plugin as cache/<market>/<plugin>/<version>. A version
+        folder that was named is the plugin imported (`update=False`) and is read exactly; an update (`update=True`) follows
+        the cache to its newest version, as does the plugin's own folder, which names none. A folder anywhere else is read
+        as it is."""
+        from .skill_sources import local_path
+
+        try:
+            folder, root = location(self.skill_home, source)
+        except MemberError:
+            return local_path(source)
+        depth = len(folder.relative_to(root).parts) if root.name == "cache" else 0
+        if depth not in (2, 3) or depth == 3 and not update:
+            return local_path(source)
+        plugin = folder if depth == 2 else folder.parent
+        versions = [p for p in directories(plugin, [MAX_DISCOVERY_ENTRIES]) if (p / ".claude-plugin/plugin.json").is_file()]
         if not versions:
-            raise MemberError("not_found", "no installed version of that plugin")
-        folder = max(versions, key=lambda p: (version_key(p.name), p.stat().st_mtime_ns))
-        return "local:" + str(folder), local_files(folder)
+            raise MemberError("not_found", "no installed version of that plugin", reason="source", file=str(folder))
+        return max(versions, key=lambda p: (version_key(p.name), p.stat().st_mtime_ns))
+
+    async def import_tree(self, tree, *, access=None):
+        """Install a source that is a plugin of any kind (skill_layouts.PluginTree): its whole tree is the set."""
+        return await self._install_set_async(tree.source, tree.files, access=access, require_new=True, identity=tree.identity)
+
+    def _local_plugin_snapshot(self, source, update=False):
+        from .skill_layouts import folder_is_plugin, normalized
+
+        folder = self._newest_version(source, update=update)
+        if not folder_is_plugin(folder):
+            raise MemberError("not_found" if not folder.exists() else "source",
+                              f"{folder} is not a plugin: it has no .claude-plugin/plugin.json",
+                              reason="source" if not folder.exists() else "no_manifest", file=str(folder))
+        # The versions a CLI caches are one plugin; a folder anywhere else is a plugin of its own.
+        try:
+            cached = location(self.skill_home, source)[1].name == "cache"
+        except MemberError:
+            cached = False
+        files = normalized(local_files(folder), folder.name)
+        if files is None:
+            raise MemberError("source", f"{folder} lists no plugin of its own", reason="no_manifest", file=str(folder))
+        return "local:" + str(folder), files, None if cached else "local:" + str(folder)
 
     async def add_marketplace(self, repo):
         data = await catalog(repo)

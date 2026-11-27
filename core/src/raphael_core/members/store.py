@@ -14,10 +14,11 @@
   runs next. Raphael has routines too, as member 0.
 - `member_unread`: the threads (Raphael's as 0) with news the owner has not seen.
 
-Raphael itself is not a row: it is member 0 everywhere, cannot be renamed or deleted, and has
-every tool. The primary contact is the member whose `primary_contact` is 1 (at most one, by the table's
-own index), or Raphael while none is. It also owns the unique chief capability
-and a member that is hidden or deleted hands that role back to Raphael. A name, a role, a personality,
+Raphael itself is not a row: it is member 0 everywhere, the app's guide and keeper and not one of the slimes. It
+cannot be renamed, deleted or made the chief, and has every tool. The primary contact is the member whose
+`primary_contact` is 1 (at most one, by the table's own index): the first member made until the owner chooses
+another, and 0, nobody, while there is no visible member (Raphael is never the chief). It also owns the unique chief
+capability; a member that is hidden or deleted hands that role to the next visible member. A name, a role, a personality,
 an instruction, a title and a prompt are what the owner wrote, so
 nothing here logs one; a refusal says which field was wrong, never what was in it.
 
@@ -94,9 +95,12 @@ class MemberError(ValueError):
     "instructions", "group", "model", "tools", "avatar", "title", "prompt", "schedule", "sources",
     "full", "not_found", "raphael", "primary", "hidden"), and `str()` names the field: never what the owner wrote."""
 
-    def __init__(self, kind: str, message: str) -> None:
+    def __init__(self, kind: str, message: str, **detail: object) -> None:
         super().__init__(message)
         self.kind = kind
+        # What the window needs to say the cause in the owner's language (a file, a size, a limit, a line): the library's
+        # refusals carry it (`reason` first), every other refusal has none.
+        self.detail = detail
 
 
 @dataclass(frozen=True)
@@ -544,22 +548,9 @@ class MemberStore:
         ).fetchone()
         return None if row is None else _member(row)
 
-    def _first_bot_name(self) -> str:
-        """The name the owner gave the first Bot (member 0), "" while it has its built-in one."""
-        try:
-            row = self._conn.execute("SELECT value FROM settings WHERE key = 'first_bot_profile'").fetchone()
-            profile = json.loads(row[0]) if row else {}
-        except (sqlite3.OperationalError, TypeError, ValueError):
-            return ""
-        name = profile.get("name") if isinstance(profile, dict) else None
-        return name if isinstance(name, str) else ""
-
     def _check_name(self, name: str, member_id: int | None) -> None:
         if is_raphael_name(name):
             raise MemberError("taken", "that name is Raphael's")
-        first = self._first_bot_name()
-        if first and " ".join(name.split()).casefold() == first.casefold():
-            raise MemberError("taken", "the first Bot has that name")
         other = self.by_name(name)
         if other is not None and other.id != member_id:
             raise MemberError("taken", "another member has that name")
@@ -610,6 +601,7 @@ class MemberStore:
                 f"INSERT INTO members ({', '.join(values)}) VALUES ({', '.join('?' for _ in values)})",
                 list(values.values()),
             )
+            self.ensure_chief()
         member = self.member(int(cursor.lastrowid or 0))
         assert member is not None
         return member
@@ -640,7 +632,7 @@ class MemberStore:
             else:
                 raise MemberError(field, f"{field} cannot be changed")
         if changes.get("hidden"):
-            # The owner sees who the primary contact is in the sidebar: a member that leaves it hands the role back to Raphael.
+            # The owner sees who the primary contact is in the sidebar: a member that leaves it hands the role on.
             changes["primary_contact"] = 0
         if changes:
             assignments = ", ".join(f"{column} = ?" for column in changes)
@@ -648,6 +640,8 @@ class MemberStore:
                 self._conn.execute(
                     f"UPDATE members SET {assignments} WHERE id = ?", [*changes.values(), member_id]
                 )
+                if "hidden" in changes:
+                    self.ensure_chief()
         if "position" in fields:
             self._move("members", member_id, fields["position"])
         updated = self.member(member_id)
@@ -655,31 +649,41 @@ class MemberStore:
         return updated
 
     def primary_id(self) -> int:
-        """The member the owner chose as their primary contact: Raphael (0) until they choose another,
-        and again once that one is hidden or deleted. The one definition of it, for the roster, the
-        window and every prompt."""
+        """The member the owner chose as their primary contact, the chief of staff: the first member made until they
+        choose another, and the next visible one once that one is hidden or deleted. 0 is nobody (no visible member
+        yet), never Raphael: the guide is not a slime. The one definition of it, for the roster, the window and
+        every prompt."""
         row = self._conn.execute("SELECT id FROM members WHERE primary_contact = 1").fetchone()
         return 0 if row is None else int(row[0])
 
+    def ensure_chief(self) -> None:
+        """Keep the chair filled: with a visible member and nobody flagged, the first one in the sidebar's order is the
+        chief of staff. Part of every write that adds, hides or removes a member, so no reader needs a fallback."""
+        if self._conn.execute("SELECT 1 FROM members WHERE primary_contact = 1").fetchone():
+            return
+        row = self._conn.execute("SELECT id FROM members WHERE hidden = 0 ORDER BY pinned DESC, position, id LIMIT 1").fetchone()
+        if row is not None:
+            self._conn.execute("UPDATE members SET primary_contact = 1 WHERE id = ?", (row[0],))
+
     def set_primary(self, member_id: Any) -> bool:
-        """Make `member_id` the primary contact (0 is Raphael), and nobody else: whether that changed
-        anything. The primary and chief capability move together. The rooms, tasks, exchanges and
-        the conversations are not touched, so nothing under way is run again, handed on or ended.
-        MemberError when it is not a whole number, nobody, or a member hidden from the sidebar."""
+        """Make `member_id` the primary contact, and nobody else: whether that changed anything. The primary and chief
+        capability move together. The rooms, tasks, exchanges and the conversations are not touched, so nothing under
+        way is run again, handed on or ended. MemberError when it is not a whole number, Raphael (never the chief),
+        nobody, or a member hidden from the sidebar."""
         if type(member_id) is not int or member_id < 0:
             raise MemberError("primary", "primary must be the id of a member")
-        if member_id:
-            member = self.member(member_id)
-            if member is None:
-                raise MemberError("not_found", "there is no such member")
-            if member.hidden:
-                raise MemberError("hidden", "a hidden member cannot be the primary contact")
+        if member_id == 0:
+            raise MemberError("raphael", "Raphael cannot be the chief of staff")
+        member = self.member(member_id)
+        if member is None:
+            raise MemberError("not_found", "there is no such member")
+        if member.hidden:
+            raise MemberError("hidden", "a hidden member cannot be the primary contact")
         if member_id == self.primary_id():
             return False
         with self.transaction():
             self._conn.execute("UPDATE members SET primary_contact = 0 WHERE primary_contact = 1")
-            if member_id:
-                self._conn.execute("UPDATE members SET primary_contact = 1 WHERE id = ?", (member_id,))
+            self._conn.execute("UPDATE members SET primary_contact = 1 WHERE id = ?", (member_id,))
         return True
 
     def delete_member(self, member_id: int) -> bool:
@@ -694,6 +698,7 @@ class MemberStore:
             self._conn.execute("DELETE FROM routines WHERE member_id = ?", (member_id,))
             self._conn.execute("DELETE FROM member_unread WHERE member_id = ?", (member_id,))
             cursor = self._conn.execute("DELETE FROM members WHERE id = ?", (member_id,))
+            self.ensure_chief()
         return cursor.rowcount > 0
 
     def exists(self, member_id: int) -> bool:
@@ -708,7 +713,7 @@ class MemberStore:
 
     def is_chief(self, member_id: int) -> bool:
         """Exactly one role holder; the existing unique primary-contact state owns it."""
-        return type(member_id) is int and self.exists(member_id) and member_id == self.primary_id()
+        return type(member_id) is int and member_id != 0 and self.exists(member_id) and member_id == self.primary_id()
 
     # --- routines ----------------------------------------------------------------------------------
 

@@ -164,7 +164,9 @@ def test_default_member_computers_share_only_team_files(tmp_path, conn):
     assert one.name != two.name and one.workspace != two.workspace
     assert one.shared == two.shared
     mounts = [next(csv.reader([args])) for args in run_args(one, vm.owner, "private") if args.startswith("type=")]
-    assert len(mounts) == 2
+    # The workspace, the team folder and the skill library, which the computer only reads.
+    assert [mount[2] for mount in mounts] == ["target=/home/cua/workspace", "target=/home/cua/team", "target=/home/cua/skills"]
+    assert mounts[2][-1] == "readonly" and "readonly" not in mounts[0] + mounts[1]
     args = run_args(one, vm.owner, "private")
     assert args[args.index("--memory") + 1] == "3g"
     assert args[args.index("--memory-swap") + 1] == "3g"

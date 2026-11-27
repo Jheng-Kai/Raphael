@@ -19,13 +19,13 @@ test("the stacked member and conversation title toggles details with one state, 
   document.body.append(page.el); page.show(); await flush();
   const title = page.el.querySelector<HTMLButtonElement>(".conversation-trigger")!;
   expect(title.querySelector(".mb-pill-t")?.textContent).toBe("拉斐爾");
-  expect(title.querySelector(".conversation-caption")?.textContent).toBe("");
-  expect(title.querySelector<HTMLElement>(".conversation-caption")!.hidden).toBe(true);
+  expect(title.querySelector(".conversation-caption")).toBeNull();
   expect(title.querySelector("button")).toBeNull();
   expect(page.el.querySelector(".conversation-head")?.textContent).not.toContain(" / ");
-  // Share sits at the right of the header, but Raphael is the app's own and is never shared as a template.
-  expect([...page.el.querySelector('.mb-head .ra-tools')!.children].map(tool => (tool as HTMLElement).dataset.act)).toEqual(["share-member"]);
+  // Share and ⋯ sit at the right of the header: Raphael is the app's own and is never shared as a template, and its ⋯ clears its conversation.
+  expect([...page.el.querySelector('.mb-head .ra-tools')!.children].map(tool => (tool as HTMLElement).dataset.act)).toEqual(["share-member", "raphael-more"]);
   expect(page.el.querySelector<HTMLElement>('[data-act="share-member"]')!.hidden).toBe(true);
+  expect(page.el.querySelector<HTMLElement>('[data-act="raphael-more"]')!.hidden).toBe(false);
   expect(page.el.querySelector('.desktop-panel')?.closest('.mb-det')).not.toBeNull();
   expect(page.el.querySelector('[data-act="clear"]')).toBeNull();
   expect(title.hasAttribute("aria-haspopup")).toBe(false);
@@ -66,33 +66,31 @@ test("quota notices stay immediately above the composer and disappear at reset",
   page.hide();
 });
 
-test("quick questions scope history, quote the entire answer, send their ID, and a message menu has reactions, Reply and Copy", async () => {
+test("an answer's history is scoped to its conversation, quoted whole and sent with its ID, and its menu has reactions, Reply and Copy", async () => {
   api.agentQuestionOpen.mockResolvedValue(null);
-  const conversations = [{ id: 1, member_id: 0, title: "Main", is_default: 1, kind: "standard" }, { id: 2, member_id: 0, title: "", is_default: 0, kind: "quick" }];
+  const conversations = [{ id: 1, member_id: 0, title: "Main", is_default: 1, kind: "standard" }];
   api.core.mockImplementation(async method => method === "conversations.list" ? { conversations } : method === "background.questions.list" ? { questions: [] } : {});
   api.agentHistoryList.mockImplementation(async ({ conversation_id }) => ({ turns: [{ id: conversation_id, conversation_id, member_id: 0, question: "Explain", text: "**Entire** answer\n\nSecond paragraph.", prefix: "", created_at_ms: 1000, status: "done", route: "answer", source: "app", detail: null }] }));
   const page = createAgent({ go() {}, device: () => ({}), onEvent: () => () => {}, undo: { begin() {} }, cleared: new Cleared() } as unknown as AppContext);
   document.body.append(page.el); page.show(); await flush();
-  if (page.el.querySelector(".conversation-trigger")!.getAttribute("aria-expanded") !== "true") page.el.querySelector<HTMLButtonElement>(".conversation-trigger")!.click(); await flush();
-  document.querySelector<HTMLButtonElement>('.mb-det [data-conversation-open="2"]')!.click(); await flush();
-  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({ conversation_id: 2 }));
+  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({ conversation_id: 1 }));
   page.el.querySelector<HTMLButtonElement>('.ra [data-act="reply-message"]')!.click();
   expect(page.el.querySelector(".cmp-quote .quote-text")?.textContent).toBe("Entire answer\nSecond paragraph.");
   const input = page.el.querySelector<HTMLTextAreaElement>(".cmp-input")!; input.value = "Continue"; input.dispatchEvent(new Event("input"));
   page.el.querySelector(".composer")!.dispatchEvent(new Event("submit", { cancelable: true })); await flush();
-  expect(api.agentAskText).toHaveBeenCalledWith("Continue", [], 0, expect.objectContaining({ conversationId: 2, quote: expect.objectContaining({ text: "Entire answer\nSecond paragraph." }) }));
+  expect(api.agentAskText).toHaveBeenCalledWith("Continue", [], 0, expect.objectContaining({ conversationId: 1, quote: expect.objectContaining({ text: "Entire answer\nSecond paragraph." }) }));
   page.el.querySelector<HTMLButtonElement>('.ra [data-act="more-message"]')!.click(); await flush();
   expect([...document.querySelectorAll<HTMLElement>('#app-popover [data-pick]')].map(item => item.dataset.pick)).toEqual(["reply", "copy", "regenerate"]);
   expect([...document.querySelectorAll<HTMLElement>('#app-popover .menu-reactions [data-lead]')].map(item => item.dataset.lead)).toEqual(["👍", "😂", "👎", "❤️", "🎉", "+"]);
   document.querySelector<HTMLButtonElement>('#app-popover [data-lead="👍"]')!.click(); await flush();
-  expect(api.core).toHaveBeenCalledWith("agent.react", { member_id: 0, conversation_id: 2, turn_id: 2, message_key: "reply", emoji: "👍", active: true });
+  expect(api.core).toHaveBeenCalledWith("agent.react", { member_id: 0, conversation_id: 1, turn_id: 1, message_key: "reply", emoji: "👍", active: true });
   page.el.querySelector<HTMLButtonElement>('.ra [data-act="more-message"]')!.click(); await flush();
   document.querySelector<HTMLButtonElement>('#app-popover [data-lead="+"]')!.click();
   expect(document.querySelector("#app-popover.emoji-picker")).not.toBeNull();
   // The picker reads its emoji on first use: that takes more than the default second on a busy machine.
   await vi.waitFor(() => expect(document.querySelector('#app-popover .emoji-cell[data-emoji="🚀"]')).not.toBeNull(), { timeout: 10_000 });
   document.querySelector<HTMLButtonElement>('#app-popover .emoji-cell[data-emoji="🚀"]')!.click(); await flush();
-  expect(api.core).toHaveBeenCalledWith("agent.react", { member_id: 0, conversation_id: 2, turn_id: 2, message_key: "reply", emoji: "🚀", active: true });
+  expect(api.core).toHaveBeenCalledWith("agent.react", { member_id: 0, conversation_id: 1, turn_id: 1, message_key: "reply", emoji: "🚀", active: true });
   expect(api.core).not.toHaveBeenCalledWith("agent.speak", expect.anything());
   page.el.querySelector<HTMLButtonElement>('.owner-message [data-act="more-message"]')!.click(); await flush();
   // The owner's own message adds Edit, which no longer stands beside the bubble (R-UI-104).
@@ -101,11 +99,11 @@ test("quick questions scope history, quote the entire answer, send their ID, and
   page.hide();
 }, 30_000);
 
-test("a question typed in the quick conversation names the quick destination, and a formal one never does", async () => {
+test("a question typed in Raphael's conversation names its conversation and never a destination: the quick ask is the key's", async () => {
   api.agentQuestionOpen.mockResolvedValue(null);
   api.agentHistoryList.mockResolvedValue({ turns: [] });
   api.agentAskText.mockResolvedValue(undefined);
-  const conversations = [{ id: 4, member_id: 0, title: "", is_default: 0, kind: "quick" }, { id: 1, member_id: 0, title: "Main", is_default: 1, kind: "standard" }];
+  const conversations = [{ id: 1, member_id: 0, title: "Main", is_default: 1, kind: "standard" }];
   api.core.mockImplementation(async method => method === "conversations.list" ? { conversations } : method === "background.questions.list" ? { questions: [] } : {});
   const page = createAgent({ go() {}, device: () => ({}), onEvent: () => () => {}, undo: { begin() {} }, cleared: new Cleared() } as unknown as AppContext);
   document.body.append(page.el); page.show(); await flush();
@@ -113,32 +111,27 @@ test("a question typed in the quick conversation names the quick destination, an
     const input = page.el.querySelector<HTMLTextAreaElement>(".cmp-input")!; input.value = text; input.dispatchEvent(new Event("input"));
     page.el.querySelector(".composer")!.dispatchEvent(new Event("submit", { cancelable: true })); await flush();
   };
-  await ask("Formal question");
-  expect(api.agentAskText).toHaveBeenLastCalledWith("Formal question", [], 0, expect.objectContaining({ conversationId: 1 }));
+  await ask("First question");
+  expect(api.agentAskText).toHaveBeenLastCalledWith("First question", [], 0, expect.objectContaining({ conversationId: 1 }));
+  await ask("Follow-up");
+  expect(api.agentAskText).toHaveBeenLastCalledWith("Follow-up", [], 0, expect.objectContaining({ conversationId: 1 }));
   expect(api.agentAskText.mock.lastCall![3]).not.toHaveProperty("destination");
-  if (page.el.querySelector(".conversation-trigger")!.getAttribute("aria-expanded") !== "true") page.el.querySelector<HTMLButtonElement>(".conversation-trigger")!.click(); await flush();
-  document.querySelector<HTMLButtonElement>('.mb-det [data-conversation-open="4"]')!.click(); await flush();
-  await ask("Quick follow-up");
-  expect(api.agentAskText).toHaveBeenLastCalledWith("Quick follow-up", [], 0, expect.objectContaining({ conversationId: 4, destination: "quick" }));
   page.hide();
 });
 
-test("Raphael's conversation and its quick questions retain independent approval cards", async () => {
+test("a question card belongs to Raphael's one conversation: another conversation's card is not shown there", async () => {
   api.agentQuestionOpen.mockResolvedValue(null);
   api.agentHistoryList.mockResolvedValue({ turns: [] });
-  const conversations = [{ id: 1, member_id: 0, title: "Main", is_default: 1, kind: "standard" }, { id: 2, member_id: 0, title: "", is_default: 0, kind: "quick" }];
+  const conversations = [{ id: 1, member_id: 0, title: "Main", is_default: 1, kind: "standard" }];
   api.core.mockImplementation(async method => method === "conversations.list" ? { conversations } : method === "background.questions.list" ? { questions: [] } : {});
   let emit: (event: MainEvent) => void = () => {};
   const page = createAgent({ go() {}, device: () => ({}), onEvent(handler: typeof emit) { emit = handler; return () => {}; }, undo: { begin() {} }, cleared: new Cleared() } as unknown as AppContext);
   document.body.append(page.el); page.show(); await flush();
-  for (const id of [1, 2]) emit({ type: "AgentQuestion", id: `q-${id}`, member_id: 0, conversation_id: id, text: `儲存摘要 ${id}？`, prefix: "問", tier: "T2", timeout_ms: 60_000 });
+  emit({ type: "AgentQuestion", id: "q-9", member_id: 0, conversation_id: 9, text: "儲存摘要 9？", prefix: "問", tier: "T2", timeout_ms: 60_000 });
+  expect(page.el.querySelector<HTMLElement>(".ask-card-host")!.hidden).toBe(true);
+  emit({ type: "AgentQuestion", id: "q-1", member_id: 0, conversation_id: 1, text: "儲存摘要 1？", prefix: "問", tier: "T2", timeout_ms: 60_000 });
   expect(page.el.querySelector<HTMLElement>(".ask-card-host")!.dataset.id).toBe("q-1");
-  if (page.el.querySelector(".conversation-trigger")!.getAttribute("aria-expanded") !== "true") page.el.querySelector<HTMLButtonElement>(".conversation-trigger")!.click(); await flush();
-  document.querySelector<HTMLButtonElement>('.mb-det [data-conversation-open="2"]')!.click(); await flush();
-  expect(page.el.querySelector<HTMLElement>(".ask-card-host")!.dataset.id).toBe("q-2");
   emit({ type: "AgentQuestionClosed", id: "q-1" });
-  expect(page.el.querySelector<HTMLElement>(".ask-card-host")!.dataset.id).toBe("q-2");
-  document.querySelector<HTMLButtonElement>('.mb-det [data-conversation-open="1"]')!.click(); await flush();
   expect(page.el.querySelector<HTMLElement>(".ask-card-host")!.hidden).toBe(true);
   page.hide();
 });

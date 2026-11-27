@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import mimetypes
 import shutil
 from collections import Counter
 from contextlib import suppress
@@ -13,6 +14,8 @@ from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..agent.plugins import PluginResult, PluginTool, tool_key
 from ..agent.policy import Tier
 from .. import work_area
+from ..protocol import RpcError
+from ..services.attachments import MAX_FILE_BYTES, Attachment
 from . import host_page
 from .browser_tabs import BROWSER_TABS
 from .file_tools import Refused, _refusal
@@ -35,8 +38,11 @@ VIEWPORT_TOOLS = {
     "click": ("Click at x,y from the shown tab's screenshot.", "x y button count modifier", "x y"),
     "double_click": ("Double-click at x,y from the shown tab's screenshot.", "x y", "x y"),
     "type_text": ("Type into the page's focused field. Leave credentials, codes and payment to the owner.", "text", "text"),
-    "press_key": ("Press a page key, optionally with modifiers.", "key modifiers", "key"),
+    "press_key": ("Press a named page key or a chord (Enter, Tab, arrows, Ctrl+A, Alt+Left to go back); use type_text for letters and digits.", "key modifiers", "key"),
     "scroll": ("Scroll the page at x,y from the screenshot.", "x y direction amount by", "x y direction"),
+    "drag": ("Press, move and release the pointer from a ref or from_x,from_y to a ref or to_x,to_y: a slider, a reordered "
+             "list, an HTML5 drop. Read the page after.",
+             "ref destination_ref from_x from_y to_x to_y modifier steps duration_ms", ""),
 }
 PAGE_ACTIONS = {"browser_click", "browser_type", "browser_select"}
 INPUT_ACTIONS = (VIEWPORT_TOOLS.keys() - {"get_desktop_state"}) | PAGE_ACTIONS | {"browser_dialog", "browser_upload"}
@@ -81,7 +87,11 @@ WORDS = {
     "browser_tab_changed": "The Chrome tab closed or changed. Use browser_tabs to find a live tab.",
     "browser_tab_busy": "Another turn or task is using this tab. Try it again shortly or use another tab from browser_tabs.",
     "browser_page_changed": "The page changed after the last read. Read it again for current controls.",
+    "browser_ref_changed": "That element is gone or changed. Read the page again for current references.",
+    "browser_drag_points": "Start the drag with one ref or from_x and from_y, and end it with one destination_ref or to_x and to_y.",
+    "browser_drag_offscreen": "That element is outside the visible page. Scroll it into view, then read the page again.",
     "browser_action_refused": "Chrome could not perform this action on the selected page element.",
+    "browser_key_is_text": "press_key does not type letters or digits, with or without Shift. Use type_text with the text, capitals included.",
     "browser_field_refused": "Chrome could not type into or select a value in that field.",
     "browser_dialog_changed": "The dialog changed. Use browser_dialog with action inspect for the current one.",
     "browser_dialog_text": "prompt_text only answers a prompt dialog that is being accepted.",
@@ -92,7 +102,7 @@ WORDS = {
     "browser_upload_count": "This file chooser takes one file.",
     "browser_upload_path": "Upload only files inside your work folder, never a private or system place.",
     "bad_path": "The requested work file path is invalid.",
-    "browser_navigation_waiting": "Chrome is still waiting for this page. If a native certificate or key prompt is blocking it, use request_takeover with reason: certificate.",
+    "browser_navigation_waiting": "Chrome is still waiting for this page. If it asks for a client certificate, use request_takeover with reason: certificate; Chrome then opens a window on the owner's screen to choose it.",
     "browser_owner_approval_required": "The owner must approve the exact outward action before it can run.",
     "browser_handback_stopped": "The owner stopped the handback. End this task without retrying the action.",
     "browser_handback_expired": "The owner did not return this tab in time. End this task without retrying the action.",
@@ -100,14 +110,15 @@ WORDS = {
     "browser_current_ref_required": "Read the tab again for current references or use screenshot coordinates for a click.",
     "browser_dom_input_required": "Use screenshot coordinates for native page input or omit input_route for a ref click.",
     "browser_coordinates": "Use x and y inside the current 1280 × 900 tab screenshot.",
-    "browser_background_only": "The owner can watch this tab in the app's Computer panel.",
+    "browser_background_only": "Raphael Chrome works in the background; leave delivery_mode out.",
     "host_tool_unavailable": "This tool requires the isolated Docker computer. Use the browser or work folder on this computer.",
 }
 
 
 class HostComputerTools:
-    def __init__(self, vm, conn, open_definition):
+    def __init__(self, vm, conn, open_definition, attachments=None):
         self.vm = vm
+        self.attachments = attachments  # where a download is also kept, for its card in the conversation (#347)
         self.browser = HostBrowser(vm.machine / "browser")
         self.browser.download_to = self.download_folder  # a download goes where the member works when it completes
         self.cards = None
@@ -127,17 +138,23 @@ class HostComputerTools:
                 for key in ("parameters", "validation")
             }}
         for name, (description, fields, required) in VIEWPORT_TOOLS.items():
-            source = definitions[name]["parameters"]["properties"]
+            source = {**definitions["browser_pointer"]["parameters"]["properties"],
+                      **definitions[name]["parameters"]["properties"]}
             properties = {field: {**source[field]} for field in fields.split()}
-            for field in properties.keys() & {"x", "y"}:
-                properties[field]["description"] = f"{field.upper()} in the 1280 × 900 Chrome page screenshot."
+            for field in properties.keys() & {"x", "y", "from_x", "from_y", "to_x", "to_y"}:
+                properties[field]["description"] = (
+                    f"{field.replace('_', ' ').capitalize()} in the 1280 × 900 Chrome page screenshot.")
+            if name == "drag":
+                properties["ref"]["description"] = "Page ref to start the drag at. Alternative to from_x and from_y."
+                properties["destination_ref"]["description"] = "Page ref to end the drag at. Alternative to to_x and to_y."
+                properties["steps"]["description"] = "Pointer moves between press and release. Default: 20."
             self.definitions[name] = {"description": description, "parameters": {
                 "type": "object", "properties": {**properties, "tab_id": tab_id}, "required": required.split(),
                 "additionalProperties": False,
             }}
         self.definitions.update({
             "browser_open": {**open_definition, "description": "Open an HTTP or HTTPS URL in your own background Chrome tab. "
-                             "The owner sees it in the app's Computer panel. When asked to show a page, open it and say where to look. "
+                             "The Computer panel shows it only to an owner who asked to see a page; answer in your reply. "
                              "Check browser_tabs first. Use new_tab to keep the current page. " + HOST_CONTRACT},
             "browser_tabs": {"description": "List your Chrome tabs across turns and tasks, including tabs the owner opened "
                              "and popups. Check before opening a duplicate. The shown tab is the default. Pass show or close "
@@ -149,7 +166,7 @@ class HostComputerTools:
                              }},
             "browser_dialog": BROWSER_DIALOG,
             "browser_upload": BROWSER_UPLOAD,
-            "request_takeover": {"parameters": HOST_TAKEOVER, "description": TAKEOVER["description"] + " Use certificate for a certificate prompt."},
+            "request_takeover": {"parameters": HOST_TAKEOVER, "description": TAKEOVER["description"] + " Use certificate when a page asks for a client certificate: Chrome opens a window on the owner's screen, where they choose it and then press Done."},
             **{name: {**DEFINITIONS[name], "description": DEFINITION_WORDS[name]} for name in READS | WRITES},
         })
 
@@ -204,16 +221,21 @@ class HostComputerTools:
         work = work_folder(self.vm.settings, member, self.vm.local_folders) if self.vm.settings else workspace
         return (work / path).resolve() if not path.is_absolute() and not raw.startswith("~") else Path(place(raw))
 
-    def inside_work(self, path, member):
-        if any(path.is_relative_to(folder) and folder.resolve() == folder for folder in self.folders(member)):
+    def inside_work(self, path, member, *, folders=None, projects=None, guard=None):
+        """Whether `path` is in the member's own folder or team's, or in a remembered project that is not Raphael's own data.
+        A walk in another thread passes what the settings hold (`folders`, `projects`, `guard`), read in the loop's thread."""
+        folders = self.folders(member) if folders is None else folders
+        if any(path.is_relative_to(folder) and folder.resolve() == folder for folder in folders):
             return True
-        projects = self.vm.settings.get("project_folders") if self.vm.settings else ()
-        return any(path.is_relative_to(folder) and folder.resolve() == folder for folder in map(Path, projects or ())) and not self.files.guard()(str(path))
+        if projects is None:
+            projects = self.vm.settings.get("project_folders") if self.vm.settings else ()
+        return (any(path.is_relative_to(folder) and folder.resolve() == folder for folder in map(Path, projects or ()))
+                and not (self.files.guard() if guard is None else guard)(str(path)))
 
-    def private_path(self, path, member):
+    def private_path(self, path, member, *, folders=None):
         if path.is_relative_to(self.browser.profile.resolve()):
             return True
-        for root in self.folders(member):
+        for root in self.folders(member) if folders is None else folders:
             if path.is_relative_to(root) and any(part.casefold().startswith((".browser-profiles", ".raphael-"))
                                                  for part in path.relative_to(root).parts):
                 return True
@@ -224,6 +246,21 @@ class HostComputerTools:
         project alone, else its own folder and the team's), in a remembered "project" that is not its own (never written),
         or "outside" it, where only the owner's yes on a card lets it be made (R-FILE-06)."""
         return work_area.reach(self.vm.settings, member, str(path), self.vm.local_folders)
+
+    def attach_downloads(self, placed):
+        """What the member is told of the downloads placed for it (#347): each file's name, type and size and the ID it is
+        attached to the conversation by, where the owner opens it from its card. The place it was put at stays Raphael's own."""
+        told = []
+        for path in placed:
+            try:
+                if self.attachments is None or path.stat().st_size > MAX_FILE_BYTES:
+                    raise OSError
+                saved = self.attachments.save(Attachment(path.name, mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+                                                         path.read_bytes()))
+                told.append({**saved.metadata(), "attached": True})
+            except (OSError, RpcError):
+                told.append({"name": path.name, "attached": False})
+        return told
 
     def download_folder(self, member):
         """The work folder whose `.raphael/downloads` takes a page's download: the chosen project, else the member's own
@@ -305,9 +342,15 @@ class HostComputerTools:
                 return PluginResult(False, "approval_required", "This write requires the owner's approval.")
         if name in ("glob", "grep"):
             from .owner_files import glob_files, grep_files
+            # The walk runs in another thread than the settings' connection: what it asks of them is read here.
             guard = self.files.guard()
+            folders = self.folders(member)
+            projects = list(self.vm.settings.get("project_folders") or ()) if self.vm.settings else []
+
             def protected(item):
-                return self.private_path(Path(item), member) or (not inside or not self.inside_work(Path(item), member)) and guard(item)
+                return (self.private_path(Path(item), member, folders=folders)
+                        or (not inside or not self.inside_work(Path(item), member, folders=folders, projects=projects, guard=guard))
+                        and guard(item))
             return await asyncio.to_thread(glob_files if name == "glob" else grep_files, args, protected)
         if inside and name in WRITES:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -339,6 +382,9 @@ class HostComputerTools:
                 name, arguments, approver, member, work, conversation_id, announce, can_hand_back=can_hand_back)
             if reason:
                 try:
+                    if reason == "certificate":
+                        # Chrome's own chooser needs a window: Chrome is shown to the owner for this step (#345).
+                        await browser.show_for_owner(tab)
                     detail = data.get("detail", "")
                     await self.cards.wait_for_browser(turn_id=turn_id, member_id=member, conversation_id=conversation_id,
                                                       language=language, reason=reason, tab=tab, detail=detail, browser=browser)
@@ -352,12 +398,16 @@ class HostComputerTools:
                 finally:
                     if browser.handback.get(member) is tab:
                         browser.handback.pop(member)
+                    if reason == "certificate":
+                        # The choice stays valid only in this Chrome, so it keeps running; its window steps aside.
+                        with suppress(BrowserError, OSError, TimeoutError, KeyError):
+                            await browser.tuck_away(tab)
                 if data.get("owner_needed"):
                     data["status"] = "owner_step_still_needed"
                 else:
                     data["status"] = "owner_finished"
             if placed := browser.take_downloads(member):
-                data = {**data, "downloads": placed}
+                data = {**data, "downloads": await asyncio.to_thread(self.attach_downloads, placed)}
             return PluginResult(True, "tab_closed" if data.get("status") == "tab_closed" else None,
                                 text=json.dumps(data, ensure_ascii=False), blocks=blocks)
         except (BrowserError, VmError) as error:
@@ -557,17 +607,19 @@ class HostComputerTools:
                 return {"target_id": tab.id, "tab_id": tab.id, "owner_needed": "certificate"}, []
             if not navigated:
                 return {"status": "download_started", "target_id": tab.id, "tab_id": tab.id,
-                        "note": "Chrome saves it in .raphael/downloads in your work folder; a later result names the file."}, []
+                        "note": "Chrome saves the file and it is attached to the conversation under its name; a later result names it. Tell the owner the name and that it is attached."}, []
         if name == "browser_click" and ("x" in arguments or "y" in arguments):
             return await host_page.viewport_action(browser, tab, "click", arguments, approver), []
         if name in PAGE_ACTIONS:
             return await host_page.act(browser, tab, name, arguments, approver)
         if name == "get_desktop_state":
             return await host_page.screenshot(browser, tab)
+        if name == "drag":
+            return await host_page.drag(browser, tab, arguments, approver), []
         if name in VIEWPORT_TOOLS:
             return await host_page.viewport_action(browser, tab, name, arguments, approver), []
         data, blocks = await host_page.snapshot(browser, tab, arguments)
-        data["view"] = "The owner can see this page in the app's Computer panel."
+        data["view"] = "The Computer panel shows this page, but your reply is the answer."
         return data, blocks
 
 

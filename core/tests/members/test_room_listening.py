@@ -19,14 +19,14 @@ async def test_room_roles_do_not_dispatch_rounds_or_an_automatic_conclusion(rig,
     room, ids = await team(rig)
     await rig.call("rooms.update", {"room_id": room["id"], "roles": {str(ids[0]): "moderator", str(ids[1]): "con"}})
     source = exchange._history.add(session_id="meeting",question="Meet",route="answer",prefix="",text="",status="running",member_id=rig.service.primary_id())
-    await exchange.meeting({"member_ids": [0, *ids], "agenda": "Discuss the release",
+    await exchange.meeting({"member_ids": [rig.lead, *ids], "agenda": "Discuss the release",
                             "roles": {str(ids[0]): "moderator", str(ids[1]): "con"}}, "en", source)
-    assert [row["member_id"] for row in rig.background.submitted] == [0]
+    assert [row["member_id"] for row in rig.background.submitted] == [rig.lead]
     prompt = rig.background.submitted[-1]["text"].split("TeamContextSnapshot")[0]
     assert "Room-only roles" in prompt and "Everyone reads every message" in prompt
     assert "two rounds" not in prompt and "chief concludes" not in prompt
     assert "no fixed rounds" in prompt and "no automatic conclusion" in prompt
-    for member_id in (0, *ids):
+    for member_id in (rig.lead, *ids):
         roster = roster_prompt(rig.service, rig.service.speaker(member_id), "en")
         assert "coordinates room conclusions" not in roster
         assert "no automatic conclusion" in roster

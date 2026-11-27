@@ -101,7 +101,7 @@ test("a recalled message ending in an @ is not typing: it opens no menu", () => 
 
 test("the team is addressed by the names the menu writes and the names the core takes in every language", () => {
   const targets = mentionTargets(list);
-  expect(targets.map(target => [target.kind, target.name])).toEqual([["everyone", expect.any(String)], ["member", "拉斐爾"], ["member", "小森"], ["member", "小晴"], ["group", "研究組"], ["app", "Notion"]]);
+  expect(targets.map(target => [target.kind, target.name])).toEqual([["everyone", expect.any(String)], ["member", "小森"], ["member", "小晴"], ["member", "拉斐爾"], ["group", "研究組"], ["app", "Notion"]]);
   const named = (text: string, among = targets): string[] => mentionRanges(text, among).map(range => range.target.name);
   expect(named("@Raphael @拉斐爾 @ラファエル")).toEqual(["拉斐爾", "拉斐爾", "拉斐爾"]);
   expect(named("@所有人 @研究組 @Notion ")).toEqual([targets[0].name, "研究組", "Notion"]);
@@ -129,17 +129,17 @@ test.each(['disabled', 'duplicate', 'no_tools', 'error', 'unchecked', 'unknown']
   const roster = { ...list, team_context: { apps: [{ name: 'Notion', state }, { name: 'Gmail', state: 'ready' }] } } as unknown as MembersList;
   bindTeamMentions(input, () => ({ list: roster }));
   input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
-  expect(rows()).toEqual(['拉斐爾', '小森', '小晴', 'Gmail']);
+  expect(rows()).toEqual(['小森', '小晴', '拉斐爾', 'Gmail']);
 });
 
 test("the menu lists the other members, then the apps, each with what it is at the right, and no group, no everyone", () => {
   const roster = { ...list, team_context: { apps: [{ name: 'Gmail', state: 'ready' }, { name: 'Notion', state: 'needs_sign_in' }] } } as unknown as MembersList;
   bindTeamMentions(input, () => ({ list: roster, self: 1 }));
   input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
-  expect(rows()).toEqual(['拉斐爾', '小晴', 'Gmail', 'Notion']);
+  expect(rows()).toEqual(['小晴', '拉斐爾', 'Gmail', 'Notion']);
   expect(menu()!.querySelector('.menu-head')).toBeNull();
   expect([...menu()!.querySelectorAll('.mtrail')].map(word => word.textContent)).toEqual(['角色', '角色', '應用程式', '應用程式']);
-  expect([...menu()!.querySelectorAll('.mt')].map(name => name.textContent)).toEqual(['拉斐爾', '小晴', 'Gmail', 'Notion']);
+  expect([...menu()!.querySelectorAll('.mt')].map(name => name.textContent)).toEqual(['小晴', '拉斐爾', 'Gmail', 'Notion']);
   expect(menu()!.querySelector('[data-value="Notion"]')!.textContent).toBe('Notion需要登入應用程式');
   expect(menu()!.querySelector('[data-value="小森"]')).toBeNull();
   // What is typed by hand is still an address: the chip is drawn and the core reads it.
@@ -173,7 +173,7 @@ test("every other member and every offered app are one list that scrolls, with n
   expect(menu()!.querySelector('.menu-action, .menu-sep')).toBeNull();
   expect(menu()!.textContent).not.toContain('顯示全部');
   expect(menu()!.classList.contains('menu-scroll')).toBe(true);
-  expect(rows().filter(name => !name.startsWith('Service'))).toEqual(['拉斐爾', '小森', '小晴']);
+  expect(rows().filter(name => !name.startsWith('Service'))).toEqual(['小森', '小晴', '拉斐爾']);
   const services = rows().filter(name => name.startsWith('Service'));
   expect(services).toHaveLength(30);
   expect(services.slice(0, 3)).toEqual(['Service 29', 'Service 28', 'Service 27']);

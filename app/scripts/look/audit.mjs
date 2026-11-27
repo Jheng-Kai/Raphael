@@ -120,7 +120,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (!element.matches(".window-resize") && !clipped(element) && (box.left < -1 || box.top < -1 || box.right > viewport.width + 1 || box.bottom > viewport.height + 1))
       outsideViewport.push({ ...description, bounds: { left: box.left, top: box.top, right: box.right, bottom: box.bottom } });
     // SVG uses viewBox coordinates, so text clientWidth and scrollWidth are not CSS overflow measurements.
-    if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
+    // KaTeX keeps the equation's MathML in a clipped one-pixel box for screen readers: it is not overflow.
+    if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && !element.closest?.('.katex-mathml') && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
     // Not a failure: words that a box cuts off without an ellipsis or a line clamp, for the person reading the pictures to look at.
@@ -348,7 +349,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       seenKeys.add(match[1]); missingI18nKeys.push({ ...description, key: match[1] });
     }
     // The literal command-template token is syntax in every locale, not English copy; so is a service's sign-in code.
-    if (allowed && !element.closest('.message-link, .url-chip, .local-command, .message-code pre code, .msg .note code, .bot-scopes code, .mb-row-p, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg, .dl-code')) for (const value of strings) {
+    if (allowed && !element.closest('.cmp-input, .message-link, .url-chip, .local-command, .message-code pre code, .msg .note code, .bot-scopes code, .mb-row-p, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg, .dl-code')) for (const value of strings) {
       let copy = productPattern ? value.replace(productPattern, "") : value;
       if (element.matches('[data-skl="pick-file"]')) copy = copy.replace(/\.(?:zip|tar\.gz|tgz|md)\b/g, "");
       for (const [word] of copy.replace(/\{input\}/g, "").replace(keyPattern, "").replace(IANA_ZONE_ID, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").matchAll(/[A-Za-z]{2,}/g)) {

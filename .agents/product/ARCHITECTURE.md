@@ -1008,6 +1008,23 @@ panel uses the same switch and words for all members. Worker reports share the m
 text contract; the existing fit_text projection derives the quick overlay caption.
 
 
+## Sub-workers of a member (`delegate_task`)
+
+agent/delegate.py owns the tool's words, its argument rules, the refusals, the weight of a place and the shape of a result;
+BackgroundService.delegate runs it. A call writes its pieces as `worker_tasks` rows of the calling member (`mode='delegate'`,
+`TaskStore.accept_delegates`: `text` the goal, `done_when` the member's context, `source_turn_id` the turn that asked,
+`parent_task_id` the task that asked when one did, no turn of their own) and queues them on the one pump. The pump counts them
+apart from ordinary work (R-DELEGATE-03): `delegate_parallel` places, one for an API model and two for a CLI, never the three
+ordinary places and never their member's one place. `_execute_scoped` runs them as any task, with the differences a sub-worker
+has: no memory, conversation, persona, team or roster, `take_snapshot(child=True)` for its tools, its own model before the
+member's, the member's own `owner_context` for its folder, and the member's gate, cards and permission mode unchanged. Its end
+(`_conclude`) wakes the one call that waits (`_delegate_ended`), which reads the row, the tokens and the files its run counted
+(`TaskRun.files_changed`) and answers the member's tool call with `ToolResult.untrusted`. The call is a held tool call, as
+`ask_member` is: it touches its task's run while it waits (a task's stall time must not end it), it ends at 25 minutes (the worker
+loop's own bound on one tool call), and a cancelled turn or task cancels its children through `_cancel` and the task tree. No
+restart starts a sub-worker again; `handoff_views` and `_child_results` leave them out, `delegate_views_for_turns` is what the
+conversation reads. No new loop, runner, RPC, table, provider or permission path is introduced.
+
 ## Routine test and saved timezone boundary
 
 The explicit main-window `routines.run` allowlist entry calls MembersService._run
@@ -1037,8 +1054,13 @@ member_skills; rooms 60 and grants 61 remain unchanged. skill_plugins.py owns
 manifest parsing, bounded HTTPS reads, commit pinning and shared set lifecycle.
 The existing members.skills.list/import/delete RPCs carry these operations through
 api.ts. There is no new native allowlist, model loop, worker or settings registry.
-A fully validated generation is staged under shared/skill-sets before one database
-transaction replaces its pointers. Stable component paths retain IDs and grants;
+A fully validated generation is staged under shared/skills (the one folder of the library, where single
+skills and plugin sets sit side by side; a set kept in the older shared/skill-sets moves in once at start)
+before one database transaction replaces its pointers. skill_layouts.py reads a plugin of any maker (Claude Code,
+Codex, Cursor, a marketplace or a bare layout of commands and agents) as the same set and keeps its whole tree;
+skill_index.py tells a model the files of a skill by name and size (R-SKILL-29 to R-SKILL-31). The Docker
+computers bind that same folder, read-only, at /home/cua/skills (computer/vm.py `SKILLS`), so no copy of a skill
+exists between this PC and the computer. Stable component paths retain IDs and grants;
 removed components trigger the existing grant cleanup. Existing local single-skill
 imports remain available and plugin components are edited through whole-set refresh.
 Commands become documents in that same store, preserving slash discovery, skill_read

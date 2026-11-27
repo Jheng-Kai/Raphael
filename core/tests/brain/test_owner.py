@@ -50,12 +50,37 @@ def test_prompt_names_host_and_docker_work_folders(conn, tmp_path):
         return json.loads(prompt.split("<owner_context>\n")[1].split("\n</owner_context>")[0])
 
     assert told(4) == {"name": "", "about": "", "work_folder": str(work), "team_folder": str(team),
-                       "project_folders": [str(notes)], "branch": "main"}
+                       "project_folders": [str(notes)], "branch": "main",
+                       "project": {"name": "work", "on_this_pc": str(work), "writable": True}}
     assert told(4, target) == {"name": "", "about": "", "work_folder": "/home/cua/projects/work",
                                "team_folder": "/home/cua/team", "project_folders": ["/home/cua/projects/notes"],
-                               "branch": "main"}
+                               "branch": "main", "project": {"name": "work", "on_this_pc": str(work),
+                                                             "in_docker": "/home/cua/projects/work", "writable": True}}
     assert told(9)["work_folder"] == str(own)
     assert told(9, target)["work_folder"] == "/home/cua/workspace"
+
+
+def test_the_prompt_names_the_chosen_project_where_it_is_and_whether_it_is_written(conn, tmp_path):
+    settings = SettingsStore(conn)
+    work, notes, team, own = (tmp_path / name for name in ("work", "notes", "team", "own"))
+    for path in (work, notes, team, own):
+        path.mkdir()
+    settings.set("project_folders", [str(work), str(notes)])
+    settings.set("member_work_folder", {"4": str(work)})
+    mounted = Target("4", "synthetic", own, team, projects=project_mounts(settings.get("project_folders")))
+    waiting = Target("4", "synthetic", own, team, projects=project_mounts([str(notes)]))
+
+    def project(member, computer=None):
+        prompt = owner_context(settings, member, folders=lambda _: (own, team), target=computer)
+        return json.loads(prompt.split("<owner_context>\n")[1].split("\n</owner_context>")[0]).get("project")
+
+    assert project(4) == {"name": "work", "on_this_pc": str(work), "writable": True}
+    assert project(4, mounted) == {"name": "work", "on_this_pc": str(work), "in_docker": "/home/cua/projects/work", "writable": True}
+    # Docker cannot add a folder to a running computer: the member is told so, not left in its own workspace unaware.
+    said = project(4, waiting)
+    assert said["on_this_pc"] == str(work) and said["writable"] is True and "in_docker" not in said
+    assert "restarts" in said["docker"] and "not mounted" in said["docker"]
+    assert project(9) is None and project(9, mounted) is None  # no project chosen: nothing to name
 
 
 def test_the_prompt_says_a_chosen_project_is_read_only_in_the_computer(conn, tmp_path):
@@ -103,3 +128,28 @@ def test_a_removed_project_falls_back_to_the_members_own_folder(conn, tmp_path):
 def test_project_paths_must_be_absolute(conn, path):
     with pytest.raises(ValueError, match="absolute path"):
         SettingsStore(conn).set("project_folders", [path])
+
+
+def test_the_prompt_says_plainly_which_folder_the_member_works_in_and_to_start_there(conn, tmp_path):
+    # Data inside the profile block is read as data: the assignment is a sentence outside it, in few words.
+    settings = SettingsStore(conn)
+    work, team, own = (tmp_path / name for name in ("work", "team", "own"))
+    for path in (work, team, own):
+        path.mkdir()
+    settings.set("project_folders", [str(work)])
+    settings.set("member_work_folder", {"4": str(work)})
+    mounted = Target("4", "synthetic", own, team, projects=project_mounts(settings.get("project_folders")))
+    waiting = Target("4", "synthetic", own, team)
+
+    def says(member, computer=None):
+        return owner_context(settings, member, folders=lambda _: (own, team), target=computer).split("<owner_context>")[0]
+
+    on_pc = says(4)
+    assert f"Your working folder is work at {work}." in on_pc and "Start there" in on_pc and "README" in on_pc
+    assert "in the computer" not in on_pc and f"your own workspace ({own})" in on_pc
+    here = says(4, mounted)
+    assert f"Your working folder is work at {work} (/home/cua/projects/work in the computer)." in here
+    assert "Start there" in here and "your own workspace (/home/cua/workspace)" in here
+    assert "not in the computer yet" in says(4, waiting) and "Start there" in says(4, waiting)
+    assert "working folder" not in says(9) and "working folder" not in says(9, mounted)  # no project chosen: nothing said
+    assert len(here.split()) < 110

@@ -92,7 +92,7 @@ test("replying to a picture quotes it in the composer as the picture, and the qu
   expect(card.querySelector(".message-quote.has-picture .quote-thumb")?.getAttribute("data-attachment")).toBe(FIRST);
   expect(card.querySelector(".quote-text")!.textContent).toBe("圖片");
   expect(card.textContent).not.toContain("attachment:");
-  const input = agent.el.querySelector<HTMLTextAreaElement>(".composer textarea")!;
+  const input = agent.el.querySelector<HTMLTextAreaElement>(".composer .cmp-input")!;
   input.value = "第一張的燈光再暖一點"; input.dispatchEvent(new Event("input", { bubbles: true }));
   agent.el.querySelector<HTMLFormElement>(".composer")!.requestSubmit(); await flush();
   expect(api.agentAskText).toHaveBeenCalledOnce();
@@ -174,7 +174,7 @@ test("a video the member sent is a message with react, reply and ⋯ beside our 
   expect(card.querySelector(".message-quote .quote-mark svg")).not.toBeNull();
   expect(card.querySelector(".quote-text")!.textContent).toBe("影片");
   expect(card.textContent).not.toContain("attachment:");
-  const input = agent.el.querySelector<HTMLTextAreaElement>(".composer textarea")!;
+  const input = agent.el.querySelector<HTMLTextAreaElement>(".composer .cmp-input")!;
   input.value = "開頭剪短一點"; input.dispatchEvent(new Event("input", { bubbles: true }));
   agent.el.querySelector<HTMLFormElement>(".composer")!.requestSubmit(); await flush();
   expect(api.agentAskText.mock.calls[0]![3].quote.text).toBe(`[tour.mp4](attachment:${CLIP})`);

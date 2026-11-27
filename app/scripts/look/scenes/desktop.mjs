@@ -126,8 +126,9 @@ export default [
   scene("desktop-computer-choice-docker", "The single computer dropdown includes Docker's local and SSH locations",
     [...entry, ...openComputerMenu, wait('.menu [data-value="docker-remote"][aria-checked="true"]'), check("desktop-computer-choice-docker")],
     {computerHost:"studio-mini", desktop:{transport:"docker",host:"studio-mini",state:"running",ready:true,control:"member"}}),
-  ...["installed", "missing"].map(docker => scene(`desktop-computer-suggestion-${docker}`,
-    "The member explains why a task needs a virtual machine and offers one owner action",
+  ...["installed", "missing", "this-pc"].map(docker => scene(`desktop-computer-suggestion-${docker}`,
+    docker === "this-pc" ? "A member on the virtual machine explains what needs this computer and offers one action to switch back"
+      : "The member explains why a task needs a virtual machine and offers one owner action",
     [member(1), wait(".computer-suggestion-card"), hover(".computer-suggestion-action"), check(`computer-suggestion-${docker}`)],
     {computerSuggestion: docker})),
   scene("desktop-takeover", "A private sign-in need opens the side panel with its request above the live screen", [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])'),check("computer-takeover")],computer("waiting_control")),
@@ -135,7 +136,10 @@ export default [
   scene("desktop-takeover-done", "One explicit done in the larger view's pill returns the current request once", [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])'),click('[data-card-desktop=take].pri'),wait('.desktop-panel[data-expanded][data-interactive="true"]'),click('[data-desktop="return"]'),waitGone('.computer-card'),check("computer-takeover-done")],computer("waiting_control")),
   scene('desktop-watch-owner', 'Enlarging an owner-held screen does not acquire or release control', [member(1),{action:'open-details'},wait('.desktop-panel'),click('[data-desktop="enlarge"]'),check('desktop-watch')], {desktop:{state:'running',ready:true,control:'owner'}}),
   scene('desktop-watch-retake', 'After a take-over the screen never confirmed and the core kept the lease, the pill watches and still offers Take control', [...entry, click('[data-desktop="enlarge"]'), click('[data-desktop="take"]'), wait('.desktop-panel[data-desktop-state="owner"]', 12000), wait('[data-desktop="take"]:not([hidden]):not(:disabled)'), check('desktop-watch-retake'), check('computer-foot-layout')], {...computer(), desktopUnconfirmed:true, releaseFails:true}),
-  scene("desktop-entry", "The monitor opens the landing preview in a working conversation", [...entry,check("computer-panel")],computer()),
+  // The first member's (the chief of staff's) Docker computer, with a recording the core recovered from its home long after the window that made it: the pill watches and still offers Take control.
+  scene('desktop-watch-leftover-recording', "The chief of staff's computer carries a recording left from an earlier session: the larger view watches and still offers Take control", [member(0), {action:'open-details'}, wait('.desktop-panel:not([hidden])'), wait('.desktop-screen iframe:not([hidden])'), click('[data-desktop="enlarge"]'), wait(':root[data-desktop-watch]'), wait('[data-desktop="take"]:not([hidden]):not(:disabled)'), check('desktop-watch'), check('computer-foot-layout')],
+    {desktop:{transport:'docker', state:'running', ready:true, control:'member', teach_available:true, teaching:{id:'left-over', state:'interrupted', text:'', conversation_id:1}}}),
+  scene("desktop-entry", "The monitor opens the landing preview in a working conversation",[...entry,check("computer-panel")],computer()),
   scene("desktop-viewer", "Open the existing stream large without a new dialog or session", [...entry,click('[data-desktop="enlarge"]'),wait('.desktop-panel[data-expanded]'),{action:"settle-motion"},check("desktop-viewer"),check("desktop-frame")],computer()),
   scene("desktop-viewer-night", "The larger view at night streams the computer with its dark default picture", [...entry,click('[data-desktop="enlarge"]'),wait('.desktop-panel[data-expanded]'),{action:"settle-motion"},check("desktop-viewer"),check("desktop-frame")],{...computer(),desktopHour:22}),
   scene("desktop-owner", "Take control acquires the lease without a reconnect", [...take,check("desktop-owner"),check("desktop-frame")],computer()),

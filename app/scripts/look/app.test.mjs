@@ -31,7 +31,7 @@ describe("real app entry with the shared look fixture", () => {
     expect(document.querySelector('.mb-chief[aria-current="true"]')).not.toBeNull();
     document.querySelector('.mb-chief').click();
     await vi.waitFor(() => expect(document.querySelector(".page-agent:not([hidden]) .conversation-trigger")).not.toBeNull());
-    await vi.waitFor(() => expect(document.querySelector(".conversation-caption").hidden).toBe(true));
+    await vi.waitFor(() => expect(document.querySelector(".conversation-caption")).toBeNull());
     // A reply wait must not select the earlier, collapsed work messages.
     await vi.waitFor(() => {
       const reply = document.querySelector(scenes.find(scene => scene.name === "chat").steps[0].selector);

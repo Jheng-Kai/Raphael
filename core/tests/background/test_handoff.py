@@ -45,6 +45,29 @@ def test_member_management_guidance_does_not_block_ordinary_work(work_request):
     assert not delegated_management(work_request)
 
 
+ACCEPTANCE_REQUEST = r"""請驗收以下功能，每項寫出通過、失敗或無法驗證，並附上實際操作結果與原始錯誤文字。主人是 Alex。
+
+1. 子任務（delegate_task）：在對話中請一隻史萊姆把一個小工作拆成幾個子任務平行做。確認回答下方出現收起來的「啟動了 N 個子工作者」，展開後每列有目標、模型和進度。
+2. 團隊技能｜匯入本機 pstack 資料夾：用本機路徑 C:\plugins\pstack\0.15.32 匯入。確認匯入成功、技能數量與同名提示正常。若失敗，附上完整錯誤。
+3. 團隊技能｜大外掛：匯入一個含非文字檔或程式的外掛，確認整包進來。
+4. 專案資料夾（#356）：先不要設定。請回報目前成員工具是否有設定專案資料夾的欄位；若沒有，標為「需主人在 App 操作」。主人設定後你再驗：用「你的工作資料夾在哪？可以寫入嗎？」提問，確認回答的路徑正確。"""
+
+
+@pytest.mark.parametrize('work_request', [ACCEPTANCE_REQUEST, '請回報目前成員工具是否有設定專案資料夾的欄位。',
+    '請驗證新增成員的流程是否正常。', 'Verify that the team can create a member and report the result.',
+    'Report whether the member tools have a field to set the project folder.', 'QA: confirm renaming a member works.'])
+def test_verifying_or_reporting_on_a_feature_is_not_member_management(work_request):
+    from raphael_core.agent.team_admin import delegated_management
+    assert not delegated_management(work_request)
+
+
+@pytest.mark.parametrize('management_request', ['請驗收功能。然後刪除成員 3。', '請回報進度，並把成員 2 改名為小明。',
+    'Report the status, then delete member 3.', 'Verify the build. Rename the group Ops to Support.'])
+def test_a_command_to_change_a_member_stays_refused_next_to_a_verification(management_request):
+    from raphael_core.agent.team_admin import delegated_management
+    assert delegated_management(management_request)
+
+
 def team_of(target,*others):
     found = {person.id:person for person in (RAPHAEL,target,*others)}
     return SimpleNamespace(speaker=found.get,roster=lambda:list(found.values()),has_members=lambda:True,
@@ -234,7 +257,8 @@ async def test_receipt_dedupe_stage_conflict_and_removed_member(make_rig):
     assert task.scope=='private' and task.report_room_id==source.room_id and task.model_ref=='fake/model' and task.root_task_id==task.id
     assert json.loads(task.schedule_provenance)['source_turn_id']==source.id
     assert rig.service.handoff(RAPHAEL,args(target,request='Different work'),source_turn_id=source.id,language='zh-TW').error=='stage_conflict'
-    with rig.conn:
+    with rig.conn:  # the first member made is the chief, and a chief cannot leave a room: hand the chair back first
+        rig.conn.execute('UPDATE members SET primary_contact=0')
         rig.conn.execute('DELETE FROM room_members WHERE room_id=? AND member_id=?',(source.room_id,target.id))
     assert rig.service.handoff(RAPHAEL,args(target,stage_id='next'),source_turn_id=source.id,language='zh-TW').error=='member_removed_from_room'
     await until(lambda:rig.task(task.id).state=='failed')
@@ -886,7 +910,7 @@ async def test_batched_handoffs_preserve_literal_views_order_and_room_scoping(ma
     finally:
         rig.conn.set_trace_callback(None)
     assert json.dumps(actual, sort_keys=True) == json.dumps(expected, sort_keys=True)
-    assert len([sql for sql in statements if 'mode IS NOT NULL AND source_turn_id IN' in sql]) == 1
+    assert len([sql for sql in statements if "mode IS NOT NULL AND mode!='delegate' AND source_turn_id IN" in sql]) == 1
     scoped = rig.service.handoff_views(room_id=room.room_id, thread_id=room.thread_id)
     assert [view['task_id'] for view in scoped] == [view['task_id'] for view in expected[room.id]]
     assert all(len(view['result']) <= 600 for view in scoped if view['mode'] == 'consult')

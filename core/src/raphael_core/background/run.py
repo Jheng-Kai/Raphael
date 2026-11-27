@@ -67,7 +67,7 @@ from ..agent.harness_tools import CALENDAR_LIST, CALENDAR_TOOLS, CALENDAR_WRITES
 from ..agent.ledger import Ledger
 from ..agent.plugins import SAID_WHOLE, PluginResult
 from ..agent.progress_updates import ProgressUpdates
-from ..worker.guards import argument_limit
+from ..worker.guards import argument_limit, neutralize
 from ..brain.prompt_cache import cache_options
 from ..agent.steps import reason_of
 from ..agent.policy import Action, Approval, NotApproved, Tier, UnknownTool
@@ -89,12 +89,13 @@ from ..integrations.pool import McpPool
 from ..protocol import WORKER_STOPPED, RpcError, invalid_params
 from ..retry_utils import MODEL_SILENCE_S, Outage
 from ..services.attachments import Attachment
-from ..services.file_reader import read_window
+from ..services.file_reader import index_refusal, read_window, window_refusal
 from ..services.urls import SeenUrls
 from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
 from ..worker.loop import MORE_ROOM, REPLY_TOKENS, WAITING, WRAP_UP, FINAL_REPORT, ToolOutcome, result_text
 from ..members.activity import current, tool_step
 from ..own_calendar import CalendarError
+from .outcomes import worker_trace
 from .routine_outcome import REFUSED_KINDS
 from .snapshot import BUILTIN, FIND, MCP, NOTHING_FITS, USE, USE_REFUSALS, USE_TOOL, Snapshot, ToolRef
 from .tasks import TaskStore
@@ -347,6 +348,8 @@ class TaskRun:
         self.succeeded: set[str] = set()
         # The tools of connected apps whose calls went through and changed something (a page written, a draft saved).
         self.written: set[str] = set()
+        # The files the task wrote with the file tools, in the order it first did (a sub-worker's result names them).
+        self.files_changed: list[str] = []
         # A connected app's call (tool, arguments) -> the digest of the error it last failed with and how many times in a row.
         self._failed_calls: dict[tuple[str, str], tuple[str, int]] = {}
         self._failures_told: dict[tuple[str, str], str] = {}
@@ -686,7 +689,7 @@ class TaskRun:
             self._charge_estimate(request_chars)  # cancelled while the provider was working
             raise
         except Exception as exc:
-            logger.warning("The task's model failed unexpectedly: %s", type(exc).__name__)
+            logger.warning("The task's model failed unexpectedly: %s", worker_trace(exc, frames_kept=12, size=1200))
             self._step(kind="model", outcome="error", ms=_ms(began), reason="error")
             raise stopped("failed", "error") from None
         self.touch()
@@ -828,6 +831,7 @@ class TaskRun:
             reply, outcome, tier, detail = await self._builtin(ref, arguments, name, call_id)
         self._note_result(ref, reply)
         self._note_action(ref, arguments, bool(reply.get("ok")))  # before the limits: the call was made
+        self._note_file(ref, arguments, bool(reply.get("ok")))
         self._check()
         if reply.get("ok") and isinstance(reply.get("content"), str):
             self.seen_urls.add_from(reply["content"])  # what it returned may be read next
@@ -861,6 +865,11 @@ class TaskRun:
             from ..services.artifacts import artifact_payload
             payload = artifact_payload(reply.get("content", ""), self._attachment_store)
             if payload:
+                self._artifact(payload)
+        elif reply.get("ok") and ref is not None and ref.server == "computer":
+            # The files a page's download left for the owner are cards, as a file the member attached is (#347).
+            from ..services.artifacts import delivered_payloads
+            for payload in delivered_payloads(reply.get("content", ""), self._attachment_store):
                 self._artifact(payload)
         if not reply.get("ok") and ref.server == "media":
             from ..failures import missing_for
@@ -926,6 +935,12 @@ class TaskRun:
             self.acted = True
             if ref.kind == MCP:
                 self.written.add(ref.name)
+
+    def _note_file(self, ref: ToolRef, arguments: dict, ok: bool) -> None:
+        """Write down the path of a file a call of the file tools wrote or edited."""
+        path = arguments.get("path") if ok and ref.name in ("write_file", "edit_file") else None
+        if isinstance(path, str) and path and path not in self.files_changed:
+            self.files_changed.append(path)
 
     def continuation_state(self):
         return {"declined": sorted(self._declined), "unanswered": sorted(self._unanswered), "seen_urls": self.seen_urls.snapshot(), "acted": self.acted,
@@ -1330,7 +1345,7 @@ class TaskRun:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            logger.warning("The %s lookup failed unexpectedly: %s", name, type(exc).__name__)
+            logger.warning("The %s lookup failed unexpectedly: %s", name, worker_trace(exc, frames_kept=12, size=1200))
             return ToolResult(name, False, None, "error")
 
 
@@ -1352,12 +1367,15 @@ class TaskRun:
         """One of the task's own files, by its number from 1: never anything else."""
         index = arguments.get("index")
         if type(index) is not int or not 1 <= index <= len(self.attachments):
-            return ToolResult("read_attachment", False, None, "bad_arguments")
+            task = self._store.get(self.task_id)
+            handed_on = task is not None and task.source_turn_id is not None and task.mode in ("work", "consult")
+            return ToolResult("read_attachment", False, None, "bad_arguments", instruction=index_refusal(
+                index, [neutralize(file.name) for file in self.attachments], handed_on=handed_on))
         question = arguments.get("question")
         question = question.strip() if isinstance(question, str) and question.strip() else ""
         window = read_window(arguments)
         if window is None:
-            return ToolResult("read_attachment", False, None, "bad_arguments")
+            return ToolResult("read_attachment", False, None, "bad_arguments", instruction=window_refusal(arguments))
         attachment = self.attachments[index - 1]
         return await self._guarded(
             self._tools.read_attachment(

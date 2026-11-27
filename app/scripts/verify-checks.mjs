@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { coreCheck } from "./guardian.mjs";
 
@@ -14,13 +14,24 @@ export const CORE_CONTRACT = ["tests/evaluate", "tests/members/test_management_d
 // them whatever changed, as Vitest filters.
 export const RULE_TESTS = ["src/architecture", "guardian-contract", "feature-map", "src/design-tokens", "src/focus-rings", "src/layout.test", "src/main/nav-layer-rule.test", "src/ui-rules", "src/main/ui.test", "i18n/i18n.test", "scripts/repo-clean", "src/main/settings-paths"];
 
+// Core tests that read a file outside their package as text (the shell's method list, the app's types): a change to that
+// file runs them too. A new reading of an app file must be added here (verify.test.mjs finds every one).
+export const READ_BY_CORE_TESTS = {
+  "app/src-tauri/src/commands.rs": ["tests/architecture/test_boundaries.py", "tests/architecture/test_management_coverage.py"],
+  "app/src/main/api.ts": ["tests/architecture/test_management_coverage.py"],
+  "app/src/main/types.ts": ["tests/agent/test_self_diagnosis.py"],
+  "app/src/main/slime-ids.ts": ["tests/members/test_slime_ids.py"],
+  "core/src/raphael_core/management.py": ["tests/architecture/test_management_coverage.py"],
+};
+
 /** The core tests --changed runs for the files a change touched, from the core folder: the test folder of each core
  *  package it changed (`raphael_core/members/…` → `tests/members`), the test file of a changed top-level module
- *  (`raphael_core/app.py` → `tests/test_app.py`) and each changed test file; a file inside a folder that runs is not
- *  named again. */
+ *  (`raphael_core/app.py` → `tests/test_app.py`), each changed test file and the tests that read a changed file as text
+ *  (READ_BY_CORE_TESTS); a file inside a folder that runs is not named again. */
 export function coreTargets(changed, exists = path => existsSync(join(root, "core", path))) {
   const targets = new Set();
   for (const file of changed) {
+    for (const reader of READ_BY_CORE_TESTS[file] ?? []) if (exists(reader)) targets.add(reader);
     const inPackage = /^core\/src\/raphael_core\/([^/]+)\//.exec(file), module = /^core\/src\/raphael_core\/([^/]+)\.py$/.exec(file);
     const test = /^core\/(tests\/.+\.py)$/.exec(file);
     if (inPackage && exists(`tests/${inPackage[1]}`)) targets.add(`tests/${inPackage[1]}`);
@@ -28,6 +39,23 @@ export function coreTargets(changed, exists = path => existsSync(join(root, "cor
     else if (test && exists(test[1])) targets.add(test[1].endsWith("/conftest.py") ? test[1].slice(0, -"/conftest.py".length) : test[1]);
   }
   return [...targets].filter(target => ![...targets].some(other => other !== target && target.startsWith(`${other}/`))).sort();
+}
+
+/** Every frontend test file, as `vitest related` names them (relative to app/). */
+function frontendTests() {
+  return ["src", "scripts"].flatMap(folder => readdirSync(join(app, folder), { recursive: true })
+    .map(path => `${folder}/${String(path).replaceAll("\\", "/")}`)
+    .filter(path => /\.test\.(ts|mjs)$/.test(path) && !path.includes("node_modules/")));
+}
+
+/** The frontend tests that read a changed file as text (a stylesheet's rules, a source's words) instead of importing it:
+ *  `vitest related` follows imports alone, so a change to agent.css never ran the agent-sizing test that reads it. A test
+ *  file that names a changed file in quotes, by its base name or a path ending in it, runs too. */
+export function textReaders(front, tests = frontendTests(), read = path => readFileSync(join(app, path), "utf8")) {
+  const names = [...new Set(front.map(file => file.split("/").pop()))].filter(name => !/\.test\.(ts|mjs)$/.test(name));
+  if (!names.length) return [];
+  const named = new RegExp(`["'\`/](?:${names.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})["'\`]`);
+  return tests.filter(test => !front.includes(test) && named.test(read(test)));
 }
 
 /** The checks one verify run makes, in order. `directory` is the run's own folder, `judge` a look run to review,
@@ -48,7 +76,7 @@ export function verifyChecks({ args, directory, judge, environment = process.env
     // What a change touched, not the whole tree (AGENTS.md, "Test what changed"): the frontend tests that import a changed
     // file, the rule tests, the core tests of the changed packages, and contrast or formatting only for their own files.
     const front = changed.filter(file => /^app\/(src|scripts)\/.+\.(ts|mjs|js|css)$/.test(file)).map(file => file.slice("app/".length));
-    if (front.length) checks.push({ name: "related", command: process.execPath, args: [...vitest, "related", "--run", "--passWithNoTests", ...vitestOptions, ...front], cwd: app });
+    if (front.length) checks.push({ name: "related", command: process.execPath, args: [...vitest, "related", "--run", "--passWithNoTests", ...vitestOptions, ...front, ...textReaders(front)], cwd: app });
     checks.push({ name: "rules", command: process.execPath, args: [...vitest, "run", ...vitestOptions, ...RULE_TESTS], cwd: app });
     if (changed.some(file => /^app\/src\/.+\.css$/.test(file))) checks.push({ name: "contrast", command: process.execPath, args: [join(app, "scripts/check-palette.mjs")], cwd: app });
     const targets = coreTargets(changed);

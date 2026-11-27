@@ -18,6 +18,8 @@ from raphael_core.computer.vm import LocalVm
 from raphael_core.computer.vm_tools import BROWSER_OPEN, COMPUTER_STATUS_KEY, VmTools, vm_scope
 from raphael_core.brain.settings import SettingsStore
 
+from .test_host_page_blockers import downloads_placed
+
 
 def add_tab(browser, identifier, member, root, *, shown=True):
     tab = Tab(identifier, "target-" + identifier, "session-" + identifier, member, root)
@@ -33,6 +35,67 @@ async def host_call(tools, name, arguments, *, member=1, turn_id=1, task_id=None
     scope = ("turn", member, 3) if task_id is None else ("task", task_id)
     return await tools.call(key, arguments, member=member, scope=scope, turn_id=turn_id,
                             conversation_id=3, private=True, approver=approver, language="en", announce=None)
+
+
+async def test_each_computer_offers_the_other_one_only_in_a_private_chat(tmp_path, conn, monkeypatch):
+    from raphael_core.computer.suggestions import SUGGEST_COMPUTER_KEY
+
+    vm = LocalVm(tmp_path, settings=SettingsStore(conn))
+    vm.desktop = SimpleNamespace(installed=lambda: True)
+    vm.real_transport = False
+    monkeypatch.setattr("raphael_core.computer.host_browser.chrome_executable", lambda: "chrome")
+    tools = VmTools(SimpleNamespace(offered=lambda: []), vm, attachments=None, conn=conn)
+    tools.host_computer = HostComputerTools(vm, conn, BROWSER_OPEN)
+    member = 0
+
+    def suggestion(for_member):
+        return [tool for tool in tools.offered_for(for_member) if tool.key == SUGGEST_COMPUTER_KEY]
+
+    await tools.prepare(member)
+    on_chrome, = suggestion(member)
+    assert "the VM" in on_chrome.description and "this PC" not in on_chrome.description
+    with conn:
+        tools.set_computer_mode(member, "docker")
+    await tools.prepare(member)
+    on_vm, = suggestion(member)
+    assert "this PC" in on_vm.description and "signed-in" in on_vm.description and "company network" in on_vm.description
+    assert on_vm.schema == on_chrome.schema and on_vm.tier == on_chrome.tier
+    assert tools.tier_of(SUGGEST_COMPUTER_KEY) is not None
+
+    # A task, a background run or a chat that is not the owner's private one only reports the need.
+    for kwargs in ({"task_id": 5}, {}):
+        refused = await tools.call(SUGGEST_COMPUTER_KEY, {"reason": "The page needs a signed-in site."}, approver="auto", **kwargs)
+        assert not refused.ok and refused.kind == "vm_required"
+    assert not conn.execute("SELECT 1 FROM computer_suggestions").fetchone()
+    # Nothing is shown without a yes either way: the member can only propose.
+    assert tools.computer_mode(member) == "docker"
+
+
+async def test_a_suggestion_names_the_other_computer_and_is_refused_on_the_wrong_one(tmp_path, conn):
+    vm = LocalVm(tmp_path, settings=SettingsStore(conn))
+    tools = VmTools(SimpleNamespace(offered=lambda: []), vm, attachments=None, conn=conn)
+    tools.host_computer = HostComputerTools(vm, conn, BROWSER_OPEN)
+    member = conn.execute("INSERT INTO members (name, role, position, created_at_ms) VALUES ('M','R',0,1)").lastrowid
+    turn = conn.execute("INSERT INTO agent_turns (created_at_ms, session_id, question, route, prefix, text, status, member_id, scope) "
+                        "VALUES (1, 's', 'q', 'operate', '', '', 'running', ?, 'private')", (member,)).lastrowid
+    suggestions = tools.suggestions
+    # On Raphael Chrome only the VM can be proposed, on the VM only this PC.
+    refused = await suggestions.show(turn, member, "Needs my signed-in site.", "en", "host")
+    assert not refused.ok and refused.kind == "computer_changed"
+    with conn:
+        tools.set_computer_mode(member, "docker")
+    refused = await suggestions.show(turn, member, "Needs a shell.", "en", "docker")
+    assert not refused.ok and refused.kind == "computer_changed"
+    assert not conn.execute("SELECT 1 FROM computer_suggestions").fetchone()
+    shown = await suggestions.show(turn, member, "Needs my signed-in site.", "en", "host")
+    assert shown.ok and suggestions.views([turn])[turn]["target"] == "host"
+    # A card whose computer the owner has already chosen by hand changes nothing and continues nothing.
+    with conn:
+        tools.set_computer_mode(member, "host")
+    suggestions.resume = None
+    with pytest.raises(Exception, match="already"):
+        await suggestions.act({"turn_id": turn, "action": "switch"})
+    assert suggestions.views([turn])[turn]["state"] == "pending"
 
 
 @pytest.mark.parametrize("installed", [False, True])
@@ -67,7 +130,7 @@ async def test_only_the_assigned_computer_is_offered_with_read_only_status(tmp_p
     await tools.prepare(0)
     offered = tools.offered_for(0)
     assert any(tool.name == "vm_exec" for tool in offered)
-    assert all(tool.name != "suggest_computer" and tool.key != host_open for tool in offered)
+    assert all(tool.key != host_open for tool in offered)
     assert (await tools.call(host_open, {"url": "https://example.invalid"}, approver="auto")).kind == "computer_changed"
     result = await tools.call(COMPUTER_STATUS_KEY, {}, approver="auto")
     assert result.ok
@@ -182,6 +245,28 @@ async def test_host_files_use_the_same_local_workspace_and_team_as_docker(tmp_pa
         assert routes.member_file_path(target, "doc.txt") == vm.guest_workspace(target) + "/doc.txt"
 
 
+@pytest.mark.parametrize("project", [False, True])
+async def test_host_glob_and_grep_read_the_settings_on_the_loop_not_in_the_walk_thread(tmp_path, conn, project):
+    # The walk runs in another thread than the settings store's connection: the folders and the projects it checks each
+    # path against are read before it starts.
+    settings = SettingsStore(conn)
+    kept = tmp_path / "project"
+    kept.mkdir()
+    if project:
+        settings.set("project_folders", [str(kept)])
+    tools = HostComputerTools(LocalVm(tmp_path / "data", settings=settings), conn, BROWSER_OPEN)
+    folder = kept if project else tools.folders(1)[0]
+    (folder / "sub").mkdir(parents=True, exist_ok=True)
+    (folder / "sub" / "note.txt").write_text("find me\n", encoding="utf-8")
+    work = ("turn", 1, 2)
+    found = await tools.file_call(1, "glob", {"pattern": "**/*.txt", "path": str(folder)}, "auto", work)
+    assert found.ok, found.text
+    assert "note.txt" in found.text
+    matched = await tools.file_call(1, "grep", {"pattern": "find me", "path": str(folder)}, "auto", work)
+    assert matched.ok, matched.text
+    assert "note.txt" in matched.text
+
+
 async def test_host_writes_use_work_roots_and_need_an_explicit_yes_elsewhere(tmp_path, conn):
     machine = LocalVm(tmp_path / "data", settings=SettingsStore(conn))
     tools = HostComputerTools(machine, conn, BROWSER_OPEN)
@@ -276,6 +361,11 @@ async def test_certificate_handoff_keeps_the_origin_and_tab_for_an_existing_priv
         assert active is tab
         return {"tab_id": "original"}, []
 
+    async def unchanged(shown):
+        assert shown is tab  # Chrome's change to a visible one has its own tests (test_host_certificate.py)
+
+    monkeypatch.setattr(browser, "show_for_owner", unchanged)
+    monkeypatch.setattr(browser, "tuck_away", unchanged)
     monkeypatch.setattr(host_page, "snapshot", snapshot)
     tools.cards = SimpleNamespace(wait_for_browser=wait)
     result = await tools.call(key, {"reason": "certificate"}, member=1, scope=("task", 5), turn_id=2,
@@ -607,10 +697,10 @@ async def test_chrome_has_scoped_tabs_page_input_private_forms_and_downloads(tmp
             async with asyncio.timeout(10):
                 while not placed.is_file():
                     await asyncio.sleep(0.05)
-                await asyncio.gather(*browser.transfers)
+            await downloads_placed(browser)
             assert placed.read_text() == "download contents" and not (root / "two" / "report.txt").exists()
             assert (root / "two" / ".raphael" / ".gitignore").read_text().splitlines()[-1] == "*"
-            assert browser.take_downloads(2) == [".raphael/downloads/report.txt"] and browser.take_downloads(2) == []
+            assert browser.take_downloads(2) == [placed] and browser.take_downloads(2) == []
             await browser.close_tab(one)
             listing = await browser.cdp.call("Target.getTargets")
             targets = {item["targetId"] for item in listing["targetInfos"] if item["type"] == "page"}

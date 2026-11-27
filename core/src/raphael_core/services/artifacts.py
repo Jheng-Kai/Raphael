@@ -22,6 +22,23 @@ def artifact_payload(content, store):
         return None
 
 
+def delivered_payloads(content, store):
+    """The file cards of a computer tool's result that names the files it delivered, such as the downloads a page made (#347):
+    only a file the attachment store holds is one."""
+    if store is None:
+        return
+    try:
+        data = json.loads(content) if isinstance(content, str) else content
+        if isinstance(data, dict) and isinstance(data.get("content"), str):
+            data = json.loads(data["content"])
+        files = data.get("downloads")
+    except (ValueError, AttributeError):
+        return
+    for file in files if isinstance(files, list) else ():
+        if isinstance(file, dict) and (payload := artifact_payload({"attachment": file}, store)):
+            yield payload
+
+
 def turn_files(history, turn_id, store):
     seen = set()
     for message in history.messages([turn_id]).get(turn_id, []):

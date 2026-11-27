@@ -59,7 +59,7 @@ def test_the_defaults_are_the_documented_ones():
         "routine_webhook_port": 0,
         "routine_owner_seen_ms": 0,
         "routine_run_window": [],
-        "chief_pinned": False,
+        "delegate_parallel": 4,
         "raphael_draft_first": True,
         "raphael_tools": None,
         "raphael_notify": False,

@@ -192,10 +192,14 @@ async def test_failed_greeting_is_replaced_on_retry_and_owner_input_closes_retry
     assert saved['source'] == 'greeting' and saved['text'] == 'I am Mia. What can I take off your plate?'
     client.chats = [live_said('Tell me the outcome.')]
     await typed(rig, 'Please help', new['id'])
-    for identifier in (new['id'], 0):
-        with pytest.raises(RpcError) as caught:
-            await rig.call('members.greet', {'id': identifier})
-        assert caught.value.code == INVALID_PARAMS
+    with pytest.raises(RpcError) as caught:
+        await rig.call('members.greet', {'id': new['id']})
+    assert caught.value.code == INVALID_PARAMS
+    # Raphael is greeted like any member whose conversation holds no owner message (its tour), and refused once it does
+    await rig.call('agent.ask', {'session_id': 'raphael-said', 'text': 'hello', 'ui_language': 'en', 'source': 'app', 'member_id': 0})
+    with pytest.raises(RpcError) as caught:
+        await rig.call('members.greet', {'id': 0})
+    assert caught.value.code == INVALID_PARAMS
 
 
 @pytest.mark.parametrize('brain', ['codex', 'claude', 'gemini'])

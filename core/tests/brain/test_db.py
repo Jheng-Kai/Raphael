@@ -435,7 +435,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 99
+LATEST = 102
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -770,7 +770,9 @@ SCHEMA_V98 = {**SCHEMA_V94, "members": [*SCHEMA_V94["members"], "computer_mode T
     "computer_suggestions": ["turn_id INTEGER PK", "member_id INTEGER NOT NULL", "reason TEXT NOT NULL", "language TEXT NOT NULL",
                              "state TEXT NOT NULL DEFAULT 'pending'", "installed INTEGER NOT NULL"]}
 
-PENDING_UPGRADES = (63, 64, *range(67, 100))
+SCHEMA_V100 = {**SCHEMA_V98, "computer_suggestions": [*SCHEMA_V98["computer_suggestions"], "target TEXT NOT NULL DEFAULT 'docker'"]}
+
+PENDING_UPGRADES = (63, 64, *range(67, 103))
 
 
 def test_upgrade_preserves_computer_choice_and_removes_desktop_control(monkeypatch, tmp_path):
@@ -786,6 +788,21 @@ def test_upgrade_preserves_computer_choice_and_removes_desktop_control(monkeypat
     assert tuple(conn.execute("SELECT name,computer_mode FROM members").fetchone()) == ("Member", "docker")
     assert conn.execute("SELECT value FROM settings WHERE key='raphael_desktop_control'").fetchone() is None
     assert conn.execute("SELECT value FROM settings WHERE key='raphael_computer_mode'").fetchone()[0] == '"docker"'
+
+
+def test_upgrade_keeps_an_open_suggestion_as_the_offer_of_the_virtual_machine(monkeypatch, tmp_path):
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 99)
+        conn = db.connect(tmp_path / "suggestion-v99.db")
+    with conn:
+        conn.execute("INSERT INTO members (name, role, position, created_at_ms) VALUES ('Member','Helper',0,1)")
+        conn.execute("INSERT INTO agent_turns (created_at_ms, session_id, question, route, prefix, text, status, member_id, scope) "
+                     "VALUES (1, 's', 'q', 'operate', '', '', 'done', 1, 'private')")
+        conn.execute("INSERT INTO computer_suggestions (turn_id, member_id, reason, language, installed) VALUES (1, 1, 'Needs a shell.', 'en', 1)")
+    db.migrate(conn)
+    assert conn.execute("SELECT target FROM computer_suggestions").fetchone()[0] == "docker"
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("UPDATE computer_suggestions SET target='elsewhere'")
 
 
 def test_upgrade_defaults_to_chrome_if_a_previous_build_removed_the_choice(monkeypatch, tmp_path):
@@ -824,7 +841,7 @@ def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries
     db.migrate(conn)
     assert steps == expected_steps
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V98.items():
+    for table, columns in SCHEMA_V100.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     entry = conn.execute("SELECT kind,label,hint,origin,members,credential FROM vault_entries WHERE id='legacy-login'").fetchone()
@@ -931,7 +948,7 @@ def test_v42_preserves_existing_google_cards_and_adds_compatible_metadata_defaul
     migrated.close()
 
 
-def test_v39_makes_raphael_the_primary_contact_of_every_older_team_and_allows_one_member_at_most(tmp_path):
+def test_v39_allows_one_primary_contact_at_most_and_v101_gives_an_older_team_its_first_slime_as_the_chief(tmp_path):
     path = tmp_path / "v38.db"
     raw = sqlite3.connect(path)
     for version in range(1, 39):
@@ -942,8 +959,7 @@ def test_v39_makes_raphael_the_primary_contact_of_every_older_team_and_allows_on
     raw.close()
     migrated = db.connect(path)
     assert migrated.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    assert [tuple(row) for row in migrated.execute("SELECT id, primary_contact FROM members ORDER BY id")] == [(1, 0), (2, 0)]
-    migrated.execute("UPDATE members SET primary_contact = 1 WHERE id = 1")
+    assert [tuple(row) for row in migrated.execute("SELECT id, primary_contact FROM members ORDER BY id")] == [(1, 1), (2, 0)]
     with pytest.raises(sqlite3.IntegrityError):
         migrated.execute("UPDATE members SET primary_contact = 1 WHERE id = 2")
     with pytest.raises(sqlite3.IntegrityError):
@@ -994,7 +1010,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V98) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V100) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -1015,7 +1031,7 @@ def test_connect_creates_the_latest_schema(conn):
         "one_standard_conversation",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V98.items():
+    for table, columns in SCHEMA_V100.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [
@@ -1032,8 +1048,8 @@ def test_unread_migration_keeps_turn_and_manual_marks_after_read_only_preflight(
     with monkeypatch.context() as old:
         old.setattr(db, "LATEST_VERSION", 93)
         with closing(db.connect(path)) as conn:
-            quick = Conversations(conn).quick()
-            turn = AgentHistory(conn).add(session_id="quick", question="Question", route="answer", prefix="",
+            quick = Conversations(conn).main(0)
+            turn = AgentHistory(conn).add(session_id="raphael", question="Question", route="answer", prefix="",
                                           text="Reply", status="done", conversation_id=quick, member_id=0)
             missing_turn = turn + 1
             with conn:

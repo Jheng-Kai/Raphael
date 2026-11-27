@@ -9,7 +9,7 @@ async def test_every_meeting_participant_gets_a_turn_and_corrections_wake_them_a
     source = meeting_source(rig, 'all')
     result = await exchange.meeting({'room_id':room['id'],'agenda':'Review this release'}, 'en', source)
     assert result['state'] == 'running'
-    assert [row['member_id'] for row in rig.background.submitted] == [0]
+    assert [row['member_id'] for row in rig.background.submitted] == [rig.lead]
     # A repeated tool call cannot reset the queue or replay the first member.
     await exchange.meeting({'room_id':room['id'],'agenda':'Review this release'}, 'en', source)
     for expected in [*ids]:
@@ -18,21 +18,21 @@ async def test_every_meeting_participant_gets_a_turn_and_corrections_wake_them_a
     await finish(rig, exchange, 'The release needs one correction. (pass)')
     state = await history(rig, room)
     assert state['exchange']['state'] == 'done' and state['meeting']['state'] == 'done'
-    assert rig.service.team_context(0, 'en')['meetings'][0]['state'] == 'done'
+    assert rig.service.team_context(rig.lead, 'en')['meetings'][0]['state'] == 'done'
     assert state['messages'][-1]['text'] == 'The release needs one correction.'
-    assert [row['member_id'] for row in rig.background.submitted] == [0,*ids]
+    assert [row['member_id'] for row in rig.background.submitted] == [rig.lead,*ids]
     await send(rig, room, 'Correction: the release is tomorrow', key='correction')
-    assert rig.background.submitted[-1]['member_id'] == 0
-    for _ in [0,*ids]:
+    assert rig.background.submitted[-1]['member_id'] == rig.lead
+    for _ in [rig.lead,*ids]:
         await finish(rig, exchange, '(pass)')
-    assert [row['member_id'] for row in rig.background.submitted] == [0,*ids,0,*ids]
+    assert [row['member_id'] for row in rig.background.submitted] == [rig.lead,*ids,rig.lead,*ids]
     assert (await history(rig, room))['meeting']['state'] == 'done'
 
 
 async def test_an_addressed_meeting_followup_only_schedules_its_recipient(rig, exchange):
     room, ids = await team(rig)
     await exchange.meeting({'room_id':room['id'], 'agenda':'Review this release'}, 'en', meeting_source(rig, 'addressed'))
-    for _ in [0, *ids]:
+    for _ in [rig.lead, *ids]:
         await finish(rig, exchange, '(pass)')
     before = len(rig.background.submitted)
     await send(rig, room, '@Alice Execute your assigned work now', key='execute')

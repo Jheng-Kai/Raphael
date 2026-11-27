@@ -125,13 +125,13 @@ describe("a member's panel", () => {
     panel.el.querySelector<HTMLElement>('[data-panel-file="page:abc"]')!.click();
     expect(openTurn).toHaveBeenCalledExactlyOnceWith(3, 12, 41);
   });
-  test("Raphael's face follows the current custom avatar on redraw", async () => {
+  test("Raphael's face is the first blue slime, whatever picture the owner has for the voice", async () => {
     current=0; const panel=mount(); await flush();
-    const avatar={url:'data:image/png;base64,c2FtcGxl',crop:{x:.5,y:.5,zoom:1}};
-    setAvatar(avatar); panel.draw();
-    expect(panel.el.querySelector<HTMLImageElement>('.mb-who img')?.getAttribute('src')).toBe(avatar.url);
+    setAvatar({url:'data:image/png;base64,c2FtcGxl',crop:{x:.5,y:.5,zoom:1}}); panel.draw();
+    expect(panel.el.querySelector('.mb-who img')).toBeNull();
+    expect(panel.el.querySelector('.mb-who .mb-av-slime svg.slime')).not.toBeNull();
     setAvatar(null); panel.draw();
-    expect(panel.el.querySelector('.mb-who img')?.getAttribute('src')).not.toBe(avatar.url);
+    expect(panel.el.querySelector('.mb-who .mb-av-slime svg.slime')).not.toBeNull();
   });
 
   test("the first view has the routines before conversations, and the three tabs", async () => {
@@ -152,28 +152,20 @@ describe("a member's panel", () => {
     expect([...writes, ...observer.takeRecords()]).toHaveLength(0);
     observer.disconnect();
   });
-  test("a member has no conversation list, and Raphael's panel switches between its conversation and quick questions", async () => {
+  test("no panel lists conversations: a member and Raphael each have the one, which the header opens", async () => {
     const panel = mount();
-    const open = vi.fn();
-    host.openConversation = open;
     const original = api.core.getMockImplementation()!;
     api.core.mockImplementation(async (method, params) => method === "conversations.list"
-      ? { conversations: params.member_id === 0
-        ? [{ id: 1, member_id: 0, title: "Weekly plan", updated_at_ms: Date.now(), is_default: 1, kind: "standard" }, { id: 2, member_id: 0, title: "", updated_at_ms: Date.now(), kind: "quick" }]
-        : [{ id: 91, member_id: params.member_id, title: "Research", updated_at_ms: Date.now(), is_default: 1, kind: "standard" }] }
+      ? { conversations: [{ id: 1, member_id: params.member_id, title: "Weekly plan", updated_at_ms: Date.now(), is_default: 1 }] }
       : original(method, params));
-    panel.draw(); await flush();
-    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
-    expect(panel.el.querySelector('[data-conversation-new]')).toBeNull();
-    expect(panel.el.textContent).not.toContain("Research");
-    current = 0; panel.showMember(); await flush();
-    const rows = [...panel.el.querySelectorAll<HTMLButtonElement>('[data-slot="conversations"] [data-conversation-open]')];
-    expect(rows.map(row => row.querySelector('span')!.textContent)).toEqual([t('conversations.main'), t('conversations.quick')]);
-    expect(panel.el.querySelector('[data-slot="conversations"] input')).toBeNull();
-    rows[1]!.click();
-    expect(open).toHaveBeenCalledWith(0, 2);
-    current = 4; panel.showMember(); await flush();
-    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
+    for (const member of [4, 0]) {
+      current = member; panel.showMember(); await flush();
+      expect(panel.el.querySelector('[data-slot="conversations"]'), `member ${member}`).toBeNull();
+      expect(panel.el.querySelector('[data-conversation-open], [data-conversation-more], [data-conversation-new]')).toBeNull();
+      expect(panel.el.textContent).not.toContain("Weekly plan");
+      expect(panel.el.querySelector('.mb-panel-routines')).not.toBeNull();
+    }
+    expect(api.core).not.toHaveBeenCalledWith("conversations.list", expect.anything());
   });
 
   test("the head is the gear on the left, apart from the × on the right, and share and hide are not here", async () => {
@@ -234,28 +226,29 @@ describe("Raphael's panel", () => {
     await flush();
     expect(panel.el.querySelector("input, textarea")).toBeNull();
     expect(panel.el.querySelector(".mb-panel-identity > b")!.textContent).toBe("拉斐爾");
-    // The first blue slime: its emblem shows only in voice.
-    expect(panel.el.querySelector(".mb-face-edit .av.mb-av-slime svg.slime")).not.toBeNull();
+    // The first blue slime: its emblem shows only in voice. It is a face, not a button: nothing of it is changed here.
+    expect(panel.el.querySelector(".mb-panel-identity > .av.mb-av-slime svg.slime")).not.toBeNull();
+    expect(panel.el.querySelector(".mb-face-edit")).toBeNull();
     expect(panel.el.querySelector('[data-det="group"]')).toBeNull();
     expect(api.routinesList).toHaveBeenCalledWith(0);
   });
 
-  test("its picture is changed here: the members' slimes, the one it wears pressed, and a picture from the PC", async () => {
+  test("its picture is not changed here: no picker opens, and a slime's still does", async () => {
     current = 0;
-    const panel = mount();
+    let panel = mount();
+    await flush();
+    expect(panel.el.querySelector('[data-det="avatar"]')).toBeNull();
+    expect(document.getElementById("app-popover")).toBeNull();
+    expect(host.update).not.toHaveBeenCalled();
+    document.body.innerHTML = "";
+    current = 3;
+    panel = mount();
     await flush();
     panel.el.querySelector<HTMLElement>('[data-det="avatar"]')!.click();
-    // The first member is dressed as every member is: it wears the first blue slime until the owner chose another.
-    expect(document.querySelector('#app-popover [data-slime-character="blue-plain"]')!.getAttribute("aria-pressed")).toBe("true");
     document.querySelector<HTMLElement>('#app-popover [data-slime-character="horns-red"]')!.click();
     await flush();
-    expect(host.update).toHaveBeenCalledWith(0, { avatar: "slime:horns-red" });
-    const fromPc = [...document.querySelectorAll<HTMLElement>("#app-popover .menu-action")];
-    expect(fromPc.map((b) => b.textContent)).toEqual(["從電腦選…"]);
-    api.avatarPick.mockResolvedValue(null);
-    fromPc[0]!.click();
-    await flush();
-    expect(api.avatarPick).toHaveBeenCalled();
+    expect(host.update).toHaveBeenCalledWith(3, { avatar: "slime:horns-red" });
+    expect([...document.querySelectorAll("#app-popover .menu-action")].map((b) => b.textContent)).toEqual([]);
   });
 });
 
@@ -355,14 +348,14 @@ test("a routine's switch turns it on or off from the row without opening the edi
 });
 
 describe("primary changes do not add face badges", () => {
-  const withPrimary = (primary_id: number): MembersList => ({ ...LIST, team_context: { primary_id } as MembersList["team_context"] });
+  const withPrimary = (primary_id: number | null): MembersList => ({ ...LIST, team_context: { primary_id } as MembersList["team_context"] });
   test.each([0, 3])("member %s keeps its picture without a primary star", async id => {
     current = id;
     const panel = mount(); await flush();
-    for (const primary of [id, 4, 0]) {
+    for (const primary of [id, 4, null]) {
       host.list = () => withPrimary(primary); panel.draw();
       expect(panel.el.querySelector('.mb-star')).toBeNull();
-      expect(panel.el.querySelector('.mb-panel-identity .mb-face-edit .av')).not.toBeNull();
+      expect(panel.el.querySelector(id === 0 ? '.mb-panel-identity > .av' : '.mb-panel-identity .mb-face-edit .av')).not.toBeNull();
     }
     if (id === 0) expect(panel.el.querySelector('.mb-panel-identity .mb-av-slime svg.slime')).not.toBeNull();
   });
@@ -373,7 +366,7 @@ describe("the computer lives in its own tab only", () => {
     for (const id of [3, 0]) {
       current = id; const panel = mount(); await flush();
       const sections = [...panel.el.querySelectorAll('.mb-tab-body > section')].map(section => section.className);
-      expect(sections).toEqual(id === 0 ? ['mb-panel-routines', '', 'mb-panel-suggest'] : ['mb-panel-routines', 'mb-panel-suggest']);
+      expect(sections).toEqual(['mb-panel-routines', 'mb-panel-suggest']);
       const body = panel.el.querySelector('.mb-tab-body')!;
       expect(body.querySelector('[class*="computer"], [data-det^="computer"], [data-k*="computer"], [data-computer-thumb]')).toBeNull();
       expect([...body.querySelectorAll('.mb-dh')].map(head => head.textContent)).not.toContain(t('members.panelTab.computer'));
@@ -385,5 +378,30 @@ describe("the computer lives in its own tab only", () => {
     expect([...panel.el.querySelectorAll<HTMLElement>('[data-det="tab"]')].map(tab => tab.dataset.tab)).toEqual(['details', 'library', 'computer']);
     panel.el.querySelector<HTMLElement>('[data-det="tab"][data-tab="computer"]')!.click();
     expect(panel.el.dataset.detailsTab).toBe('computer');
+  });
+});
+
+describe("Raphael's panel and the chief's", () => {
+  const asChief = (): void => { host.list = () => ({ ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, chief: true } : m), team_context: { primary_id: 3 } as MembersList["team_context"] }); };
+
+  test("neither Raphael's panel nor the chief's lists conversations: each has the one, which the header opens", async () => {
+    current = 3;
+    const panel = mount(); await flush();
+    asChief(); panel.draw(); await flush();
+    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
+    current = 0; panel.showMember(); panel.draw(); await flush();
+    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
+  });
+
+  test("Raphael's face is only a face: no picture to change, no role, and a slime's panel keeps its picker", async () => {
+    current = 0;
+    let panel = mount(); await flush();
+    expect(panel.el.querySelector('[data-det="avatar"], .mb-face-edit, .mb-face-pencil')).toBeNull();
+    expect(panel.el.querySelector(".mb-panel-identity .mb-av-slime svg.slime")).not.toBeNull();
+    expect(panel.el.querySelector(".mb-panel-identity small")).toBeNull();
+    document.body.innerHTML = "";
+    current = 3;
+    panel = mount(); await flush();
+    expect(panel.el.querySelector('[data-det="avatar"]')).not.toBeNull();
   });
 });

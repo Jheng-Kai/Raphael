@@ -103,6 +103,6 @@ class AssistantRig:
     async def confirm(self, confirm_id, approved=True):
         return await self.call("agent.confirm", {"id": confirm_id, "approved": approved})
 
-    async def turns(self, *, quick=True):
-        conversation = self.service.conversations.quick() if quick else self.service.conversations.main()
+    async def turns(self):
+        conversation = self.service.conversations.main(0)
         return (await self.call("agent.history.list", {"conversation_id": conversation}))["turns"]

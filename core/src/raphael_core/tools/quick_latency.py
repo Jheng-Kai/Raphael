@@ -141,10 +141,7 @@ async def replay(args):
                     service._settings.set("agent_model", args.formal_model)
                     service._settings.set("quick_model", args.model)
                     service._settings.set("quick_effort", args.effort)
-                    formal = service.conversations.main()
-                    service._history.add(session_id="formal", question="FORMAL_CONTEXT_SENTINEL", route="answer",
-                        prefix="", text="Formal project", status="done", conversation_id=formal)
-                    quick = service.conversations.quick()
+                    quick = service.conversations.main()  # Raphael's one conversation holds the earlier quick answers
                     for n in range(12):
                         service._history.add(session_id=f"seed-{n}", question=f"QUICK_SEED_{n:02}", route="answer",
                             prefix="", text="Earlier quick answer", status="done", conversation_id=quick)
@@ -158,7 +155,6 @@ async def replay(args):
                             if turn is None or turn.status != "done":
                                 raise RuntimeError("replay turn did not complete")
                             if fake:
-                                assert "FORMAL_CONTEXT_SENTINEL" not in json.dumps(fake.calls)
                                 assert "QUICK_SEED_00" not in json.dumps(fake.calls)
                                 assert "QUICK_SEED_11" in json.dumps(fake.calls[0])
                                 assert all(call["model"] == (args.model or args.formal_model) for call in fake.calls)
@@ -173,7 +169,7 @@ async def replay(args):
                         assert recorded.count("open") == len(range(0, args.count, 3))
                         assert recorded.count("routine_list") == len(range(2, args.count, 3))
                         assert all(trace.traces[n]["first_step"] is not None for n in range(args.count))
-                        print(json.dumps({"fake": True, "turns": args.count, "scope": "quick-only", "model": args.model or args.formal_model,
+                        print(json.dumps({"fake": True, "turns": args.count, "scope": "quick-asks", "model": args.model or args.formal_model,
                             "effort": args.effort, "model_calls": len(fake.calls), "routing_calls": fake.routes, "recorded_tools": recorded}))
                 finally:
                     await service.aclose()

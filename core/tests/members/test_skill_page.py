@@ -67,8 +67,8 @@ async def test_the_switch_and_the_document_change_together_or_not_at_all(rig):
 
 
 @pytest.mark.parametrize("text,kind", [
-    pytest.param("No frontmatter at all.", "description", id="no-frontmatter"),
-    pytest.param("---\nname: writing\n---\nNo description.", "description", id="no-description"),
+    pytest.param("No frontmatter at all.", "skill", id="no-frontmatter"),
+    pytest.param("---\nname: writing\n---\nNo description.", "skill", id="no-description"),
     pytest.param("---\nname: writing\ndescription: ok\n---\n" + "x" * MAX_SKILL_BYTES, "size", id="too-large"),
     pytest.param("   ", "skill", id="blank"),
     pytest.param("---\nname: writing\ndescription: ok\n---\nnul\x00byte", "skill", id="nul-byte"),

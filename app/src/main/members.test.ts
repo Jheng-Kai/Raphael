@@ -12,9 +12,9 @@ import {
   memberRole,
   memberPlaceholder,
   memberSections,
-  memberDisplayList,
   orderedMembers,
-  primaryFirst,
+  chiefFirst,
+  primaryIdOf,
   parseSource,
   previewOf,
   raphaelOf,
@@ -23,19 +23,19 @@ import {
   plainLine,
   stableMember,
 } from "./members";
-import { firstBotName, rememberFirstBot } from "./first-bot";
+import { raphaelName } from "./raphael";
 import { memberColor } from "./owner-bubble";
 import type { Member, MembersList } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
 
-test.each([["zh-TW", "幕僚長"], ["en", "Chief of staff"], ["ja", "参謀長"]] as const)("Raphael's role uses one localized label in %s", (locale, expected) => {
+test.each([["zh-TW", "幕僚長"], ["en", "Chief of staff"], ["ja", "参謀長"]] as const)("the chief's role uses one localized label in %s, and Raphael has none", (locale, expected) => {
   setLocale(locale);
-  expect(memberRole({ id: 0, role: "Legacy assistant" })).toBe(expected);
-  expect(memberMatches(member(0, { role: "Legacy assistant" }), expected)).toBe(true);
   expect(memberRole({ id: 1, role: "Research" })).toBe("Research");
   expect(memberRole({ id: 1, role: "Research", chief: true })).toBe(expected);
-  expect(memberRole({ id: 0, role: "Core assistant", chief: false })).toBe("Core assistant");
+  expect(memberMatches(member(1, { role: "Legacy assistant", chief: true }), expected)).toBe(true);
+  expect(memberRole({ id: 0, role: "" })).toBe("");
+  expect(memberRole({ id: 1, role: "Core assistant", chief: false })).toBe("Core assistant");
 });
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
@@ -46,7 +46,7 @@ function member(id: number, more: Partial<Member> = {}): Member {
 
 const LIST: MembersList = {
   members: [
-    member(0, { name: "拉斐爾" }),
+    member(0, { name: "拉斐爾", raphael: true }),
     member(1, { name: "進度官", role: "Raphael 專案", group_id: 10 }),
     member(2, { name: "文書", role: "資料整理", group_id: 10, waiting: true, preview: "移動 12 個檔案" }),
     member(3, { name: "日文老師", role: "N2 嚴格版", group_id: 20 }),
@@ -82,7 +82,7 @@ describe("the column's sections", () => {
 
   test("Raphael is the list's member 0, or its name before there is a list", () => {
     expect(raphaelOf(LIST).name).toBe("拉斐爾");
-    expect(raphaelOf(null)).toMatchObject({ id: 0, name: "拉斐爾" });
+    expect(raphaelOf(null)).toMatchObject({ id: 0, name: "拉斐爾", raphael: true });
   });
 
   test("collapses inner whitespace in names and reserves Raphael's name in every language", () => {
@@ -92,12 +92,6 @@ describe("the column's sections", () => {
     expect(isMemberNameTaken("raphael", [])).toBe(true);
     expect(isMemberNameTaken("ラファエル", [])).toBe(true);
     expect(isMemberNameTaken("進度官", ["日文 老師"])).toBe(false);
-  });
-
-  test("the first member may keep or take Raphael's name, the app's and the voice's, but not another member's", () => {
-    expect(isMemberNameTaken("拉斐爾", [], true)).toBe(false);
-    expect(isMemberNameTaken("Raphael", ["小晴"], true)).toBe(false);
-    expect(isMemberNameTaken("小晴", ["小晴"], true)).toBe(true);
   });
 });
 
@@ -111,22 +105,21 @@ describe("primary display order", () => {
     expect(plainLine("比較如下\n| 方案 | 費用 |\n|---|:--:|\n| A | 10 |\n```mermaid\nflowchart TD\n A-->B\n```\n結束")).toBe("比較如下 方案 費用 A 10 結束");
   });
 
-  test("swaps identities without mutating the source, including group and pinned placement", () => {
+  test("the chief leads the pickers and the rest follow in their groups, without mutating the source and without Raphael", () => {
     const list = { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, pinned: true } : m), team_context: { primary_id: 3 } } as MembersList;
-    const before = JSON.stringify(list), display = memberDisplayList(list);
-    expect(display.members.map(m => m.id)).toEqual([3, 1, 2, 0, 4, 5]);
-    expect(display.members.find(m => m.id === 0)).toMatchObject({ group_id: 20, name: '拉斐爾' });
-    expect(display.members.find(m => m.id === 0)?.pinned).toBeFalsy();
-    expect(orderedMembers(list).map(m => m.id)).toEqual([3, 1, 2, 0, 4, 5]);
+    const before = JSON.stringify(list);
+    expect(orderedMembers(list).map(m => m.id)).toEqual([3, 1, 2, 4, 5]);
     expect(JSON.stringify(list)).toBe(before);
   });
-  test("default, absent and invalid primaries retain Raphael first and original group order", () => {
-    for (const primary_id of [undefined, 0, 999]) {
+  test("absent, invalid and Raphael's primaries mean no chief, and the groups then keep their own order", () => {
+    for (const primary_id of [undefined, null, 0, 999]) {
       const list = { ...LIST, team_context: { primary_id } } as MembersList;
-      expect(orderedMembers(list).map(m => m.id)).toEqual([0, 1, 2, 3, 4, 5]);
+      expect(primaryIdOf(list)).toBeNull();
+      expect(orderedMembers(list).map(m => m.id)).toEqual([1, 2, 3, 4, 5]);
     }
-    expect(orderedMembers(null).map(m => m.id)).toEqual([0]);
-    expect(primaryFirst([{ id: 2 }, { id: 1 }], 1).map(m => m.id)).toEqual([2, 1]);
+    expect(orderedMembers(null).map(m => m.id)).toEqual([]);
+    expect(chiefFirst([{ id: 2 }, { id: 1 }, { id: 0 }], 1).map(m => m.id)).toEqual([1, 2]);
+    expect(chiefFirst([{ id: 2 }, { id: 1 }], null).map(m => m.id)).toEqual([2, 1]);
   });
 });
 
@@ -151,20 +144,15 @@ describe("the faces", () => {
     expect(html).not.toMatch(/app-emblem|letter|拉/);
   });
 
-  test("the first member wears the slime the owner dressed it in, everywhere: its face, its colour, its name", () => {
+  test("it is that slime whatever the roster says of its look, its colour and its name too", () => {
     const dressed = { ...LIST, members: LIST.members.map((m) => (m.id === 0 ? { ...m, name: "小藍", avatar: "slime:horns-red" } : m)) };
-    const html = faceHTML(raphaelOf(dressed), 64);
-    expect(html).toContain("#F23B3B");
-    expect(html).not.toContain("#3DB5FF");
-    expect(memberColor(raphaelOf(dressed))).toBe("#F23B3B");
-    // A place that knows only the id draws and names it as the last roster did.
-    rememberFirstBot(dressed);
-    expect(faceHTML({ id: 0, name: "" }, 22)).toContain("#F23B3B");
-    expect(firstBotName()).toBe("小藍");
-    expect(raphaelOf(null).name).toBe("小藍");
-    rememberFirstBot(LIST);
+    expect(faceHTML(raphaelOf(dressed), 64)).toContain("#3DB5FF");
+    expect(faceHTML(raphaelOf(dressed), 64)).not.toContain("#F23B3B");
+    expect(memberColor(raphaelOf(dressed))).toBe(memberColor({ id: 0, avatar: "" }));
+    // A place that knows only the id draws and names it the same way.
     expect(faceHTML({ id: 0, name: "" }, 22)).toContain("#3DB5FF");
-    expect(firstBotName()).toBe("拉斐爾");
+    expect(raphaelName()).toBe("拉斐爾");
+    expect(raphaelOf(null).name).toBe("拉斐爾");
   });
 
   test("a member is a slime, whatever picture an older build stored for it", () => {

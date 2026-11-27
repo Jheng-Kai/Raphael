@@ -15,7 +15,6 @@ import { createAgent } from "./agent";
 
 const conversations = [
   { id: 1, member_id: 0, is_default: 1, kind: "main", title: "", created_at_ms: 1, updated_at_ms: 1 },
-  { id: 4, member_id: 0, is_default: 0, kind: "quick", title: "", created_at_ms: 1, updated_at_ms: 1 },
   { id: 31, member_id: 3, is_default: 1, kind: "main", title: "", created_at_ms: 1, updated_at_ms: 1 },
 ];
 let turns: AgentTurn[];
@@ -24,14 +23,9 @@ let agent: ReturnType<typeof createAgent>;
 const $ = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 const flush = async () => { for (let i = 0; i < 60; i++) await Promise.resolve(); };
 const refresh = async (event: MainEvent = { type: "MembersChanged" }) => { emit(event); await vi.advanceTimersByTimeAsync(400); await flush(); };
-const choose = async (member: number, conversation: number) => {
-  $(`.mb-col [data-member="${member}"]`).click();
-  await flush();
-  // A member has one conversation; only Raphael's panel switches between its conversation and the quick questions.
-  if (member !== 0) return;
-  if ($<HTMLElement>(".mb-det").hidden) $(".conversation-trigger").click();
-  await flush();
-  $(`[data-conversation-open="${conversation}"]`).click();
+const choose = async (member: number, _conversation = 1) => {
+  // Raphael is not in the sidebar: its space opens from the account menu's route. Each member, Raphael too, has the one conversation.
+  if (member === 0) agent.show("raphael"); else $(`.mb-col [data-member="${member}"]`).click();
   await flush();
 };
 const live = (more: Partial<AgentTurn> = {}): AgentTurn => ({
@@ -79,14 +73,14 @@ test("while work runs the field sends message after message and stops nothing", 
 });
 
 test("a quick voice turn replaces recognition with the transcript while the answer is pending", async () => {
-  mount("toggle"); await flush(); await choose(0, 4);
+  mount("toggle"); await flush(); await choose(0, 1);
   emit({ type: "Dictation", phase: "listening", agent: true, member_id: 0 });
   emit({ type: "Dictation", phase: "processing", agent: true, member_id: 0 });
   expect(document.querySelector('[data-key="hearing"]')).not.toBeNull();
   expectStop("ack");
 
   const question = "Will it rain tomorrow?";
-  turns = [live({ source: "voice", question, conversation_id: 4 })];
+  turns = [live({ source: "voice", question, conversation_id: 1 })];
   await refresh({ type: "AgentTurn", turn_id: 11, member_id: 0 });
   expect(document.querySelector('[data-key="hearing"]')).toBeNull();
   expect($('.tn[data-id="11"] .me').textContent).toContain(question);
@@ -106,7 +100,7 @@ test.each([[0, 1], [3, 31]])("the composer voice press stays in member %s conver
   await vi.advanceTimersByTimeAsync(300); await flush();
   expect(api.agentVoice.mock.calls).toEqual([["down", member, conversation]]);
   emit({ type: "Dictation", phase: "listening", agent: true, member_id: member });
-  await choose(0, 4);
+  await choose(member === 0 ? 3 : 0, member === 0 ? 31 : 1);
   pointer(button, "pointerup"); pointerClick(button); await flush();
   expect(api.agentVoice.mock.calls).toEqual([["down", member, conversation], ["up", member, conversation]]);
   emit({ type: "Dictation", phase: "processing", agent: true, member_id: member });
@@ -148,7 +142,7 @@ const holdAndRelease = async (member: number) => {
   pointer(button, "pointerup"); pointerClick(button); await flush();
 };
 
-test.each([[0, 4], [3, 31]])("the voice button sends the composer's words and picture with the recording (member %s, conversation %s)", async (member, conversation) => {
+test.each([[0, 1], [3, 31]])("the voice button sends the composer's words and picture with the recording (member %s, conversation %s)", async (member, conversation) => {
   mount(); await flush(); await choose(member, conversation);
   await compose("Look at this");
   await holdAndRelease(member);
@@ -448,11 +442,11 @@ test("a pending request keeps one live avatar through the running announcement w
 });
 
 test("a spoken pending request becomes one live avatar when its running turn arrives", async () => {
-  mount(); await flush(); await choose(0, 4);
+  mount(); await flush(); await choose(0, 1);
   emit({ type: "Dictation", phase: "processing", agent: true, member_id: 0 });
   await vi.advanceTimersByTimeAsync(3000);
   expect($(".is-pending .live-presence")).not.toBeNull();
-  turns = [live({ conversation_id: 4, source: "voice" })];
+  turns = [live({ conversation_id: 1, source: "voice" })];
   await refresh({ type: "AgentTurn", turn_id: 11, member_id: 0 });
   expect($('[data-id="11"] .live-presence')).not.toBeNull();
   expect(document.querySelector(".work-time")).toBeNull();
@@ -470,7 +464,7 @@ test("a finished paced reply keeps its settled work chip without a second waitin
   expect($(".work-toggle")).toBeNull();
 });
 
-test.each([[0, 4], [3, 31]])("voice processing for member %s is stoppable before any turn is announced", async (member, conversation) => {
+test.each([[0, 1], [3, 31]])("voice processing for member %s is stoppable before any turn is announced", async (member, conversation) => {
   mount(); await flush(); await choose(member, conversation);
   emit({ type: "Dictation", phase: "listening", agent: true, member_id: member });
   emit({ type: "Dictation", phase: "processing", agent: true, member_id: member });
@@ -508,25 +502,24 @@ test("while the owner speaks the one button sends, and Stop appears only once it
   expect(api.cancelSession).toHaveBeenCalledExactlyOnceWith();
 });
 
-test("a quick voice request stays out of formal threads and returns with Stop after navigation", async () => {
-  mount(); await flush(); await choose(0, 4);
+test("a quick voice request is Raphael's alone and returns with Stop after navigation to a slime and back", async () => {
+  mount(); await flush(); await choose(0, 1);
   emit({ type: "Dictation", phase: "processing", agent: true, member_id: 0 });
-  await choose(0, 1);
-  expect($(".composer").dataset.taskState).toBe("idle");
-  expect(document.querySelector('[data-key="hearing"]')).toBeNull();
+  expectStop("ack");
   await choose(3, 31); expect($(".composer").dataset.taskState).toBe("idle");
-  await choose(0, 4); expectStop("ack");
+  expect(document.querySelector('[data-key="hearing"]')).toBeNull();
+  await choose(0, 1); expectStop("ack");
   // A voice/CLI path may announce only the final turn, after processing began.
-  turns = [live({ conversation_id: 4, source: "voice", status: "done", text: "Report ready" })];
+  turns = [live({ conversation_id: 1, source: "voice", status: "done", text: "Report ready" })];
   await refresh({ type: "AgentTurn", turn_id: 11, member_id: 0 });
   expect($(".composer").dataset.taskState).toBe("idle");
 });
 
-test("running member and quick turns survive navigation and page reopening without new send events", async () => {
-  turns = [live({ conversation_id: 4 }), live({ id: 12, session_id: "member-reply", member_id: 3, conversation_id: 31 })];
+test("running Raphael and member turns survive navigation and page reopening without new send events", async () => {
+  turns = [live({ conversation_id: 1 }), live({ id: 12, session_id: "member-reply", member_id: 3, conversation_id: 31 })];
   mount(); await flush(); await choose(3, 31); await refresh(); expectStop();
-  await choose(0, 1); expect($(".composer").dataset.taskState).toBe("idle");
-  await choose(0, 4); agent.hide(); agent.show(); await flush(); await refresh(); expectStop();
+  await choose(0, 1); await refresh(); expectStop();
+  agent.hide(); agent.show(); await flush(); await refresh(); expectStop();
   press(); await flush(); expect(api.agentStop).toHaveBeenCalledExactlyOnceWith("reply-11", 0);
   expect(turns.find(turn => turn.id === 12)!.status).toBe("running");
 });
@@ -541,12 +534,12 @@ test("repeated Stop presses send one cancellation and cannot turn into a voice p
   expect(api.agentVoice).not.toHaveBeenCalled(); finish(); await flush();
 });
 
-test("opening quick after Alt+Space processing does not mistake an older voice turn for its answer", async () => {
-  turns = [live({ id: 90, conversation_id: 4, source: "voice", status: "done", created_at_ms: Date.now() - 60_000, text: "Earlier answer" })];
+test("opening Raphael after Alt+Space processing does not mistake an older voice turn for its answer", async () => {
+  turns = [live({ id: 90, conversation_id: 1, source: "voice", status: "done", created_at_ms: Date.now() - 60_000, text: "Earlier answer" })];
   mount(); await flush();
   emit({ type: "Dictation", phase: "listening", agent: true, member_id: 0 });
   emit({ type: "Dictation", phase: "processing", agent: true, member_id: 0 });
-  await choose(0, 4); expectStop("ack");
+  await choose(0, 1); expectStop("ack");
 });
 
 test("typed acknowledgement becomes a running turn, then idle before the native call finishes", async () => {
@@ -566,7 +559,7 @@ test("typed acknowledgement becomes a running turn, then idle before the native 
 });
 
 test.each(["failed", "cancelled", "pasted"] as const)("voice %s releases its pre-turn Stop", async phase => {
-  mount(); await flush(); await choose(0, 4);
+  mount(); await flush(); await choose(0, 1);
   emit({ type: "Dictation", phase: "processing", agent: true, member_id: 0 }); expectStop("ack");
   emit({ type: "Dictation", phase, agent: true, member_id: 0 });
   expect($(".composer").dataset.taskState).toBe("idle");
@@ -578,7 +571,6 @@ test("Stop follows the running worker in its conversation before a newer submiss
   api.agentAskText.mockReturnValue(new Promise(() => {})); mount(); await flush();
   $<HTMLTextAreaElement>(".cmp-input").value = "A newer reply";
   $(".composer").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-  await choose(0, 4); expect($(".composer").dataset.taskState).toBe("idle");
   await choose(3, 31); expect($(".composer").dataset.taskState).toBe("idle");
   await choose(0, 1); expectStop("running"); press(); await flush();
   expect(api.agentStop).toHaveBeenCalledExactlyOnceWith("reply-11", 0);

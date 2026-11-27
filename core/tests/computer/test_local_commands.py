@@ -428,6 +428,16 @@ if sys.argv[1] == "sleep":
                         pass
 
 
+async def warm_up(hub, folder):
+    """A fresh machine's first PowerShell and Python can take seconds to start (a CI runner's first one, the first test
+    of its share, took over ten): one of each runs before a command whose timing is the point."""
+    python = sys._base_executable
+    command = (f"param(); & '{python.replace(chr(39), chr(39) * 2)}' -I -c pass; exit $LASTEXITCODE" if sys.platform == "win32"
+               else f"{shlex.quote(python)} -I -c pass")
+    result = await hub.call("mcp:local/local_exec", {"command": command, "cwd": str(folder), "timeout_seconds": 60}, approver="user")
+    assert result.ok, result
+
+
 async def run_command_tree(hub, command, folder, *, background, timeout):
     result = await hub.call("mcp:local/local_exec", {
         "command": command, "cwd": str(folder), "background": background, "timeout_seconds": timeout,
@@ -454,6 +464,7 @@ async def test_an_exited_local_command_leaves_its_pipe_holding_descendant_runnin
     hub, _, _ = local
     hub.host = LocalHost()
     command, marker = command_tree
+    await warm_up(hub, marker.parent)
     start = asyncio.get_running_loop().time()
     try:
         data = await run_command_tree(hub, command("exit"), marker.parent, background=background, timeout=12)
@@ -473,6 +484,7 @@ async def test_a_local_command_timeout_kills_its_tree(local, command_tree, backg
     hub, _, _ = local
     hub.host = LocalHost()
     command, marker = command_tree
+    await warm_up(hub, marker.parent)
     try:
         data = await run_command_tree(hub, command("sleep"), marker.parent, background=background, timeout=5)
         assert data["exit_code"] is None and data["timed_out"] is True, data

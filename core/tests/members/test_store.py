@@ -277,14 +277,3 @@ def test_a_thread_is_unread_until_it_is_read(store):
     assert store.mark_read(0) is True
     assert store.mark_read(0) is False
     assert store.unread() == {3}
-
-
-def test_no_member_takes_the_name_the_owner_gave_the_first_bot(store, conn):
-    from raphael_core.brain.settings import SettingsStore
-
-    assert store.create_member(name="小藍").name == "小藍"
-    store.update_member(store.by_name("小藍").id, name="小綠")
-    SettingsStore(conn).set("first_bot_profile", {"name": "小藍"})
-    assert kind_of(lambda: store.create_member(name=" 小藍 ")) == "taken"
-    other = store.by_name("小綠")
-    assert kind_of(lambda: store.update_member(other.id, name="小藍")) == "taken"

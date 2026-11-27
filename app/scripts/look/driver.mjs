@@ -7,6 +7,7 @@ import { placesProblems, slimePlaces } from "./slime-places.mjs";
 import { sendProbe } from "./send-probe.mjs";
 import { typingProbe } from "./typing-probe.mjs";
 import { dragProbe } from "./drag-probe.mjs";
+import { resizeProbe } from "./resize-probe.mjs";
 import { followProbe } from "./follow-probe.mjs";
 import { animationAudit, motionCost, motionDetails } from "./motion-cost.mjs";
 
@@ -778,6 +779,8 @@ export async function perform(page, step, evidenceDirectory) {
     case "send-probe": return await sendProbe(page, step);
     case "typing-probe": return await typingProbe(page);
     case "drag-probe": return await dragProbe(page, step, evidenceDirectory);
+    case "tmp-dump": { const html = await page.evaluate(sel => [...document.querySelectorAll(sel)].slice(0,3).map(n=>n.outerHTML.slice(0,1500)).join(String.fromCharCode(10)+"---"+String.fromCharCode(10)), step.selector); await writeFile("tmp-dump.txt", html); return { check: "tmp-dump" }; }
+    case "resize-probe": return await resizeProbe(page, step, evidenceDirectory);
     case "follow-probe": return await followProbe(page, step);
     case "advance-time":
       // Advance the shared fixed clock, then let production timers observe it.
@@ -949,7 +952,7 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "clipboard-paste": case "file-drop": {
       if (step.action === "clipboard-paste") await page.focus(step.selector);
-      await page.$eval(step.selector, (element, { action, name, image, text, hold, mime, size, fill, label }) => {
+      await page.$eval(step.selector, (element, { action, name, image, text, html, hold, mime, size, fill, label }) => {
         // One opaque pixel, a real picture for the composer to show and the look to load. `fill` (and `label`) draw a picture of that
         // colour with its number on it instead, so that pictures in a row can be told apart where it scrolls.
         let picture = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
@@ -968,11 +971,13 @@ export async function perform(page, step, evidenceDirectory) {
           transfer.items.add(input);
         }
         if (text) transfer.setData("text/plain", text);
+        // Rich words, as a page, a document or a message copies them: HTML beside the plain text.
+        if (html) transfer.setData("text/html", html);
         if (action === "clipboard-paste") {
           const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer });
           element.dispatchEvent(event);
           // A synthetic paste does nothing by itself: the browser's own default, which writes the words in, is done here when no page code took the paste.
-          if (!event.defaultPrevented && text && !file) document.execCommand("insertText", false, text);
+          if (!event.defaultPrevented && text && !file && !html) document.execCommand("insertText", false, text);
           return;
         }
         for (const type of hold ? ["dragenter", "dragover"] : ["dragenter", "dragover", "drop"]) element.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer }));
@@ -980,6 +985,20 @@ export async function perform(page, step, evidenceDirectory) {
       break;
     }
     case "type": await fill(step.selector, step.text); break;
+    // The owner's own keys: each part is typed letter by letter through the real keyboard, or, as `{Shift+Enter}`, `{Tab}`,
+    // `{Backspace}`, pressed (with the modifiers named before the last `+`). What the field turns typed words into (a list, a heading,
+    // an equation) happens only to keys typed this way, never to a value written into it.
+    case "typing": {
+      await page.focus(step.selector);
+      for (const part of step.parts) {
+        const pressed = /^\{(.+)\}$/.exec(part);
+        if (!pressed) { await page.keyboard.type(part); continue; }
+        const keys = pressed[1].split("+"), last = keys.pop();
+        for (const modifier of keys) await page.keyboard.down(modifier);
+        try { await page.keyboard.press(last); } finally { for (const modifier of keys.reverse()) await page.keyboard.up(modifier); }
+      }
+      break;
+    }
     case "hover": { const element = await visible(step.selector); await element.hover(); await element.dispose(); break; }
     // A press held past a control's long-press threshold, then let go there (the member voice button records on hold).
     // `release: false` keeps the button down through the still frame (the crop frame's thirds show only while held).
@@ -1276,7 +1295,11 @@ export async function perform(page, step, evidenceDirectory) {
       finally { await element.dispose(); }
       break;
     }
-    case "member": await click(`.mb-col [data-member="${step.id}"]`); break;
+    // Raphael (member 0) is no row of the sidebar: its space is the account menu's own entry.
+    case "member":
+      if (step.id === 0) { await click('#nav .sidebar-account'); await visible('#app-popover.account-menu'); await click('#app-popover.account-menu [data-account="raphael"]'); }
+      else await click(`.mb-col [data-member="${step.id}"]`);
+      break;
     case "room": await click(`[data-room="${step.id}"]`); break;
     case "new-room": await click('[data-col="add"]'); await click('#app-popover [data-pick="group-chat"]'); break;
     // A room's row draws no ⋯ (R-UI-44): its menu opens the way the owner opens it, with a right click on the row.

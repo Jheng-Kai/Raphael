@@ -2,6 +2,7 @@
 
 import base64
 import io
+import os
 import shutil
 import stat
 import tarfile
@@ -16,6 +17,11 @@ from raphael_core.protocol import RpcError
 
 def document(name):
     return f"---\nname: {name}\ndescription: Guide to {name}\n---\nBody for {name}."
+
+
+async def direct(rig, params):
+    """The importer without the conversion: what the library says of a source, with no slime to turn it into a skill."""
+    return await rig.service._import_package(-1, params)
 
 
 def upload(name, data):
@@ -105,7 +111,7 @@ async def test_invalid_packages_leave_the_library_and_files_untouched(rig, monke
         monkeypatch.setattr(skill_sources, "MAX_PACKAGE_BYTES", 1024 if problem == "expanded" else 16)
         entries.append(("notes/help.txt", b"x" * 2000))
     with pytest.raises(RpcError) as error:
-        await rig.call("skills.library.import", upload("notes.zip", archive(entries)))
+        await direct(rig, upload("notes.zip", archive(entries)))
     assert error.value.data["kind"] == kind
     # The window reads the kind from the message, which is all the shell passes it (skill-library.ts failureText).
     assert error.value.message.startswith(f"Invalid params: {kind}: ")
@@ -114,7 +120,7 @@ async def test_invalid_packages_leave_the_library_and_files_untouched(rig, monke
 
 
 async def test_a_repository_import_is_one_package_with_no_members_until_granted(rig, monkeypatch):
-    async def download(source):
+    async def download(source, **_):
         return [(source + "/" + slug, {"SKILL.md": document(slug).encode()}) for slug in ("read-notes", "write-notes")]
     monkeypatch.setattr("raphael_core.members.service.download_skills", download)
     package = (await rig.call("skills.library.import", {"source": "owner/notes"}))["package"]
@@ -274,7 +280,7 @@ async def test_only_selected_skill_links_are_resolved_and_external_links_are_not
                 output.writestr(entry, target)
     data = buffer.getvalue()
     name = "notes.tgz" if tar else "notes.zip"
-    [files] = skill_sources.read_archive(name, data, subpath="notes")
+    [files] = skill_sources.read_archive(name, data)
     assert files["deep/read.txt"] == b"read this"
     assert "external.txt" not in files and "AGENTS.md" not in files
     assert files.skipped_links == ["external.txt"]
@@ -289,15 +295,71 @@ async def test_only_selected_skill_links_are_resolved_and_external_links_are_not
     from pathlib import Path
 
     folder = Path(native["path"]).parent
-    with pytest.raises(MemberError, match="invalid skill package"):
+    with pytest.raises(MemberError, match="not a path a skill may hold"):
         load_package(folder)
     assert load_package(folder, installed=True)["deep/read.txt"] == b"read this"
+
+
+def plugin_archive(tar):
+    """A plugin whose skill ships a script marked executable and a plain data file."""
+    entries = [(".claude-plugin/plugin.json", b'{"name":"notes","version":"1.0.0"}', 0o644),
+               ("skills/notes/SKILL.md", document("read-notes").encode(), 0o644),
+               ("skills/notes/run.sh", b"#!/bin/sh\necho hi\n", 0o755), ("skills/notes/data.txt", b"plain", 0o644)]
+    buffer = io.BytesIO()
+    if tar:
+        with tarfile.open(fileobj=buffer, mode="w:gz") as out:
+            for name, data, mode in entries:
+                info = tarfile.TarInfo(name)
+                info.size, info.mode = len(data), mode
+                out.addfile(info, io.BytesIO(data))
+    else:
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as out:
+            for name, data, mode in entries:
+                info = zipfile.ZipInfo(name)
+                info.create_system = 3
+                info.external_attr = (stat.S_IFREG | mode) << 16
+                out.writestr(info, data)
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize("tar", [False, True])
+def test_an_archive_keeps_which_files_are_executable(tar):
+    from raphael_core.bots.homes import Executable
+
+    [files] = skill_sources.read_archive("notes.tgz" if tar else "notes.zip", plugin_archive(tar))
+    assert isinstance(files["run.sh"], Executable)
+    assert not isinstance(files["data.txt"], Executable)
+    assert files["run.sh"] == b"#!/bin/sh\necho hi\n"
+
+
+def test_writing_an_executable_file_asks_for_the_executable_bit_and_a_plain_one_does_not(tmp_path, monkeypatch):
+    from raphael_core.bots.homes import Executable, atomic
+
+    asked = []
+    real = os.chmod
+    monkeypatch.setattr(os, "chmod", lambda path, mode, **kw: (asked.append((os.path.basename(path), mode)), real(path, mode, **kw))[1])
+    atomic(tmp_path / "run.sh", Executable(b"#!/bin/sh\n"))
+    atomic(tmp_path / "data.txt", b"plain")
+    assert [name.split(".")[0] for name, mode in asked if mode & stat.S_IXUSR] == ["run"]
+    assert (tmp_path / "run.sh").read_bytes() == b"#!/bin/sh\n" and (tmp_path / "data.txt").read_bytes() == b"plain"
+
+
+@pytest.mark.parametrize("tar", [False, True])
+async def test_an_imported_plugin_script_is_executable_on_disk(rig, tmp_path, tar, monkeypatch):
+    asked, real = [], os.chmod
+    monkeypatch.setattr(os, "chmod", lambda path, mode, **kw: (asked.append((os.path.basename(path), mode)), real(path, mode, **kw))[1])
+    await rig.call("skills.library.import", upload("notes.tgz" if tar else "notes.zip", plugin_archive(tar)))
+    assert [name.split(".")[0] for name, mode in asked if mode & stat.S_IXUSR] == ["run"]  # the intent, also where Windows drops the bit
+    [script] = [path for path in tmp_path.rglob("run.sh")]
+    [data] = [path for path in tmp_path.rglob("data.txt")]
+    if os.name != "nt":
+        assert script.stat().st_mode & stat.S_IXUSR and not data.stat().st_mode & stat.S_IXUSR
 
 
 async def test_missing_skill_document_is_refused_before_writing(rig):
     data = archive([("notes/SKILL.md", b"\x00invalid")])
     with pytest.raises(RpcError, match="UTF-8 Markdown"):
-        await rig.call("skills.library.import", upload("notes.zip", data))
+        await direct(rig, upload("notes.zip", data))
     assert not rig.service.packages.list()
 
 
@@ -377,7 +439,7 @@ async def test_the_imported_plugin_skill_reads_its_linked_files_and_the_result_n
         pytest.skip(f"cannot create local symlinks: {error}")
     skill = root / "skills" / "lazy-mode" / "SKILL.md"
     skill.write_bytes(skill.read_bytes() + b"Also [a link](../../actions/linked.md).\n")
-    package = (await rig.call("skills.library.import", {"source": f"local:{root}"}))["package"]
+    package = (await rig.call("skills.library.import", {"source": f"local:{root}", "plugin": False}))["package"]
     named = next(s for s in package["skills"] if s["name"] == "lazy-mode")
     assert package["kind"] == "plugin"
     assert {(item["path"], item["reason"]) for item in package["skipped_references"][str(named["id"])]} == {
@@ -399,7 +461,7 @@ async def test_the_imported_plugin_skill_reads_its_linked_files_and_the_result_n
     assert not (folder.parent / "actions").exists()
 
 
-def test_a_skill_outside_a_plugin_or_beside_its_files_is_imported_as_it_is(tmp_path):
+def test_a_skill_outside_a_plugin_takes_the_files_it_links_to_from_the_folder_picked(tmp_path):
     root = tmp_path / "loose"
     (root / "skills" / "notes").mkdir(parents=True)
     (root / "actions").mkdir()
@@ -407,7 +469,8 @@ def test_a_skill_outside_a_plugin_or_beside_its_files_is_imported_as_it_is(tmp_p
     text = document("notes") + "\nRead ../../actions/report.md.\n"
     (root / "skills" / "notes" / "SKILL.md").write_bytes(text.encode())
     [files], _ = skill_sources.local(f"local:{root}")
-    assert files["SKILL.md"] == text.encode() and list(files) == ["SKILL.md"] and not files.skipped_references
+    assert files["SKILL.md"] == text.replace("../../actions/report.md", "_plugin/actions/report.md").encode()
+    assert files["_plugin/actions/report.md"] == b"report" and not files.skipped_references and not files.plugin_manifest
     # A plugin skill whose folder already uses the shared name copies nothing and says why.
     (root / ".claude-plugin").mkdir()
     (root / ".claude-plugin" / "plugin.json").write_bytes(b"{}")

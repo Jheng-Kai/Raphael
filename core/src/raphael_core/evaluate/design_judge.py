@@ -45,7 +45,10 @@ def rules_text(root):
 
 
 def judge_rules(text):
-    return "\n".join(line for line in text.splitlines() if re.match(r"\| R-[A-Z]+-\d+ \|", line) and "judge" in line.split("|")[4])
+    """The rule rows a judge checks: every row, a multi-part ID (R-COMP-HOST-08) included, whose Check column names judge.
+    Rows are split on line feeds alone: str.splitlines also breaks a row at a form feed or a line separator inside it."""
+    rows = (line for line in text.split("\n") if re.match(r"\| R-[A-Z]+(?:-[A-Z]+)*-\d+ \|", line))
+    return "\n".join(line for line in rows if len(line.split("|")) > 4 and "judge" in line.split("|")[4])
 
 
 def feature_for(root, scene):
@@ -84,7 +87,7 @@ def parse_review(text, rules):
         raise ValueError("invalid_review")
     if type(value["score"]) is not int or value["score"] not in range(1, 6) or not isinstance(value["findings"], list):
         raise ValueError("invalid_review")
-    rows = {line.split("|")[1].strip(): line for line in judge_rules(rules).splitlines()}
+    rows = {line.split("|")[1].strip(): line for line in judge_rules(rules).split("\n") if line}
     for item in value["findings"]:
         if not isinstance(item, dict) or set(item) != {"rule_id", "hard", "detail"}:
             raise ValueError("invalid_finding")

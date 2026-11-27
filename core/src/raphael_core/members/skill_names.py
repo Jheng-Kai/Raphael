@@ -49,6 +49,19 @@ def description_words(text):
     return frozenset(words)
 
 
+# Words that begin many names without naming what the skills are about: a prefix of these is no family.
+_GENERIC_FAMILY = _GENERIC_NAME | {"my", "new", "test", "demo", "example", "sample", "custom", "default"}
+
+
+def family(name):
+    """The word a skill's name begins with, which others may begin with too (`pdf` for `pdf-read` and `pdf-fill`), or an empty
+    string when its name has no such word: a name of one word, a first word of under three letters or a generic one. Skills
+    of one family are one plugin (R-SKILL-20)."""
+    parts = str(name).rsplit(":", 1)[-1].casefold().split("-")
+    first = parts[0]
+    return first if len(parts) > 1 and len(first) >= 3 and re.fullmatch(r"[a-z][a-z0-9]*", first) and first not in _GENERIC_FAMILY else ""
+
+
 def _share(left, right):
     return len(left & right) / len(left | right) if left and right else 0.0
 
@@ -65,6 +78,22 @@ def similar_skill(name, description, skills):
         if _share(wanted_description, description_words(skill.get("description", ""))) >= NEAR_DESCRIPTION:
             return skill
     return None
+
+
+def with_name(text, slug):
+    """`text` with the `name:` of its front matter set to `slug` (added when the front matter has none)."""
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return f"---\nname: {slug}\n---\n" + text
+    for index in range(1, len(lines)):
+        if lines[index].strip() == "---":
+            break
+        key, sep, _ = lines[index].partition(":")
+        if sep and key == "name":
+            lines[index] = f"name: {slug}" + lines[index][len(lines[index].rstrip("\r\n")):]
+            return "".join(lines)
+    lines.insert(1, f"name: {slug}" + (lines[0][len(lines[0].rstrip("\r\n")):] or "\n"))
+    return "".join(lines)
 
 
 def normalize_skill_name(name: str) -> str:

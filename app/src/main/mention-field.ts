@@ -7,6 +7,7 @@
 // backspace takes one letter and the caret rests anywhere in it. The words hold its whole address (composer-links.ts), and
 // copying or sending gives the same text.
 import { esc, patchHTML } from "./ui";
+import { richFieldOf, type RichChip } from "./composer-rich-handle";
 import { linkRanges, shortenLinks, wholeLinks } from "./composer-links";
 import { mentionChipHTML, mentionRanges, type MentionTarget } from "./mention-text";
 
@@ -25,8 +26,10 @@ export function skillRanges(text: string): ChipRange[] {
 export interface MentionField { refresh(): void }
 
 export function bindMentionField(input: HTMLTextAreaElement, targets: () => readonly MentionTarget[]): MentionField {
+  // In the composer's own field (composer-rich-field.ts) the chips are drawn by the editor; a plain textarea gets the mirror.
+  const rich = richFieldOf(input);
   const field = input.closest<HTMLElement>(".cmp-field"), mirror = field?.querySelector<HTMLElement>(".cmp-mirror");
-  if (!field || !mirror) return { refresh() {} };
+  if (!rich && (!field || !mirror)) return { refresh() {} };
   let ranges: ChipRange[] = [];
   /** The chips that move, select and delete as one unit: the addresses; a link and a skill are words. */
   let units: ChipRange[] = [];
@@ -39,7 +42,7 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
   };
   const place = (): void => {
     // A scrollbar narrows the textarea's lines; the copy has to wrap at the same letter.
-    if (!ranges.length) return;
+    if (!ranges.length || !mirror) return;
     const bar = `${Math.max(0, input.offsetWidth - input.clientWidth)}px`;
     if (mirror.style.getPropertyValue("--cmp-bar") !== bar) mirror.style.setProperty("--cmp-bar", bar);
     mirror.scrollTop = input.scrollTop;
@@ -56,6 +59,13 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
       ranges = [...chips, ...(text.includes("/") ? skillRanges(text).filter(item => free(item, chips)) : [])].sort((a, b) => a.start - b.start);
       units = ranges.filter(range => !range.url && !range.skill);
     }
+    if (rich) {
+      rich.setChips(ranges.map((range): RichChip => range.target
+        ? { start: range.start, end: range.end, kind: "mention", mention: range.target.kind, icon: range.target.mark(14) }
+        : { start: range.start, end: range.end, kind: range.url ? "url" : "skill" }));
+      return;
+    }
+    if (!field || !mirror) return;
     if (!ranges.length) {
       if (field.classList.contains("has-mentions")) { size?.disconnect(); field.classList.remove("has-mentions"); mirror.textContent = ""; }
       return;
@@ -81,13 +91,13 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
   const setRangeText = input.setRangeText as (...args: unknown[]) => void;
   input.setRangeText = (words: string, ...rest: unknown[]): void => { setRangeText.call(input, shortenLinks(words), ...rest); draw(); };
   const replaceSelection = (words: string): void => {
-    // The browser's own edit keeps the undo history and says `input` to everyone listening.
-    if (words ? document.execCommand?.("insertText", false, words) : document.execCommand?.("delete")) return;
+    // The browser's own edit keeps the undo history and says `input` to everyone listening; the editor has its own.
+    if (!rich && (words ? document.execCommand?.("insertText", false, words) : document.execCommand?.("delete"))) return;
     input.setRangeText(words, input.selectionStart, input.selectionEnd, "end");
     input.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
-  input.addEventListener("paste", event => {
+  if (!rich) input.addEventListener("paste", event => {
     // Files are the page's own to take: it puts their words in through setRangeText.
     if (event.clipboardData?.files.length) return;
     const pasted = event.clipboardData?.getData("text/plain") ?? "", short = shortenLinks(pasted);
@@ -102,8 +112,7 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
     event.clipboardData?.setData("text/plain", whole);
     if (cut) replaceSelection("");
   };
-  input.addEventListener("copy", event => carry(event, false));
-  input.addEventListener("cut", event => carry(event, true));
+  if (!rich) { input.addEventListener("copy", event => carry(event, false)); input.addEventListener("cut", event => carry(event, true)); }
 
   input.addEventListener("compositionupdate", event => { composed = (event as CompositionEvent).data; });
   input.addEventListener("compositionend", () => { composing = null; composed = ""; draw(); });
@@ -137,7 +146,7 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
       event.preventDefault();
       input.setSelectionRange(range.start, range.end);
       // The browser's own delete keeps the undo history and says `input` to everyone listening.
-      if (!document.execCommand?.("delete")) { input.setRangeText("", range.start, range.end, "end"); input.dispatchEvent(new Event("input", { bubbles: true })); }
+      if (rich || !document.execCommand?.("delete")) { input.setRangeText("", range.start, range.end, "end"); input.dispatchEvent(new Event("input", { bubbles: true })); }
       return;
     }
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;

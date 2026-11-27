@@ -2,6 +2,8 @@
 // there is no button for it. The cursor changes over the edge and a thin line shows while it moves. From the keyboard it is
 // a separator: the arrow keys move it, and Enter does what the pane does when it is dragged as far as it goes.
 
+import { holdLines } from "./reading-place";
+
 export interface EdgeOptions {
   label: string;
   /** The pane's width with the pointer at `x` (a left pane: x; a right pane: the window's width minus x). */
@@ -27,12 +29,19 @@ export function mountEdge(edge: HTMLElement, o: EdgeOptions): () => void {
   edge.setAttribute("aria-label", o.label);
   edge.tabIndex = 0;
   let pointer: number | null = null;
+  // The window keeps the resize cursor and selects no text while the edge moves: one element over it says so. The same words set as
+  // inherited properties on the root (`cursor`, `user-select`) styled every element of the window again, when the pointer went down and again
+  // when it came up.
+  let shield: HTMLElement | null = null;
+  // The conversations keep their lines while the edge moves and set them once when it is let go (reading-place.ts holdLines).
+  let letLinesGo: (() => void) | null = null;
   const end = (): void => {
     if (pointer === null) return;
     if (edge.hasPointerCapture(pointer)) edge.releasePointerCapture(pointer);
     pointer = null;
     edge.classList.remove("is-dragging");
-    document.documentElement.removeAttribute("data-resizing");
+    shield?.remove(); shield = null;
+    letLinesGo?.(); letLinesGo = null;
     o.done();
   };
   const down = (event: PointerEvent): void => {
@@ -41,8 +50,11 @@ export function mountEdge(edge: HTMLElement, o: EdgeOptions): () => void {
     pointer = event.pointerId;
     edge.setPointerCapture(event.pointerId);
     edge.classList.add("is-dragging");
-    // The whole window keeps the resize cursor and selects no text while the edge moves.
-    document.documentElement.setAttribute("data-resizing", "");
+    shield = document.createElement("div");
+    shield.className = "edge-shield";
+    shield.setAttribute("aria-hidden", "true");
+    document.body.append(shield);
+    letLinesGo = holdLines();
   };
   const move = (event: PointerEvent): void => {
     if (pointer !== event.pointerId) return;

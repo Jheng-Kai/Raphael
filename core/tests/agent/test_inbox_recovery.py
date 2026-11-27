@@ -10,6 +10,7 @@ from raphael_core.agent.service import _Ask
 from raphael_core.members.store import MemberStore
 from raphael_core.services.attachment_store import AttachmentStore
 from raphael_core.services.attachments import Attachment
+from second_conversation import another_conversation
 
 from .test_service import make_rig, until  # noqa: F401
 from .test_narration import chat, typed
@@ -249,7 +250,7 @@ async def test_stop_selects_inflight_scope_instead_of_a_later_terminal_row(make_
     try:
         conversation = rig.service.conversations.main(0)
         queued = await typed(rig, 'Return this queued message')
-        other = rig.service.conversations.quick()
+        other = another_conversation(rig.conn)
         terminal = rig.service._history.add(
             session_id='live', question='Finished elsewhere', route='answer', prefix='', text='Old answer',
             status='done', source='app', conversation_id=other,

@@ -7,6 +7,7 @@ import subprocess
 import pytest
 
 from raphael_core.protocol import RpcError
+from .test_skill_import_limits import detail
 from .test_skill_packages import archive, document, upload
 
 
@@ -24,10 +25,10 @@ async def packages(rig):
 
 async def test_a_taken_name_says_which_package_holds_it_and_whether_it_is_switched_off(rig):
     held = (await rig.call("skills.library.import", pack("tdd", "review")))["package"]
-    with pytest.raises(RpcError, match=r'taken: a skill named tdd already exists in the package "tools.zip"$'):
+    with pytest.raises(RpcError, match=r'taken: a skill named tdd already exists in the package "tools.zip" \[\['):
         await rig.call("skills.library.import", {"text": document("tdd")})
     await rig.call("skills.library.update", {"key": held["key"], "skill": {"id": skill_id(held, "tdd"), "enabled": False}})
-    with pytest.raises(RpcError, match=r'in the package "tools.zip" \(switched off\)$'):
+    with pytest.raises(RpcError, match=r'in the package "tools.zip" \(switched off\) \[\['):
         await rig.call("skills.library.import", {"text": document("tdd")})
     assert len(await packages(rig)) == 1
 
@@ -119,14 +120,14 @@ async def test_a_plugin_with_taken_skill_names_imports_the_rest_and_names_each_h
     second = desk(cap, tmp_path, "two", extra=("extra",))
     made = await rig.call("skills.library.import", {"plugin": True, "source": "local:" + str(second)})
     assert sorted(made["skipped"], key=lambda s: s["name"]) == [
-        {"name": "desk:check", "held_by": "desk"}, {"name": "desk:write", "held_by": "desk"}]
+        {"name": "desk:check", "held_by": holder(tmp_path, "one")}, {"name": "desk:write", "held_by": holder(tmp_path, "one")}]
     assert [s["name"] for s in made["package"]["skills"]] == ["extra"]
     root = cap.plugin_root(int(made["package"]["key"][4:]))
     assert (root / "skills/extra/SKILL.md").is_file() and not (root / "skills/write").exists()
     assert len((await rig.call("skills.library.list", {}))["packages"]) == 2
     # Every skill taken: the plugin is refused and the holder is named.
     third = desk(cap, tmp_path, "three")
-    with pytest.raises(RpcError, match=r'taken: a skill named desk:\w+ already exists in the package "desk"'):
+    with pytest.raises(RpcError, match=r'taken: a skill named desk:\w+ already exists in the package "desk \('):
         await rig.call("skills.library.import", {"plugin": True, "source": "local:" + str(third)})
     assert len((await rig.call("skills.library.list", {}))["packages"]) == 2
 
@@ -142,6 +143,11 @@ async def test_a_package_that_loses_skills_to_taken_names_stays_closed_like_a_pa
     # Named access is still honoured.
     named = await rig.call("skills.library.import", {**pack("tdd", "plan", name="named.zip"), "access": "all"})
     assert named["package"]["access"] == "all"
+
+
+def holder(tmp_path, market, name="desk"):
+    """How a plugin of the same name as another is told: by the folder it came from, when their versions are the same."""
+    return f"{name} ({tmp_path / 'synthetic-home' / '.claude/plugins/cache' / market / name / '1.0.0'})"
 
 
 def plugin_at(cap, tmp_path, market, files, name="desk"):
@@ -206,7 +212,7 @@ async def test_a_skipped_skill_does_not_take_the_files_of_the_skill_nested_in_it
     cap = rig.service.capabilities
     await rig.call("skills.library.import", {"plugin": True, "source": plugin_at(cap, tmp_path, "m", {"skills/outer/SKILL.md": document("outer")})})
     made = await rig.call("skills.library.import", {"plugin": True, "source": plugin_at(cap, tmp_path, "n", NESTED)})
-    assert made["skipped"] == [{"name": "desk:outer", "held_by": "desk"}]
+    assert made["skipped"] == [{"name": "desk:outer", "held_by": holder(tmp_path, "m")}]
     assert [s["name"] for s in made["package"]["skills"]] == ["inner"]
     root = cap.plugin_root(int(made["package"]["key"][4:]))
     assert not (root / "skills/outer/SKILL.md").exists() and not (root / "skills/outer/notes.md").exists()
@@ -252,7 +258,7 @@ async def test_a_skipped_skill_keeps_the_files_of_a_nested_skill_whose_folder_di
     cap = rig.service.capabilities
     await rig.call("skills.library.import", {"plugin": True, "source": plugin_at(cap, tmp_path, "m", {"skills/outer/SKILL.md": document("outer")})})
     made = install_mixed_case(cap)
-    assert made["skipped"] == [{"name": "desk:outer", "held_by": "desk"}]
+    assert made["skipped"] == [{"name": "desk:outer", "held_by": holder(tmp_path, "m")}]
     # The first plugin still holds outer; the second one brought only inner.
     assert sorted(s["name"] for s in cap.skills(-1)) == ["inner", "outer"]
     root = cap.plugin_root(made["id"])
@@ -296,3 +302,44 @@ async def test_deleting_a_skill_never_follows_a_link_inside_its_folder(rig, tmp_
     # The nested skill keeps everything, its own link included.
     assert (root / "skills/outer/inner/data.txt").read_text() == "inner data"
     assert os.path.lexists(root / "skills/outer/inner/own-shortcut")
+
+
+def versioned(cap, tmp_path, version, market="market", name="desk"):
+    """A plugin of the same name as an installed version folder of a marketplace's cache."""
+    cap.skill_home = tmp_path / "synthetic-home"
+    folder = cap.skill_home / f".claude/plugins/cache/{market}/{name}/{version}"
+    for relative, text in {".claude-plugin/plugin.json": json.dumps({"name": name, "version": version}),
+                           "skills/write/SKILL.md": document("write")}.items():
+        path = folder / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    return "local:" + str(folder)
+
+
+async def test_two_packages_of_one_name_are_told_apart_by_their_versions(rig, tmp_path):
+    cap = rig.service.capabilities
+    await rig.call("skills.library.import", {"plugin": True, "source": versioned(cap, tmp_path, "0.15.48")})
+    # Importing another marketplace's version of it is refused: both are called desk, and the answer says which version holds the name.
+    with pytest.raises(RpcError) as error:
+        await rig.call("skills.library.import", {"plugin": True, "source": versioned(cap, tmp_path, "0.15.32", "other")})
+    found = detail(error)
+    assert found["held_by"] == "desk (0.15.48)" and found["incoming"] == "desk (0.15.32)"
+    assert 'in the package "desk (0.15.48)", and the package "desk (0.15.32)" has one too' in str(error.value)
+    # A name that is taken by a package whose name is its own is told as it always was.
+    assert (await rig.call("skills.library.import", {"text": document("tdd")}))["package"]["name"] == "tdd"
+    with pytest.raises(RpcError) as error:
+        await rig.call("skills.library.import", {"text": document("tdd")})
+    assert detail(error)["held_by"] == "tdd"
+
+
+async def test_the_skipped_skills_of_a_plugin_name_the_version_that_holds_them(rig, tmp_path):
+    cap = rig.service.capabilities
+    await rig.call("skills.library.import", {"plugin": True, "source": versioned(cap, tmp_path, "0.15.48")})
+    other = tmp_path / "synthetic-home/.claude/plugins/cache/other/desk/0.15.32"
+    (other / ".claude-plugin").mkdir(parents=True)
+    (other / ".claude-plugin/plugin.json").write_text(json.dumps({"name": "desk", "version": "0.15.32"}), encoding="utf-8")
+    for skill in ("write", "extra"):
+        (other / "skills" / skill).mkdir(parents=True)
+        (other / "skills" / skill / "SKILL.md").write_text(document(skill), encoding="utf-8")
+    made = await rig.call("skills.library.import", {"plugin": True, "source": "local:" + str(other)})
+    assert made["skipped"] == [{"name": "desk:write", "held_by": "desk (0.15.48)"}]

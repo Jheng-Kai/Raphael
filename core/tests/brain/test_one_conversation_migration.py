@@ -1,12 +1,19 @@
 """Fold historical standard conversations without losing delivered records."""
 
 import sqlite3
+from unittest.mock import patch
 
 import pytest
 
 from raphael_core.agent.conversations import Conversations
 from raphael_core.agent.history import AgentHistory
 from raphael_core.brain import db
+
+
+def migrate(conn):
+    """Up to schema 101: the folding of Raphael's quick conversation (102) has its own tests."""
+    with patch.object(db, "LATEST_VERSION", 101):
+        db.migrate(conn)
 
 
 @pytest.fixture
@@ -54,7 +61,7 @@ def test_v68_moves_every_conversation_record_and_keeps_quick_and_target_context(
     extra = [conversation(conn, 1, 30), conversation(conn, 1, 20)]
     chief = Conversations(conn).main()
     chief_extra = conversation(conn, 0, 50)
-    quick = Conversations(conn).quick()
+    quick = conversation(conn, 0, 5, kind="quick")
     fallback = [conversation(conn, 2, 20), conversation(conn, 2, 40), conversation(conn, 2, 40)]
     expected = {1: [], 0: []}
     for member, cid in [(1, extra[0]), (0, chief_extra), (1, target), (1, extra[1]), (0, chief)]:
@@ -90,9 +97,9 @@ def test_v68_moves_every_conversation_record_and_keeps_quick_and_target_context(
     conn.commit()
     conn.execute("PRAGMA foreign_keys=ON")
 
-    db.migrate(conn)
+    migrate(conn)
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 101
     for member, cid in [(1, target), (0, chief), (2, fallback[-1])]:
         standard = conn.execute("SELECT id,is_default FROM conversations WHERE member_id=? AND kind='standard'", (member,)).fetchall()
         assert [tuple(row) for row in standard] == [(cid, 1)]
@@ -119,7 +126,7 @@ def test_v68_moves_every_conversation_record_and_keeps_quick_and_target_context(
     assert tuple(conn.execute("SELECT * FROM agent_turns WHERE id=?", (quick_turn,)).fetchone()) == (*quick_turn_before, None)
     assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
     before = conn.total_changes
-    db.migrate(conn)
+    migrate(conn)
     assert conn.total_changes == before
 
 
@@ -139,7 +146,7 @@ def test_v68_inbox_collisions_keep_target_then_earliest_folded_work(legacy, targ
         conn.execute("UPDATE agent_inbox SET state='started' WHERE turn_id=?", (tid,))
         conn.execute("UPDATE agent_turns SET status='running' WHERE id=?", (tid,))
     conn.commit()
-    db.migrate(conn)
+    migrate(conn)
     rows = {row["turn_id"]: dict(row) for row in conn.execute("SELECT * FROM agent_inbox")}
     assert rows[kept]["state"] == ("started" if target_started else "queued")
     assert rows[started]["state"] == ("terminal" if target_started else "started")
@@ -160,7 +167,7 @@ def test_v68_is_atomic_if_cleanup_fails_after_records_move(legacy):
     tid = turn(conn, 1, extra, "Saved")
     conn.executescript("CREATE TRIGGER refuse_fold BEFORE DELETE ON conversations WHEN OLD.member_id=1 BEGIN SELECT RAISE(ABORT,'test rollback'); END;")
     with pytest.raises(sqlite3.IntegrityError, match="test rollback"):
-        db.migrate(conn)
+        migrate(conn)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == 67
     assert conn.execute("SELECT conversation_id FROM agent_turns WHERE id=?", (tid,)).fetchone()[0] == extra
     assert conn.execute("SELECT COUNT(*) FROM conversations WHERE id IN (?,?)", (target, extra)).fetchone()[0] == 2

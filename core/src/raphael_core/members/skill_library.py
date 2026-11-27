@@ -13,13 +13,30 @@ from contextlib import suppress
 from pathlib import Path
 
 from ..bots.homes import BotHomes, HomeError, atomic
+from .skill_errors import oversized_package, too_many_files
 from .store import MemberError
 
 SHARED = -1
-MAX_PACKAGE_BYTES = 32 * 1024 * 1024
-MAX_PACKAGE_FILES = 2000
+# What an import may hold is bounded only by what would keep the app busy for good: an ordinary skill or plugin, assets and
+# all, is far below each of these. Whatever crosses one is refused with the file, its size and the limit (skill_errors.py).
+MAX_PACKAGE_BYTES = 256 * 1024 * 1024  # the files one import holds in memory
+MAX_PACKAGE_FILES = 100_000  # the files one import holds
+MAX_ARCHIVE_ENTRIES = 200_000  # the entries an archive may list, however few of them are taken
+MAX_UPLOAD_BYTES = 128 * 1024 * 1024  # a file the window reads and sends (base64 in one message); the folder has none
+MAX_SCAN_ENTRIES = 2_000_000  # what the walk of a picked folder looks at to find skills
+MAX_DISCOVERY_DEPTH = 64  # folders below the one picked
+# What the automatic list of installed skills and plugins scans (the owner picks nothing there).
 MAX_DISCOVERY_ENTRIES = 20000
-MAX_DISCOVERY_DEPTH = 12
+# Never part of a skill: what a tool, a run or an operating system leaves in a folder.
+JUNK_FOLDERS = frozenset({"node_modules", "__pycache__", "__macosx", ".git"})
+JUNK_FILES = frozenset({".ds_store", "thumbs.db", "desktop.ini"})
+
+
+def junk(path):
+    """Whether a path (a name, or a `/` path) is such a leftover and so no part of a skill."""
+    parts = path.replace("\\", "/").split("/")
+    last = parts[-1].casefold()
+    return any(part.casefold() in JUNK_FOLDERS for part in parts[:-1]) or last in JUNK_FILES or last in JUNK_FOLDERS
 
 
 class SkillHomes(BotHomes):
@@ -59,8 +76,9 @@ def package(folder, *, installed=False, cached=False):
     return files
 
 
-def walk(folder, remaining, *, strict=False):
-    """Bound directory enumeration and let discovery prune an entire skill subtree."""
+def walk(folder, remaining, *, strict=False, hidden=False):
+    """Bound directory enumeration and let discovery prune an entire skill subtree. A folder the owner picked is searched
+    through its hidden folders too (`.claude/skills`), never through what `junk` names."""
     pending = [(folder, 0)]
     while pending:
         directory, depth = pending.pop()
@@ -68,7 +86,8 @@ def walk(folder, remaining, *, strict=False):
         with os.scandir(directory) as entries:
             for entry in entries:
                 if remaining[0] <= 0:
-                    raise MemberError("size", "local skill scan limit reached")
+                    raise MemberError("size", "this folder holds too many entries to search for skills: pick the folder "
+                                      "of the skill itself", reason="scan")
                 remaining[0] -= 1
                 path = Path(entry.path)
                 if linked(path):
@@ -79,7 +98,7 @@ def walk(folder, remaining, *, strict=False):
                         raise MemberError("source", "linked skill packages are not supported")
                     continue
                 if entry.is_dir(follow_symlinks=False):
-                    if entry.name != "node_modules" and not entry.name.startswith("."):
+                    if not junk(entry.name) if hidden else entry.name != "node_modules" and not entry.name.startswith("."):
                         dirs.append(path)
                 else:
                     info = entry.stat(follow_symlinks=False)
@@ -102,8 +121,10 @@ def fingerprint(folder, remaining=None):
         for path, info in entries:
             size += info.st_size
             files.append((path.relative_to(folder).as_posix(), info.st_size, info.st_mtime_ns))
-            if size > MAX_PACKAGE_BYTES or len(files) > MAX_PACKAGE_FILES:
-                raise MemberError("size", "skill package is too large")
+            if size > MAX_PACKAGE_BYTES:
+                raise oversized_package(files[-1][0], size, MAX_PACKAGE_BYTES)
+            if len(files) > MAX_PACKAGE_FILES:
+                raise too_many_files(len(files), MAX_PACKAGE_FILES, files[-1][0])
     for entry in sorted(files):
         digest.update(json.dumps(entry, ensure_ascii=False).encode() + b"\0")
     return digest.hexdigest()
@@ -181,7 +202,8 @@ def describe(folder, root, remaining=None, document=None):
         with (folder / "SKILL.md").open("rb") as stream:
             document = stream.read(MAX_SKILL_BYTES + 1)
     if len(document) > MAX_SKILL_BYTES:
-        raise MemberError("size", "skill document is too large")
+        from .skill_errors import oversized_file
+        raise oversized_file(f"{folder.name}/SKILL.md", len(document), MAX_SKILL_BYTES)
     name, description = skill_metadata(document.decode("utf-8-sig"))
     relative = folder.relative_to(root).parts
     plugin = relative[1] if root.name == "cache" and len(relative) >= 3 else ""

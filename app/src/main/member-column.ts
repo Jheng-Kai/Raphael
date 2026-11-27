@@ -1,5 +1,5 @@
-// The member column puts the primary contact first, followed by member groups and ungrouped members.
-// Raphael keeps its emblem even when the primary contact takes the first conversation slot.
+// The member column lists the owner's slimes: the chief of staff first (a slime like the others, with the crown), followed
+// by member groups and ungrouped members. Raphael is not in it: it has its own entry in the account menu.
 //
 // A row's borderless 「more」 that shows under the pointer, or a right click on the row (context-menu.ts), opens the row menu
 // (`memberMenu`); a group header's gives 「重新命名」, 「看的地方」 and 「刪除」. What they do is the host's
@@ -12,8 +12,9 @@ import { DRAFT_EVENT, unsentWords } from "./composer-drafts";
 import { createRoomsSection, openNewGroupChat } from "./group-chats";
 import { t } from "./i18n";
 import { createMessageSearch } from "./message-search";
+import { movedGroup, movedMember } from "./member-order";
 import { lightHTML, lightOf } from "./sidebar-light";
-import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, pinReplacements, plainLine, previewOf, primaryIdOf, raphaelOf } from "./members";
+import { type MemberSection, chiefFirst, faceHTML, memberMatches, memberOf, memberSections, memberRole, orderedMembers, pinReplacements, plainLine, previewOf, primaryIdOf } from "./members";
 import type { Member, MembersList } from "./types";
 import { type ConfirmWords, confirmDelete } from "./member-dialogs";
 import { closeMenu, esc, ico, iconButton, openPopover } from "./ui";
@@ -44,7 +45,7 @@ const memberDot = (member: Member, v: Pick<ColumnView, "current" | "active">): s
 function pinnedTileHTML(member: Member, v: ColumnView, top: boolean): string {
   const role = memberRole(member);
   return (
-    `<div class="mb-item" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
+    `<div class="mb-item" data-member-item="${member.id}" draggable="true">` +
     `<button type="button" class="nav mb-row mb-tile${top ? " mb-chief" : ""}" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}" aria-label="${esc(role ? `${member.name} · ${role}` : member.name)}">` +
     faceHTML(member, 64, { moving: true }) + `<b>${esc(member.name)}</b>${memberDot(member, v)}</button>` +
     iconButton("more", t("members.more", { p0: member.name }), ` data-member-more="${member.id}" aria-haspopup="menu" aria-expanded="false" data-k="member-more:${member.id}"`, "mb-more") +
@@ -60,7 +61,7 @@ export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "a
   const preview = unsent ? { text: t("members.draft", { p0: unsent }), waiting: false } : previewOf(member, v.previews.get(member.id));
   const dot = memberDot(member, v);
   return (
-    `<div class="mb-item${v.fresh.has(member.id) ? " is-new" : ""}" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
+    `<div class="mb-item${v.fresh.has(member.id) ? " is-new" : ""}" data-member-item="${member.id}" draggable="true">` +
     `<button type="button" class="nav mb-row" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}">` +
     faceHTML(member, 40, { moving: true }) +
     `<span class="mb-row-main"><span class="mb-row-t"><b>${esc(member.name)}</b></span>` +
@@ -107,14 +108,14 @@ function hiddenSectionHTML(hidden: readonly Member[], v: ColumnView): string {
     `<div class="mb-hidden-rooms" data-hidden-rooms></div></div></div></section>`;
 }
 
-/** The list: the pinned tiles, the primary, then groups and ungrouped members, then the hidden ones. */
+/** The list: the pinned tiles, the chief of staff, then groups and ungrouped members, then the hidden ones. Slimes only: Raphael is never in it. */
 export function columnHTML(v: ColumnView): string {
-  const all = memberDisplayList(v.list), top = all.members[0];
-  const pinned = all.members.filter(m => m.pinned && (m.id === top.id || !m.hidden));
-  const sections = memberSections({ ...all, members: all.members.filter(m => !m.pinned) }, "", top.id);
-  const chief = memberRowHTML(top, v).replace('class="nav mb-row"', 'class="nav mb-row mb-chief"');
-  const hidden = (v.list?.members ?? []).filter(m => m.hidden && m.id !== top.id);
-  return (pinned.length ? `<div class="mb-pinned" data-count="${Math.min(pinned.length, 3)}">${pinned.map(m => pinnedTileHTML(m, v, m.id === top.id)).join("")}</div>` : "") + (top.pinned ? "" : chief) + sections.map((section) => sectionHTML(section, v)).join("") + hiddenSectionHTML(hidden, v);
+  const chiefId = primaryIdOf(v.list), all = chiefFirst(v.list?.members ?? [], chiefId), top = all.find(m => m.id === chiefId);
+  const pinned = all.filter(m => m.pinned && (m.id === chiefId || !m.hidden));
+  const sections = memberSections({ members: all.filter(m => !m.pinned), groups: v.list?.groups ?? [] }, "", chiefId);
+  const chief = top ? memberRowHTML(top, v).replace('class="nav mb-row"', 'class="nav mb-row mb-chief"') : "";
+  const hidden = all.filter(m => m.hidden && m.id !== chiefId);
+  return (pinned.length ? `<div class="mb-pinned" data-count="${Math.min(pinned.length, 3)}">${pinned.map(m => pinnedTileHTML(m, v, m.id === chiefId)).join("")}</div>` : "") + (top?.pinned ? "" : chief) + sections.map((section) => sectionHTML(section, v)).join("") + hiddenSectionHTML(hidden, v);
 }
 
 export interface ColumnHost {
@@ -208,12 +209,12 @@ export function openConfirmMenu(anchor: HTMLElement, o: { label: string; ask: Co
 export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHost, "view" | "moveMember" | "deleteMember" | "memberAction">): void {
   const list = host.view().list;
   const member = list?.members.find(m => m.id === id);
+  // Raphael is no row of the list: it has no menu.
+  if (!member || id === 0) return;
   const primary = primaryIdOf(list);
   const isPrimary = primary === id;
-  const pin: ActionItem = { id: "pin", label: t(member?.pinned ? "members.sideUnpin" : "members.sidePin"), icon: member?.pinned ? "pinOff" : "pin" };
+  const pin: ActionItem = { id: "pin", label: t(member.pinned ? "members.sideUnpin" : "members.sidePin"), icon: member.pinned ? "pinOff" : "pin" };
   const replace: ActionItem = { id: "primary", label: t("members.sideReplacePrimary"), icon: "swap" };
-  // Raphael is not a member row the owner can edit: pinning is all there is to do to it here, and handing on the primary when it is the primary.
-  if (id === 0) return openActions(anchor, isPrimary ? [pin, SEP, replace] : [pin], pick => host.memberAction?.(id, pick));
   const unread: ActionItem = { id: "unread", label: t("members.sideUnread"), icon: "mail" };
   const tail: (ActionItem | typeof SEP)[] = [
     SEP, { id: "edit", label: t("members.sideEdit"), icon: "pencil" },
@@ -224,7 +225,8 @@ export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHos
   const tile = !!member?.pinned && !member.hidden;
   // Nobody to put in its place: the item would open an empty window, so it is not offered.
   const swap: ActionItem = { id: "replace-pinned", label: t("members.sideReplacePrimary"), icon: "swap" };
-  const items: (ActionItem | typeof SEP)[] = isPrimary ? [pin, unread, ...tail, SEP, replace]
+  // The chief is a slime like the others: the core hands the role on when it is hidden or deleted; handing it on by choice needs someone else.
+  const items: (ActionItem | typeof SEP)[] = isPrimary ? [pin, unread, ...tail, remove, ...(orderedMembers(list).length > 1 ? [SEP, replace] as const : [])]
     : tile ? [pin, unread, ...tail, remove, ...(pinReplacements(list).length ? [SEP, swap] as const : [])]
       : [pin, { id: "move", label: t("members.moveTo"), icon: "folder", submenu: true }, unread, ...tail, remove];
   openActions(anchor, items, (pick, row) => {
@@ -256,10 +258,9 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
   const unfolded = new Set<number>();
   try { for (const id of JSON.parse(localStorage.getItem("raphael.sidebar.folders") ?? "[]")) if (Number.isInteger(id) && id !== HIDDEN_SECTION) folded.add(id); } catch { /* Keep folders open when storage is unavailable. */ }
   const search = createMessageSearch(list, {
-    name: id => (id === 0 ? raphaelOf(host.view().list) : host.view().list?.members.find(member => member.id === id))?.name ?? "",
+    name: id => memberOf(host.view().list, id)?.name ?? "",
     face: id => {
-      const members = host.view().list;
-      const member = id === 0 ? raphaelOf(members) : members?.members.find(member => member.id === id);
+      const member = memberOf(host.view().list, id);
       return member ? faceHTML(member, 34) : "";
     },
     open: (member, conversation, turn) => host.openMessage?.(member, conversation, turn),
@@ -305,7 +306,8 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
         [
           { id: "member", label: t("members.newMember") + "  " + shortcutText(["Primary", "N"]), icon: "plus" },
           { id: "group", label: t("members.newGroup"), icon: "folder" },
-          { id: "group-chat", label: t("members.sideNewGroupChat"), icon: "chat" },
+          // A group chat has the chief of staff in it: with no slime there is no one to meet.
+          ...(primaryIdOf(host.view().list) === null ? [] : [{ id: "group-chat", label: t("members.sideNewGroupChat"), icon: "chat" as const }]),
           { id: "member-store", label: t("store.title"), icon: "store" },
         ],
         pick => {
@@ -369,8 +371,21 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     line.hidden = false;
   };
   const clearDrop = (): void => { line.hidden = true; landing = null; };
-  /** Where the dragged row lands for a pointer at `y`, and the line that says so. */
+  /**
+   * Where the dragged row lands for a pointer at `y`, and the line that says so: only a place the drop changes something at.
+   * The same `movedMember` / `movedGroup` that the drop is saved by decides, so a line is never drawn where nothing would happen
+   * and a drop where one is drawn is what it shows.
+   */
   function landingAt(target: Element, y: number): { group: HTMLElement; before: number | null; lineY: number; box: DOMRect } | null {
+    const next = candidateAt(target, y), list = host.view().list;
+    if (!next || !drag || !list) return null;
+    const moved = drag.kind === "member"
+      ? movedMember(list, drag.id, next.group.dataset.group === "none" ? null : Number(next.group.dataset.group), next.before ?? undefined)
+      : movedGroup(list, drag.id, next.before);
+    return moved ? next : null;
+  }
+  /** The place under the pointer, whether or not the row would move there. */
+  function candidateAt(target: Element, y: number): { group: HTMLElement; before: number | null; lineY: number; box: DOMRect } | null {
     if (!drag) return null;
     if (drag.kind === "member") {
       // Not the hidden folder: a member is hidden by its menu, and no folder of that name takes a drop.
@@ -430,7 +445,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
   /** Every member the search can reach, as two-line rows (face, name, last message), filtered by the words typed. */
   function searchRowsHTML(words: string): string {
     const view = host.view();
-    const members = memberDisplayList(view.list).members.filter((m, index) => (index === 0 || !m.hidden) && memberMatches(m, words));
+    const members = chiefFirst(view.list?.members ?? [], primaryIdOf(view.list)).filter(m => !m.hidden && memberMatches(m, words));
     if (!members.length) return `<p class="mb-none">${esc(t("members.noMatch"))}</p>`;
     return members.map(m => `<button type="button" class="nav side-search-row" data-member="${m.id}">${faceHTML(m, 28)}` +
       `<span class="side-search-main"><b>${esc(m.name)}</b><span>${esc(previewOf(m, view.previews.get(m.id)).text)}</span></span></button>`).join("");
@@ -460,9 +475,9 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     const rows = panel.querySelector<HTMLElement>(".side-search-rows")!;
     const leave = (): void => closeMenu();
     const lookup = createMessageSearch(rows, {
-      name: id => (id === 0 ? raphaelOf(host.view().list) : host.view().list?.members.find(member => member.id === id))?.name ?? "",
+      name: id => memberOf(host.view().list, id)?.name ?? "",
       face: id => {
-        const member = id === 0 ? raphaelOf(host.view().list) : host.view().list?.members.find(member => member.id === id);
+        const member = memberOf(host.view().list, id);
         return member ? faceHTML(member, 28) : "";
       },
       open: (member, conversation, turn) => { leave(); host.openMessage?.(member, conversation, turn); },

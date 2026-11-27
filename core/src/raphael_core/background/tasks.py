@@ -172,7 +172,10 @@ class Task:
     def quiet(self) -> bool:
         """Whether its report stays in its thread: a member's task, or a routine's run, is never
         said on the overlay (the owner reads it in the app)."""
-        return self.member_id != 0 or self.routine_id is not None or self.scope != "private" or self.report_room_id is not None or self.mode == "work"
+        # A conversion of the library's import box (members/skill_convert.py) answers the window that asked, never the overlay;
+        # a delegated sub-worker answers the member that started it.
+        return (self.member_id != 0 or self.routine_id is not None or self.scope != "private" or self.report_room_id is not None
+                or self.mode in ("work", "delegate") or self.session_id.startswith("skills:convert:"))
 
 
 @dataclass
@@ -361,6 +364,32 @@ class TaskStore:
             self._conn.execute("INSERT INTO task_outbox VALUES (?,?, 'queued',?,?,?,?,NULL,NULL)",
                 (f'{task_id}:queued',task_id,source.id,source.room_id,source.thread_id,now))
         return task_id, False
+
+    def accept_delegates(self, *, source, parent, member_id, language, pieces):
+        """Write down the sub-workers a member started (`delegate_task`, agent/delegate.py), queued, together: one task for each
+        of `pieces` (goal, context, model). A sub-worker belongs to the member (`member_id`, which is whose folder, tools,
+        cards and permission it has) and to the turn that started it (`source_turn_id`, where the conversation shows it), with
+        no turn of its own, and below the task that started it when one did. Its `done_when` is the context the member wrote."""
+        now = self._now_ms()
+        ids = []
+        with self._conn:
+            for goal, context, model in pieces:
+                cursor = self._conn.execute(
+                    "INSERT INTO worker_tasks(created_at_ms,state,session_id,language,text,member_id,scope,parent_task_id,root_task_id,"
+                    "from_member_id,source_turn_id,model_ref,mode,done_when,ready_at_ms,schedule_provenance) "
+                    "VALUES (?,'queued',?,?,?,?,'private',?,?,?,?,?,'delegate',?,?,?)",
+                    (now, source.session_id, language, goal, member_id, parent.id if parent else None,
+                     (parent.root_task_id or parent.id) if parent else None, member_id, source.id, model, context, now,
+                     json.dumps({"kind": "delegate_task", "source_turn_id": source.id, "authorization": "immediate_only"})))
+                identifier = cursor.lastrowid
+                self._conn.execute("UPDATE worker_tasks SET root_task_id=COALESCE(root_task_id,id) WHERE id=?", (identifier,))
+                ids.append(identifier)
+        return ids
+
+    def delegated_from(self, source_turn_id):
+        """How many sub-workers the turn `source_turn_id` has started, of any end."""
+        return self._conn.execute("SELECT COUNT(*) FROM worker_tasks WHERE mode='delegate' AND source_turn_id=?",
+                                  (source_turn_id,)).fetchone()[0]
 
     def room_handoffs_used(self, source, parent):
         """Whether the work handed off from a reply in a room is at its bound: this reply's own
@@ -743,9 +772,9 @@ class TaskStore:
         with self._conn:
             rows = self._conn.execute(
                 "SELECT id, language, (state='queued' AND mode IS NOT NULL AND started_at_ms IS NULL"
-                " AND ready_at_ms < ?) AS stale FROM worker_tasks"
+                " AND ready_at_ms < ?) AS stale, (mode='delegate') AS silent FROM worker_tasks"
                 " WHERE state IN ('queued', 'running', 'waiting')"
-                " AND (stale OR (NOT ((mode IS NOT NULL OR continuation IS NOT NULL) AND state='queued')"
+                " AND (stale OR mode='delegate' OR (NOT ((mode IS NOT NULL OR continuation IS NOT NULL) AND state='queued')"
                 " AND NOT (state='waiting' AND continuation IS NOT NULL)))",
                 (-1 if stale_before_ms is None else stale_before_ms,),
             ).fetchall()
@@ -775,11 +804,13 @@ class TaskStore:
                     )
                     continue
                 # A hand-off nobody began says nothing when it ends: no report, and nothing to announce (R-STOP-01).
-                prefix, text = ("", "") if row["stale"] else report(row["language"], self.tool_steps(row["id"]))
+                # A sub-worker's end is told to the member that waited for it, never to the owner.
+                quiet = row["stale"] or row["silent"]
+                prefix, text = ("", "") if quiet else report(row["language"], self.tool_steps(row["id"]))
                 self._conn.execute(
                     "UPDATE worker_tasks SET state = 'interrupted', finished_at_ms = ?,"
                     " reason = ?, report_prefix = ?, report_text = ?, announced = ? WHERE id = ?",
-                    (self._now_ms(), ended, prefix, text, 1 if row["stale"] else 0, row["id"]),
+                    (self._now_ms(), ended, prefix, text, 1 if quiet else 0, row["id"]),
                 )
                 self._conn.execute("INSERT OR IGNORE INTO task_outbox "
                     "SELECT CAST(id AS TEXT)||':result',id,'result',source_turn_id,COALESCE(report_room_id,room_id),COALESCE(report_thread_id,thread_id),?,NULL,NULL "
@@ -790,7 +821,7 @@ class TaskStore:
         """The tasks that run, then the newest of those that are queued or ended at `since_ms` or
         later, with something said (a cleared task keeps nothing)."""
         rows = self._conn.execute(
-            f"SELECT {_TASK_COLUMNS} FROM worker_tasks WHERE text != '' AND member_id = ?"
+            f"SELECT {_TASK_COLUMNS} FROM worker_tasks WHERE text != '' AND member_id = ? AND mode IS NOT 'delegate'"
             " AND scope='private'"
             " AND (turn_id IS NULL OR EXISTS(SELECT 1 FROM agent_turns t WHERE t.id=worker_tasks.turn_id AND t.scope='private'))"
             " AND (state IN ('queued', 'running', 'waiting') OR finished_at_ms >= ?)"

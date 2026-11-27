@@ -1,7 +1,7 @@
 """One persistent main conversation per member for chat, voice, routines and messaging.
 
-The main conversation is created lazily and cannot be replaced through public actions.
-Raphael also keeps one quick conversation, reached only explicitly (`QUICK`), never by default.
+The main conversation is created lazily and cannot be replaced through public actions. Raphael has no second
+one: its quick questions (Alt+Space) are written to its main conversation and only answered the quick way (`QUICK`).
 """
 
 import sqlite3
@@ -11,7 +11,7 @@ from ..clock import wall_clock_ms
 from ..protocol import invalid_params
 
 TITLE_MAX = 80
-# The destination (and model purpose) of an Alt+Space question: Raphael's quick conversation.
+# The destination (and model purpose) of an Alt+Space question: Raphael's one conversation, answered the quick way.
 QUICK = "quick"
 
 
@@ -54,33 +54,11 @@ class Conversations:
         return self.main(member_id) if conversation_id is None else self.get(conversation_id, member_id)["id"]
 
     def destination(self, member_id: int, conversation_id: int | None, *, quick: bool) -> int:
-        """Where a request is written. A quick request goes to Raphael's quick conversation and a
-        formal one to the member's main conversation; an ID that names the other kind is
-        refused, never routed elsewhere."""
-        if quick:
-            if member_id != 0:
-                raise invalid_params("quick questions belong to Raphael")
-            quick_id = self.quick()
-            if conversation_id is not None and conversation_id != quick_id:
-                raise invalid_params("conversation_id is not the quick conversation")
-            return quick_id
-        if conversation_id is not None and self.get(conversation_id, member_id)["kind"] == QUICK:
-            raise invalid_params("the quick conversation takes quick questions only")
+        """Where a request is written: the member's main conversation, or the one it names. A quick request is
+        Raphael's alone (it says how the turn is answered, not where it is kept)."""
+        if quick and member_id != 0:
+            raise invalid_params("quick questions belong to Raphael")
         return self.resolve(member_id, conversation_id)
-
-    def quick(self) -> int:
-        """The single, lazy, persistent hotkey conversation; never the formal default."""
-        row = self.conn.execute("SELECT id FROM conversations WHERE kind = 'quick'").fetchone()
-        if row is not None:
-            return row[0]
-        now = self.now_ms()
-        with self.conn:
-            self.conn.execute(
-                "INSERT OR IGNORE INTO conversations"
-                " (member_id, title, created_at_ms, updated_at_ms, is_default, kind)"
-                " VALUES (0, '', ?, ?, 0, 'quick')", (now, now),
-            )
-        return self.conn.execute("SELECT id FROM conversations WHERE kind = 'quick'").fetchone()[0]
 
     def _create_main(self, member_id: int) -> int:
         now = self.now_ms()
@@ -93,10 +71,8 @@ class Conversations:
 
     def list(self, member_id: int, query: str = "") -> list[dict]:
         self.main(member_id)
-        if member_id == 0:
-            self.quick()
         rows = self.conn.execute(
-            "SELECT c.*, (SELECT COUNT(*) FROM agent_turns t WHERE t.conversation_id = c.id AND t.member_id = c.member_id) AS turn_count FROM conversations c WHERE member_id = ? ORDER BY (kind = 'quick') DESC, updated_at_ms DESC, id DESC", (member_id,),
+            "SELECT c.*, (SELECT COUNT(*) FROM agent_turns t WHERE t.conversation_id = c.id AND t.member_id = c.member_id) AS turn_count FROM conversations c WHERE member_id = ? ORDER BY updated_at_ms DESC, id DESC", (member_id,),
         )
         return [dict(row) for row in rows if query.casefold() in row["title"].casefold()]
 

@@ -39,23 +39,25 @@ test("each subscription gives its window with the most used, in the reading's or
   expect(read({ brains: [stale.brains[0]!, allowances().brains[1]!] }).map(row => row.name)).toEqual(["Claude 每週", "Codex 每週"]);
 });
 
-test("the rows are 用量 with a chevron and no number, 聽寫, 行事曆, a hairline and 設定, and with no window known 用量 has no chevron and no submenu", () => {
+test("the rows are 用量 with a chevron and no number, 聽寫, 行事曆, a hairline, Raphael, a hairline and 設定, and with no window known 用量 has no chevron and no submenu", () => {
   const known = document.createElement("div");
   known.innerHTML = accountMenuHTML([block({}), block({ id: "claude", name: "Claude 每週", used: 97, value: "已使用 97%" })]);
-  expect([...known.querySelectorAll("button")].map(row => row.dataset.account)).toEqual(["usage", "dictation", "calendar", "settings"]);
+  expect([...known.querySelectorAll("button")].map(row => row.dataset.account)).toEqual(["usage", "dictation", "calendar", "raphael", "settings"]);
   expect(known.querySelector('[data-account="usage"]')!.getAttribute("aria-haspopup")).toBe("menu");
   expect(known.querySelector('[data-account="usage"] > svg.i')).not.toBeNull();
   expect(known.querySelector('[data-account="usage"]')!.textContent).toBe("用量");
-  expect(known.querySelectorAll('.menu-sep')).toHaveLength(1);
-  expect(known.querySelector(".menu-sep")!.nextElementSibling!.getAttribute("data-account")).toBe("settings");
+  expect(known.querySelectorAll('.menu-sep')).toHaveLength(2);
+  expect(known.querySelector(".menu-sep")!.nextElementSibling!.getAttribute("data-account")).toBe("raphael");
+  expect([...known.querySelectorAll(".menu-sep")].pop()!.nextElementSibling!.getAttribute("data-account")).toBe("settings");
   const none = document.createElement("div");
   none.innerHTML = accountMenuHTML([]);
-  expect([...none.querySelectorAll("button")].map(row => row.dataset.account)).toEqual(["usage-settings", "dictation", "calendar", "settings"]);
+  expect([...none.querySelectorAll("button")].map(row => row.dataset.account)).toEqual(["usage-settings", "dictation", "calendar", "raphael", "settings"]);
   expect(none.querySelector('[data-account="usage-settings"]')!.hasAttribute("aria-haspopup")).toBe(false);
   expect(none.querySelector("button > svg.i")).toBeNull();
-  // A Lucide icon on every row, and no two rows share one.
+  // A Lucide icon on every row, and no two rows share one; Raphael's cell holds its own slime instead.
   const icons = [...known.querySelectorAll("button .ck")].map(icon => icon.innerHTML);
-  expect(icons.every(Boolean) && new Set(icons).size).toBe(4);
+  expect(icons.every(Boolean) && new Set(icons).size).toBe(5);
+  expect(known.querySelectorAll('button .ck svg.i')).toHaveLength(4);
 });
 
 test("the submenu has a block for each provider with its words and number, no reset time, then 管理用量", () => {
@@ -185,4 +187,28 @@ test("a reading that fails keeps what was known of that provider, and the others
   anchor.click(); await flush();
   menu()!.querySelector<HTMLElement>('[data-account="usage"]')!.click();
   expect([...document.querySelectorAll(".account-window-name")].map(name => name.textContent)).toEqual(["Codex 每週", "ChatGPT", "OpenRouter 本月"]);
+});
+
+test("Raphael has an entry of its own in the menu: after 行事曆, apart by hairlines, with its blue slime and its name", async () => {
+  const known = document.createElement("div");
+  known.innerHTML = accountMenuHTML([block({})]);
+  expect([...known.querySelectorAll("button")].map(row => row.dataset.account)).toEqual(["usage", "dictation", "calendar", "raphael", "settings"]);
+  expect([...known.children].map(child => child.getAttribute("data-account") ?? "|")).toEqual(["usage", "dictation", "calendar", "|", "raphael", "|", "settings"]);
+  const row = known.querySelector<HTMLElement>('[data-account="raphael"]')!;
+  expect(row.querySelector(".mt")!.textContent).toBe("拉斐爾");
+  expect(row.querySelector(".ck .mb-av-slime")).not.toBeNull();
+  expect(row.innerHTML).toContain("#3DB5FF");
+  expect(row.querySelector("img")).toBeNull();
+  setLocale("en");
+  known.innerHTML = accountMenuHTML([]);
+  expect(known.querySelector('[data-account="raphael"] .mt')!.textContent).toBe("Raphael");
+});
+
+test("choosing Raphael opens its conversation space as the app's ordinary route", async () => {
+  const { anchor, go } = mount(async () => ({ brains: [] }));
+  anchor.click(); await flush();
+  menu()!.querySelector<HTMLElement>('[data-account="raphael"]')!.click();
+  expect(go).toHaveBeenCalledExactlyOnceWith("agent", "raphael");
+  expect(menu()).toBeNull();
+  expect(document.activeElement).toBe(anchor);
 });

@@ -220,6 +220,20 @@ async def test_glob_and_grep_walk_the_home_but_not_packages_or_kept_places(home,
     assert not bad.ok and bad.kind == "bad_pattern"
 
 
+async def test_glob_and_grep_read_the_members_folders_on_the_loop_not_in_the_walk_thread(conn, home, files, tmp_path):
+    # The members' folders come from the settings store, whose connection belongs to the loop's thread: the walk runs in
+    # another one, so what it needs is read before it starts (a real store here, as the app wires it).
+    from raphael_core.computer.vm import LocalVm
+    vm = LocalVm(tmp_path / "data", settings=SettingsStore(conn))
+    files.owner_files.member_folders = vm.local_folders
+    found = await call(files, "glob", {"pattern": "*.md"})
+    assert found.ok, found.text
+    assert "plan.md" in found.text
+    matched = await call(files, "grep", {"pattern": "ship"})
+    assert matched.ok, matched.text
+    assert "Found 1 file" in matched.text and "plan.md" in matched.text
+
+
 async def test_a_search_for_raphaels_database_by_name_is_made_and_finds_none_of_its_data(conn, home, files, monkeypatch):
     # Through the gate: the data floor reads a search's path as its place, never its pattern.
     data = home / "Raphael Data"
@@ -457,3 +471,21 @@ def test_the_walk_skips_app_data_unless_it_starts_there(home):
     assert not [path for path in walked if "Library" in path]
     inside = list(owner_files.Walk(os.path.realpath(library), lambda path: False, home=home).files())
     assert [os.path.basename(path) for path in inside] == ["notes.md"]
+
+
+async def test_a_search_that_names_no_folder_starts_in_the_members_project(conn, home, files):
+    # As Claude Code searches its working directory: with a project chosen, glob and grep start there, not in the owner's home.
+    settings = SettingsStore(conn)
+    (home / "Documents" / "notes" / "plan.md").write_text("# Plan\nship it\n", encoding="utf-8")
+    (home / "elsewhere").mkdir()
+    (home / "elsewhere" / "other.md").write_text("ship elsewhere\n", encoding="utf-8")
+    everywhere = await call(files, "glob", {"pattern": "**/*.md"})
+    assert "other.md" in everywhere.text
+    settings.set("project_folders", [str(home / "Documents")])
+    settings.set("member_work_folder", {"0": str(home / "Documents")})
+    found = await call(files, "glob", {"pattern": "**/*.md"})
+    assert found.ok and "plan.md" in found.text and "other.md" not in found.text
+    matched = await call(files, "grep", {"pattern": "ship"})
+    assert matched.ok and "plan.md" in matched.text and "other.md" not in matched.text
+    named = await call(files, "grep", {"pattern": "ship", "path": "~/elsewhere"})
+    assert "other.md" in named.text  # a folder that is named is the one searched

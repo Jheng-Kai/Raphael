@@ -50,7 +50,10 @@ describe("a verify run of only what changed (--changed)", () => {
     expect(checks.map(check => check.name)).toEqual(["tsc", "related", "rules"]);
     const related = checks[1].args;
     expect(related.slice(1, 4)).toEqual(["related", "--run", "--passWithNoTests"]);
-    expect(related.slice(-3)).toEqual(["src/main/desktop-viewer.ts", "src/main/desktop-viewer.test.ts", "scripts/look/checks.mjs"]);
+    const front = ["src/main/desktop-viewer.ts", "src/main/desktop-viewer.test.ts", "scripts/look/checks.mjs"], at = related.indexOf(front[0]);
+    expect(related.slice(at, at + 3)).toEqual(front);
+    // After them, the tests that read one of them as text, which vitest related does not follow.
+    expect(related.slice(at + 3)).toEqual(verifyModule.textReaders(front));
     expect(of([], "rules").args).toEqual(expect.arrayContaining(["run", "src/architecture", "guardian-contract", "feature-map", "scripts/repo-clean"]));
   });
   it("runs the test folder of each changed core package, a changed module's test file and changed test files, once", () => {
@@ -62,6 +65,34 @@ describe("a verify run of only what changed (--changed)", () => {
     const core = of(["core/src/raphael_core/members/service.py"], "core");
     expect(core.args).toEqual(expect.arrayContaining(["-W", "error", "tests/members"]));
     expect(core.cwd).toBe(resolve(app, "../core"));
+  });
+  it("runs the core tests that read a changed app file as text, such as the boundary test the shell's method list feeds", () => {
+    const { coreTargets } = verifyModule;
+    const exists = path => path.startsWith("tests/architecture/");
+    expect(coreTargets(["app/src-tauri/src/commands.rs"], exists)).toEqual(["tests/architecture/test_boundaries.py", "tests/architecture/test_management_coverage.py"]);
+    expect(coreTargets(["app/src/main/api.ts", "core/src/raphael_core/management.py"], exists)).toEqual(["tests/architecture/test_management_coverage.py"]);
+    expect(of(["app/src-tauri/src/commands.rs"], "core").args).toEqual(expect.arrayContaining(["tests/architecture/test_management_coverage.py"]));
+  });
+  it("knows every app file a core test reads as text", () => {
+    const { READ_BY_CORE_TESTS } = verifyModule;
+    const core = resolve(app, "../core"), listing = spawnSync("git", ["ls-files", "tests/**/*.py"], { cwd: core, encoding: "utf8" });
+    const reads = [];
+    for (const test of listing.stdout.split("\n").filter(Boolean)) {
+      for (const match of readFileSync(join(core, test), "utf8").matchAll(/\/ "(app\/[^"]+\.(?:ts|rs|mjs))"\)\.read_text/g)) reads.push([match[1], test]);
+    }
+    expect(reads.length).toBeGreaterThan(3);
+    for (const [file, test] of reads) expect(READ_BY_CORE_TESTS[file] ?? [], `${test} reads ${file}`).toContain(test);
+  });
+  it("runs the frontend tests that read a changed file as text, which vitest related does not follow", () => {
+    const { textReaders } = verifyModule;
+    const texts = { "src/main/agent-sizing.test.ts": 'read("agent.css")', "src/main/other.test.ts": 'import "./agent"', "scripts/look/a.test.mjs": 'join(app, "src/main/agent.css")' };
+    const tests = Object.keys(texts), read = path => texts[path];
+    expect(textReaders(["src/main/agent.css"], tests, read)).toEqual(["src/main/agent-sizing.test.ts", "scripts/look/a.test.mjs"]);
+    expect(textReaders(["src/main/agent-sizing.test.ts"], tests, read)).toEqual([]);
+    // The real tree: the test that failed only in the whole suite, after a change to agent.css, is run by --changed.
+    expect(textReaders(["src/main/agent.css"])).toContain("src/main/agent-sizing.test.ts");
+    const related = run(["app/src/main/agent.css"]).find(check => check.name === "related");
+    expect(related.args).toContain("src/main/agent-sizing.test.ts");
   });
   it("checks contrast only when CSS changed and Rust formatting only when Rust changed", () => {
     expect(run(["app/src/main/agent.ts"]).map(check => check.name)).not.toContain("contrast");

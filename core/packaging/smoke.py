@@ -231,7 +231,7 @@ def smoke_without_a_key(executable: Path) -> dict:
                                              "ui_language": "en", "target_app": None, "destination": "quick"})
             require(refused["status"] == "done" and refused["prefix"] == "Negative",
                     "The voice assistant did not refuse a request it cannot answer without a key")
-            quick = next(c["id"] for c in rpc.call("conversations.list")["conversations"] if c["kind"] == "quick")
+            quick = rpc.call("conversations.list")["conversations"][0]["id"]
             turns = rpc.call("agent.history.list", {"conversation_id": quick})["turns"]
             require(len(turns) == 1 and turns[0]["status"] == "error", "The assistant's turn was not recorded")
             require(rpc.call("agent.history.clear") == {"deleted": 1}, "The assistant's history was not cleared")
@@ -296,7 +296,7 @@ def smoke_with_the_fake_llm(executable: Path) -> dict:
                                             "ui_language": "en", "target_app": None, "destination": "quick"})
             require(spoken == {"status": "done", "turn_id": 1, "prefix": "Answer", "text": "hello"},
                     "The voice assistant did not answer with the fake LLM")
-            quick = next(c["id"] for c in rpc.call("conversations.list")["conversations"] if c["kind"] == "quick")
+            quick = rpc.call("conversations.list")["conversations"][0]["id"]
             require([turn["question"] for turn in rpc.call("agent.history.list", {"conversation_id": quick})["turns"]] == ["hello"],
                     "The assistant's turn was not recorded")
             # A task for the background worker: the core starts its worker (this executable again,

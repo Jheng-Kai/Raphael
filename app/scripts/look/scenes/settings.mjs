@@ -149,7 +149,7 @@ export default [
   ], { noOwnGoogle: true }),
   scene("store-google-in-chat", "加入 on the owner's own Google leaves for the conversation with the owner's words, where the member shows the card that walks the steps", [
     ...store, type('#conn-search', 'Google'), wait('[data-conn="open-store"][data-id="google"]'),
-    click('[data-conn="join"][data-id="google"]'), wait('.page-agent:not([hidden]) .composer textarea'), check("store-google-in-chat"),
+    click('[data-conn="join"][data-id="google"]'), wait('.page-agent:not([hidden]) .composer .cmp-input'), check("store-google-in-chat"),
   ], { noOwnGoogle: true }),
   scene("plugins-store", "Search-first catalog of the apps not added yet, in bounded pages", [
     ...store, check("plugins-store"), check("plugins-store-rows"), check("plugins-store-groups"),
@@ -267,5 +267,5 @@ export default [
   scene("onboarding-abilities", "First-run step 4: the abilities as Settings › 工具's rows, each saying what it uses, with its switch", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-svc="toggle"][data-id="read"]'), wait('[data-svc="toggle"][data-id="read"][aria-checked="false"]'), check("onboarding-abilities")], { onboarding: true }),
   scene("onboarding-abilities-choice", "First-run step 4: an ability opens its choice of service in the card, as in Settings", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-svc="open"][data-id="search"]'), wait('.ob-card #svc-dialog .svc-srv')], { onboarding: true }),
   scene("onboarding-slime-crown", "First-run step 1: the first slime in a brown headband slime wears one crown on its head, large", [click('[data-ob="next"]'), wait('#ob-first-name'), type('#ob-first-name', '小藍'), click('.ob-first-picker [data-slime-tab="brown"]'), click('.ob-first-picker [data-slime-character="headband-brown"]'), wait('.ob-first-face .slime-surface[style*="#8E7254"]'), check('chief-crown')], { onboarding: true }),
-  scene("after-onboarding", "Finishing the guide opens the conversation of the slime the owner named, the app's start", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-ob="next"]'), wait(".page-agent:not([hidden]) .conversation-trigger"), check("foot-rest"), check("sidebar-shell"), check("first-slime-named")], { onboarding: true }),
+  scene("after-onboarding", "Finishing the guide opens the conversation of the slime the owner named, the app's start", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-ob="next"]'), wait(".page-agent:not([hidden]) .conversation-trigger"), wait('.mb-col .mb-chief[aria-current="true"]'), check("sidebar-shell"), check("first-slime-named")], { onboarding: true }),
 ];

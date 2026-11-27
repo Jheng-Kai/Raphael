@@ -39,7 +39,6 @@ DEFAULTS: dict[str, Any] = {
     "routine_webhook_port": 0,
     "chatgpt.registrations.v1": {},
     "first_bot_profile": {},
-    "chief_pinned": False,
     "raphael_draft_first": True,
     "raphael_computer_mode": "host",
     "raphael_tools": None,
@@ -105,6 +104,9 @@ DEFAULTS: dict[str, Any] = {
     "computer_vm_idle_minutes": 15,
     # The most one background task may spend, in US$.
     "worker_cost_cap_usd": 0.20,
+    # How many places the sub-workers a member starts (`delegate_task`) may fill at once: a worker on an API model takes one,
+    # one on a subscription CLI two, since that is a program of its own of a few hundred megabytes (agent/delegate.py).
+    "delegate_parallel": 4,
     # The models the user starred in the pickers, per role (the page's names for them), in the order
     # they were added. The page shows the ones the catalog still has at the top of its list; the
     # others stay here, in case the catalog gets them back.
@@ -198,6 +200,8 @@ _OPTIONAL_AMOUNTS = ("monthly_limit_usd",)
 
 def _allowed(key: str, value: Any) -> Any:
     """`value`, or ValueError if the key has a list of choices and `value` is not on it."""
+    if key == "delegate_parallel" and not 1 <= value <= 64:
+        raise ValueError("Sub-workers at once must be between 1 and 64")
     if key == "worker_cost_cap_usd" and (not 0 < value < float("inf")):
         raise ValueError("Task cost must be a positive finite number")
     if key == "routine_webhook_port" and not 0 <= value <= 65535:
@@ -301,25 +305,14 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
     """The key and the value that setting `key` to `value` saves, or the error `SettingsStore.set`
     raises for them (see there). Nothing is saved."""
     if key == "first_bot_profile":
-        # `avatar` is the slime the owner dressed the first Bot in (`slime:<id>`, "" for the first blue slime).
-        limits = {"name": 16, "role": 24, "personality": 2000, "instructions": 2000, "avatar": 64}
+        # Raphael's own words for how it speaks and what it does. Its name and its look are fixed, and are not here.
+        limits = {"personality": 2000, "instructions": 2000}
         if not isinstance(value, dict) or set(value) - set(limits):
             raise ValueError("Invalid first Bot profile")
         if any(not isinstance(text, str) or len(text.strip()) > limits[field] or "\x00" in text
                for field, text in value.items()):
             raise ValueError("Invalid first Bot profile text")
-        if "name" in value and not value["name"].strip():
-            raise ValueError("The first Bot needs a name")
-        profile = {field: text.strip() for field, text in value.items()}
-        if profile.get("avatar"):
-            from ..members.store import MemberError, clean_avatar
-            if not profile["avatar"].startswith("slime:"):
-                raise ValueError("The first Bot wears a slime")
-            try:
-                profile["avatar"] = clean_avatar(profile["avatar"])
-            except MemberError as error:
-                raise ValueError(str(error)) from None
-        return key, profile
+        return key, {field: text.strip() for field, text in value.items()}
     if key == "raphael_tools":
         from ..members.store import MemberError, clean_tools
         try:

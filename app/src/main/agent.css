@@ -520,7 +520,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* The composer's line brightens under the pointer, and more while the owner is in it (pressed into it or typing) or it
    holds words. Never from the focus alone: opening a conversation focuses the composer, and a jump lights nothing (R-UI-118). */
 .composer:hover { border-color: var(--line-lit); }
-.composer[data-engaged], .composer:has(.cmp-input:not(:placeholder-shown)) { border-color: var(--line-focus); }
+.composer[data-engaged], .composer:has(.cmp-input:not(:placeholder-shown, [data-empty])) { border-color: var(--line-focus); }
 /* The shadow is always black and focus changes nothing, so opening a conversation (which focuses the field)
    lights no halo around it in the dark theme. */
 .cmp-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
@@ -570,10 +570,10 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .page-agent .btn.cmp-attach:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .btn.cmp-attach .i { width: 20px; height: 20px; }
 /* The field grows with its text by itself, up to six lines: measured from script, every keystroke laid out the whole thread. */
-.cmp-input { flex: 1; min-width: 0; min-height: var(--pa-cmp-btn); max-height: min(calc(160px + 40 * var(--pa-u)), calc(6lh + 2px)); field-sizing: content; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: var(--pa-cmp-fs)/var(--pa-cmp-lh) var(--voice); padding: var(--pa-cmp-py) 4px; overflow-y: auto; }
+.cmp-input { flex: 1; min-width: 0; min-height: var(--pa-cmp-btn); max-height: min(calc(280px + 60 * var(--pa-u)), 45vh); field-sizing: content; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: var(--pa-cmp-fs)/var(--pa-cmp-lh) var(--voice); padding: var(--pa-cmp-py) 4px; overflow-y: auto; }
 .cmp-input::placeholder { color: var(--text-3); }
 .cmp-input:focus-visible { outline: 0; }
-/* The words live in the textarea. While they address someone, its text is not painted and the same words are drawn over it
+/* A plain textarea field keeps its words in it. While they address someone, its text is not painted and the same words are drawn over it
    (mention-field.ts) with each address as a chip; the caret, selection and input method stay the textarea's own. */
 .cmp-field { position: relative; min-width: 0; }
 .cmp-field > .cmp-input { display: block; width: 100%; }
@@ -767,6 +767,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .ra-hero { width: 132px; height: 132px; }
 .ra-hi { max-width: 100%; margin: 0; min-height: 1.6em; font: 500 var(--pa-hi)/1.6 var(--voice); letter-spacing: 0.04em; color: var(--text); overflow-wrap: anywhere; }
 .ra-empty.is-failed .ra-hi { font-size: var(--pa-dfs); letter-spacing: 0; color: var(--text-2); }
+/* No answer model yet, so Raphael cannot speak: the one line that says so and the button that chooses it, where its words would stand. */
+.ra-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-2); max-width: 100%; color: var(--text-2); font-size: var(--pa-dfs); line-height: 1.6; }
+.ra-notice[hidden] { display: none; }
 .ra-slot { width: min(calc(560px + 160 * var(--pa-u)), 100%); margin-top: var(--sp-1); text-align: left; }
 
 /* ---------- the voice mode: Raphael flies up over the conversation ---------- */
@@ -974,3 +977,11 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .room-thread-dock { padding: var(--sp-3) var(--sp-5); }
 .room-side-thread .chat-message { max-width: 100%; }
 @media (min-width: 1100px) { .au-room-pane.has-side-thread > .ra-stage, .au-room-pane.has-side-thread > .page-head { margin-right: 440px; } }
+/* A column centred with `margin: auto` sits half a pixel off whenever the pane's width and the column's differ by an odd number, and
+   moves by half a pixel for each pixel the pane is dragged: its words are drawn a pixel further on every other frame. Its lead is the
+   same space rounded down to a whole pixel (the resting layout differs by under half a pixel). Where `round()` is unknown the
+   columns keep `margin: auto`. */
+@supports (margin-left: round(down, 1px, 1px)) {
+  .page-agent { --col-lead: max(0px, round(down, calc((100% - var(--pa-colw)) / 2), 1px)); }
+  .page-agent .ra-col, .page-agent .ra-dock > .composer, .page-agent .ra-dock > .ask-card, .page-agent .ra-dock > .draft-panel, .page-agent .peer-thread { margin-inline: var(--col-lead) 0; }
+}

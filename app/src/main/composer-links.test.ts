@@ -36,3 +36,11 @@ test("a long link is one range, so the field treats it as one unit", () => {
   const words = `a ${LONG} b`;
   expect(linkRanges(words)).toEqual([{ start: 2, end: 2 + LONG.length }]);
 });
+
+test("an item or a quote line the field holds open at the end is not sent", () => {
+  expect(wholeLinks("1. one\n2. ")).toBe("1. one");
+  expect(wholeLinks("- a\n- [ ] ")).toBe("- a");
+  expect(wholeLinks("> said\n>")).toBe("> said");
+  expect(wholeLinks("- a\n- b")).toBe("- a\n- b");
+  expect(wholeLinks("Owner words\n")).toBe("Owner words\n");
+});

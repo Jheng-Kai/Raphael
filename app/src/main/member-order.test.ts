@@ -66,6 +66,15 @@ describe("a member dropped", () => {
     expect(movedMember(list(), 99, 1)).toBeNull();
   });
 
+  test("before a row lands before that member, the chief's too, and Raphael has no row to land before", () => {
+    // Member 4 is the chief of staff: it leads the column like a member of its folder.
+    const withPrimary = (): MembersList => ({ ...list(), team_context: { primary_id: 4 } as MembersList["team_context"] });
+    expect(ids(movedMember(withPrimary(), 1, 2, 4)!, 2)).toEqual([1, 4, 5]);
+    // Raphael is no row among the members: nothing stands before it, so the member goes last in its folder.
+    expect(ids(movedMember(withPrimary(), 1, 2, 0)!, 2)).toEqual([4, 5, 1]);
+    expect(ids(movedMember(list(), 1, 2, 0)!, 2)).toEqual([4, 5, 1]);
+  });
+
   test("leaves the list it was given as it was", () => {
     const base = list(), before = JSON.stringify(base);
     movedMember(base, 1, 2, 5);
@@ -91,7 +100,7 @@ describe("a folder dropped", () => {
 
 describe("what a list says besides the order", () => {
   test("is the same for a list in another order, in other folders and with another roster revision", () => {
-    const base: MembersList = { ...list(), team_context: { schema_version: 1, revision: "a", self_id: 0, count: 7, primary_id: 0, chief_id: 0, inventory_state: "ready", room_member_ids: null, members: [{ id: 0, name: "拉", role: "", blurb: "" }, { id: 1, name: "一", role: "", blurb: "" }], apps: [], connected: 0 } };
+    const base: MembersList = { ...list(), team_context: { schema_version: 1, revision: "a", self_id: 0, count: 7, primary_id: null, chief_id: null, inventory_state: "ready", room_member_ids: null, members: [{ id: 3, name: "拉", role: "", blurb: "" }, { id: 1, name: "一", role: "", blurb: "" }], apps: [], connected: 0 } };
     const moved = movedMember(base, 1, 2, 5)!;
     const other: MembersList = { ...moved.list, team_context: { ...base.team_context!, revision: "b", members: [...base.team_context!.members].reverse() } };
     expect(withoutPlaces(other)).toBe(withoutPlaces(base));

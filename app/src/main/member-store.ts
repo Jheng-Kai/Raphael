@@ -1,4 +1,5 @@
 // Catalogue browsing uses the existing member-template preview and install boundary.
+import { useLive } from "./live-size";
 import "./member-store.css";
 import * as api from "./api";
 import { t } from "./i18n";
@@ -21,7 +22,10 @@ const categoryKeys = {engineering:"store.engineering",sales:"store.sales",market
  */
 export function openMemberStore(o: { groupId: number | null; create(member: NewMember): Promise<Member | null> }): Dialog {
   const dialog = openDialog({ title: t("store.title"), cls: "store-dialog", body: `<section class="member-store"></section>`, actions: {}, onAct() {} });
-  dialog.el.closest(".mb-scrim")!.classList.add("store-scrim");
+  const scrim = dialog.el.closest<HTMLElement>(".mb-scrim")!;
+  scrim.classList.add("store-scrim");
+  // It starts where the list ends, wherever the list was dragged to (live-size.ts).
+  useLive("--side-live", scrim);
   mountMemberStore(dialog.el.querySelector<HTMLElement>(".member-store")!, o.create, o.groupId, () => dialog.close());
   dialog.el.querySelector<HTMLElement>("[data-store-search]")!.focus({ preventScroll: true });
   return dialog;

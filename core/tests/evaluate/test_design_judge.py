@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from raphael_core.evaluate.design_judge import build_prompt, cache_key, candidates, judge_image, parse_review, run_judge
+from raphael_core.evaluate.design_judge import build_prompt, cache_key, candidates, judge_image, judge_rules, parse_review, run_judge
 
 RULES = "| R-UI-01 | 2026-10-25 | No filler | judge | hard | images |\n| R-UI-02 | 2026-10-25 | Polish | judge | normal | images |\n| R-WF-01 | 2026-10-25 | Native | human | hard | review |"
 
@@ -24,6 +24,13 @@ def test_prompt_contains_judge_rules_feature_and_untrusted_boundary():
     assert "R-UI-01" in prompt and "R-WF-01" not in prompt
     assert "Home feature entry" in prompt and "untrusted" in prompt
     assert "FIRST image" in prompt
+
+
+def test_a_multi_part_rule_and_a_row_with_a_form_feed_are_read_as_rows():
+    rules = RULES + "\n| R-COMP-HOST-08 | 2026-10-25 | Host | judge | hard | images |\n| R-UI-03 | 2026-10-25 | A row with\x0ca form feed | judge | normal | images |\n| R-UI-04 | short"
+    rows = judge_rules(rules).split("\n")
+    assert [row.split("|")[1].strip() for row in rows] == ["R-UI-01", "R-UI-02", "R-COMP-HOST-08", "R-UI-03"]
+    assert "R-COMP-HOST-08" in build_prompt(rules, "Feature", "home light 720")
 
 
 def test_parser_fails_low_scores_and_hard_rule_downgrades():

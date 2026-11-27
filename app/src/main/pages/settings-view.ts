@@ -27,7 +27,7 @@ import { type UsageAnalysisView, usageAnalysisHTML } from "../usage-analysis";
 import { type LanguageGroup, languageSelectHTML, normalizeLanguages } from "../languages";
 import { type RulesView, rulesHTML } from "../safety-rules";
 import { type VaultView, emptyVaultView, vaultHTML } from "../vault";
-import { type SkillLibraryView, emptySkillLibraryView, skillLibraryHTML } from "../skill-library";
+import { type SkillLibraryView, emptySkillLibraryView, importButtonHTML, skillLibraryHTML } from "../skill-library";
 import { AUTO_MICROPHONE, microphoneChoices } from "../microphone";
 import { missingHTML } from "../missing";
 import type { LocalView } from "../local-models";
@@ -407,7 +407,8 @@ export const headingHTML = (v: SettingsView): string =>
   `<h1 id="set-title" tabindex="-1">${esc(paneTitle(v.pane))}</h1>`;
 
 const settingsCloseHTML = (): string => headerCloseButton(t("common.close"), ' data-act="close" data-k="settings-close" data-nav-back', "modal-x");
-const settingsHeaderHTML = (v: SettingsView): string => `<header class="set-head">${headingHTML(v)}${settingsCloseHTML()}</header>`;
+/** The tab's head: its name, an action of the page when it has one (Team skills' 匯入) and the close. */
+const settingsHeaderHTML = (v: SettingsView, action = ""): string => `<header class="set-head">${headingHTML(v)}${action}${settingsCloseHTML()}</header>`;
 
 /** What the tabs that need the core say when it does not answer. */
 const coreNote = (v: SettingsView): string => (v.brain === null ? `<div class="alert core-note">${st("err", t("settings.052"))}</div>` : "");
@@ -497,7 +498,7 @@ function toolsHTML(v: SettingsView): string {
 /** Team skills: every shared skill in its package, and who may use each (skill-library.ts). */
 function skillsHTML(v: SettingsView): string {
   return skillLibraryHTML(v.skillLibrary ?? emptySkillLibraryView(), {
-    listHeader: settingsHeaderHTML(v), pageClose: settingsCloseHTML(), notice: coreNote(v),
+    listHeader: settingsHeaderHTML(v, importButtonHTML()), pageClose: settingsCloseHTML(), notice: coreNote(v),
   });
 }
 

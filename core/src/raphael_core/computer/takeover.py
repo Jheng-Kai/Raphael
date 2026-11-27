@@ -16,7 +16,7 @@ REASONS = ("sign_in", "password", "two_factor", "captcha", "payment", "other")
 TAKEOVER = {
     "description": ("Pause only for an owner-only step such as sign-in, 2FA, CAPTCHA, payment or consent. "
                     "Explain the step in a public message and choose the matching reason. For other, give the "
-                    "exact owner-only step in detail. To show a page, open it and point to the Computer panel. "
+                    "exact owner-only step in detail. To show a page the owner asked to see, open it; the answer still goes in your reply. "
                     "Never request secrets in chat or tool arguments. Wait for explicit Done, then inspect "
                     "the same window or tab before acting."),
     "parameters": {"type": "object", "properties": {"reason": {"type": "string", "enum": list(REASONS)},

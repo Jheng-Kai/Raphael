@@ -18,7 +18,7 @@ import sys
 import time
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from jsonschema import Draft202012Validator
 
@@ -29,13 +29,13 @@ from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from ..agent.data_floor import DataFloor
 from .. import work_area
 from ..folders import choice, path_key
-from .vm import GUEST, SHARED, VmError, engine_start_allowed
+from .vm import GUEST, SHARED, SKILLS, VmError, engine_start_allowed
 from .vm_bridge import CuaBridge, call_driver_tool
 from .owner_files import KEPT_WORDS, MAC_PRIVATE, kept_place, place as owner_place
 from .owner_transfer import REMOTE_FILE_MAX, hand_over, safe_name
 from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, BROWSER_APPS, definition as driver_definition, offline_catalog, shared_argument_paths, shared_native_input
 from .takeover import TAKEOVER, TAKEOVER_REASON_REQUIRED, owner_waiting_result, takeover_detail
-from .suggestions import ComputerSuggestions, SUGGEST_COMPUTER, SUGGEST_COMPUTER_KEY
+from .suggestions import ComputerSuggestions, OTHER, SUGGEST_COMPUTER, SUGGEST_COMPUTER_KEY, SUGGEST_THIS_PC
 from .browser_tabs import BLANK, BROWSER_TABS, NEW_TAB, new_tab_of, rows as tab_rows, shown_tab
 from . import seat_launch
 from . import seat_view
@@ -148,6 +148,19 @@ COMPUTER_FAULT_NOTE = ("Raphael's own computer layer failed on this call ({kind}
                        "anything was done is unknown. Read the current window or page before the next action.")
 
 
+def _noted(result, note):
+    """`result` with `note` said in it: a key of a JSON answer, else a last line."""
+    try:
+        data = json.loads(result.text)
+    except ValueError:
+        data = None
+    if isinstance(data, dict):
+        result.text = json.dumps({**data, "note": f"{data['note']} {note}" if data.get("note") else note}, ensure_ascii=False)
+    else:
+        result.text = (result.text + "\n" if result.text else "") + note
+    return result
+
+
 def _raised_at(error):
     """`file:line in function` of the innermost frame an exception was raised in: where, never what it said."""
     frame = error.__traceback__
@@ -181,9 +194,24 @@ ENGINE_FAILURES = {
                       "wait for one to finish, or tell the owner which work is in the way.",
     "incompatible": "This computer was made by an earlier version and must be repaired before it starts. Ask the owner to "
                     "choose 修復 in your computer's ⋯ menu; its files are kept.",
+    "window_list_unavailable": "The computer did not give its list of windows, even when it was asked again, so nothing was sent "
+                               "to the page. Read the tabs again with browser_tabs and use the ids it gives; if that fails "
+                               "too, open the browser again with browser_open. Tab ids from before a restart of the browser "
+                               "are not valid.",
     "start_failed": "The computer did not start. Try once more; if it fails again, tell the owner Docker Desktop may need a "
                     "restart (quit it from its tray or menu bar icon and open it again).",
 }
+
+
+TAB_UNKNOWN = ("This tab or window is not available now: the browser may have been started again, the tab closed or its "
+               "window moved, and tab ids do not last through a restart. Read the tabs again with browser_tabs and use the "
+               "ids it gives, or open the browser again with browser_open.")
+
+
+def tab_unknown(data):
+    """Whether the driver refused a page call because it knows no such tab (`refusal.code`, as measured on both browsers)."""
+    refusal = (data.get("structuredContent") or {}).get("refusal")
+    return isinstance(refusal, dict) and refusal.get("code") == "browser_tab_not_found"
 
 
 @contextmanager
@@ -336,6 +364,7 @@ class VmTools:
     browser_open_s = 300.0
     # How long a window that was moved onto its screen is waited for before it is called outside it.
     window_fit_wait_s = 10.0
+    window_list_retry_s = 0.25
     # How long a launch at a seat waits for a window it opened: one handed to a copy already running, or started on a
     # loaded PC, maps after the driver has answered. The wait ends at the first such window.
     launch_window_wait_s = 10.0
@@ -452,6 +481,20 @@ class VmTools:
         publish(with_ui_words({"zh-TW": f"電腦磁碟快滿了。最大的資料夾：{names}。要我清理哪些？刪除前會先徵求你的同意。",
             "ja": f"ディスクの空き容量が少なくなっています。大きいフォルダー：{names}。削除する前に確認します。どれを整理しますか？", "en": f"The computer disk is nearly full. Largest folders: {names}. Which should I clean up? I will ask before deleting anything."}, lambda _ui_language: ui_word('The computer disk is nearly full. Largest folders: {p0}. Which should I clean up? I will ask before deleting anything.', _ui_language).format(p0=names)).get(language,
             f"The computer disk is nearly full. Largest folders: {names}. Which should I clean up? I will ask before deleting anything."))
+
+    def _project_note(self, target, member):
+        """What a call is told when the project chosen for the member is not in its computer: Docker cannot add a folder to a
+        running container, so the call went on in the workspace (the computer was in use and kept its mounts, or the mount
+        was refused) and the member must not take that place for the project."""
+        wanted = () if target.remote or self.vm.settings is None else self.vm.projects()
+        chosen = choice(self.vm.settings, member) if wanted else None
+        if not chosen or any(source == Path(chosen) for _, source in target.projects):
+            return None
+        guest = next((guest for guest, source in wanted if source == Path(chosen)), None)
+        return (f"Your chosen project ({chosen}) is not mounted in the Docker computer yet, so this ran in your workspace, not in "
+                "the project. Docker cannot add a folder to a running computer: it is added "
+                f"{f'at {guest} ' if guest else ''}when the computer restarts, which happens by itself as soon as "
+                "nothing else is working in it. If the task needs the project now, say so plainly to the owner.")
 
     def _rebuild_notice(self, target):
         progress, language = _NOTE.get()
@@ -664,7 +707,9 @@ class VmTools:
             if self.computer_mode(member_id) == "host":
                 return [*offered, *self.host_computer.offered(member_id), *([SUGGEST_COMPUTER] if self.suggestions else [])]
         target = self.vm.target(member_id)
-        return [*offered, *(self.tools[key] for key in self.catalogs.get(target.key, []) if self.routes[key] == target)]
+        # A member on the VM may propose this PC's Chrome, as one on Chrome may propose the VM.
+        back = [SUGGEST_THIS_PC] if self.host_computer is not None and self.suggestions else []
+        return [*offered, *(self.tools[key] for key in self.catalogs.get(target.key, []) if self.routes[key] == target), *back]
 
     @property
     def enforces_computer_choice(self):
@@ -675,6 +720,13 @@ class VmTools:
             return self.vm.settings.get("raphael_computer_mode")
         row = self.conn.execute("SELECT computer_mode FROM members WHERE id=?", (member,)).fetchone() if self.conn else None
         return row[0] if row else "host"
+
+    def library_path(self, member):
+        """Where the team's skill library is for `member`'s commands: its guest path (`SKILLS`) when the member works in a Docker
+        computer that mounts the library, None when it works on this PC (the library's own path is then the one to run)."""
+        if not self.vm.enabled or self.vm.remote or self.host_computer is not None and self.computer_mode(member) == "host":
+            return None
+        return SKILLS if self.vm.mounted_target(self.vm.target(member)).library is not None else None
 
     def member_exists(self, member):
         return member == 0 or self.conn is not None and self.conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None
@@ -977,16 +1029,16 @@ class VmTools:
         turn_id, private, _ = _TURN.get()
         if self.host_computer is not None:
             chosen = self.computer_mode(member)
-            if chosen != ("host" if host_key or key == SUGGEST_COMPUTER_KEY else "docker"):
+            if key != SUGGEST_COMPUTER_KEY and chosen != ("host" if host_key else "docker"):
                 return PluginResult(False, "computer_changed", "The owner selected a different computer. Use only its tools on the next turn.")
         if key == SUGGEST_COMPUTER_KEY:
             if not self.vm.enabled or self.host_computer is None or self.suggestions is None or approver == "none":
                 return PluginResult(False, "blocked")
             if task_id or not private or not turn_id or not scope or scope[0] != "turn":
-                return PluginResult(False, "vm_required", "Report why the VM is required and stop. A suggestion card is only available in a private app conversation.")
+                return PluginResult(False, "vm_required", "Report why the other computer is required and stop. A suggestion card is only available in a private app conversation.")
             if not Draft202012Validator(SUGGEST_COMPUTER.schema).is_valid(arguments) or not (reason := " ".join(arguments["reason"].split())):
                 return PluginResult(False, "bad_arguments")
-            return await self.suggestions.show(turn_id, member, reason, _NOTE.get()[1])
+            return await self.suggestions.show(turn_id, member, reason, _NOTE.get()[1], OTHER[chosen])
         conversation_id = scope[2] if scope and scope[0] == "turn" else None
         if task_id and self.conn is not None:
             origin = self.private_task_origin(task_id)
@@ -1340,6 +1392,7 @@ class VmTools:
                         return self._busy(target, None, self.busy_wait_s)
                 else:
                     await lock.acquire()
+            project_note = None
             self.vm.active[target.key] = self.vm.active.get(target.key, 0) + 1
             self.vm.physical_active[target.physical] = self.vm.physical_active.get(target.physical, 0) + 1
             # Not input at the screen: the owner's press to take control does not wait for these.
@@ -1359,6 +1412,7 @@ class VmTools:
                         target = kept
                         await self._started(target, member, tool.name)
                     target = self.vm.mounted_target(target)
+                    project_note = self._project_note(target, member)
                 finally:
                     self.mount_start.reset(start)
                 await self._disk_notice(target)
@@ -1542,6 +1596,8 @@ class VmTools:
                     # A page tool says its tabs, refs and what came of a gesture only here; its text is one line about them.
                     if tool.name.startswith(PAGE_TOOLS) and data.get("structuredContent"):
                         text.append(json.dumps(data["structuredContent"], ensure_ascii=False))
+                    if tool.name.startswith(PAGE_TOOLS) and tab_unknown(data):
+                        text.append(TAB_UNKNOWN)
                     combined = "\n".join(text)
                     if self.logins:
                         for identifier in self.logins.values if target.container == "shared" else (member,):
@@ -1566,6 +1622,8 @@ class VmTools:
                 if lock is not None:
                     self.lease_used[target.key] = self.vm.clock()
                     lock.release()
+            if project_note and tool.name in ("vm_exec", "attach_file", *FILE_TOOLS):
+                result = _noted(result, project_note)
             return result
         except asyncio.CancelledError:
             self.vm.invalidate(target)
@@ -2086,12 +2144,17 @@ class VmTools:
         return observation
 
     async def _canvas_windows(self, client, session, filters=None, *, owner_observation=False):
-        reply = await call_driver_tool(client, "list_windows", {**(filters or {}), "session": session},
-                                       **({"owner_observation": True} if owner_observation else {}))
-        try:
-            return seat_view.canvas_windows(reply)
-        except (ValueError, KeyError, TypeError):
-            raise VmError("window_list_unavailable") from None
+        # A read, so asking once more is safe: the driver sometimes gives no list the first time, and nothing has been sent
+        # to a page yet when a window is looked up.
+        for attempt in (0, 1):
+            reply = await call_driver_tool(client, "list_windows", {**(filters or {}), "session": session},
+                                           **({"owner_observation": True} if owner_observation else {}))
+            try:
+                return seat_view.canvas_windows(reply)
+            except (ValueError, KeyError, TypeError):
+                if attempt:
+                    raise VmError("window_list_unavailable") from None
+                await asyncio.sleep(self.window_list_retry_s)
 
     async def _shared_browser_window(self, target, client, session):
         # The caller holds the unit native lock across discovery, launcher and attach.
@@ -2185,8 +2248,7 @@ class VmTools:
             fits = [row for row in seat_view.windows(canvas, target.screen, target.screens)["windows"]
                     if row.get("app_name", "").lower() in BROWSER_APPS and args.get("pid", row.get("pid")) == row.get("pid")]
             if len(fits) != 1:
-                return self._seat_error("The bound window is not on this member's screen. Call list_windows and bind an own window again."
-                                        if "target_id" in args else
+                return self._seat_error(TAB_UNKNOWN if "target_id" in args else
                                         "Name one of this member's own windows or a bound target_id; call list_windows.")
             args.pop("target_id", None)
             args.pop("tab_id", None)
@@ -2194,7 +2256,7 @@ class VmTools:
         if "target_id" in args:
             window = await self._bound_window(target, client, args)
             if window is None:
-                return self._seat_error("The bound window is not on this member's screen. Call list_windows and bind an own window again.")
+                return self._seat_error(TAB_UNKNOWN)
         if "window_id" in args or ("pid" in args and name != "list_windows"):
             window = await self._own_window(target, client, session, args.get("window_id"), args.get("pid"))
             if window is None:

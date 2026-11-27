@@ -36,17 +36,20 @@ class FakeBackground:
         self.cancelled = []
         self.refuse = None
 
-    def submit(self, *, session_id, text, language, model, member_id=0, routine_id=None, **_):
+    def submit(self, *, session_id, text, language, model, member_id=0, routine_id=None, attachments=(), **_):
         if self.refuse:
             raise Refused(self.refuse)
         self.submitted.append(
             {"session_id": session_id, "text": text, "language": language, "model": model,
-             "member_id": member_id, "routine_id": routine_id}
+             "member_id": member_id, "routine_id": routine_id, **({"attachments": list(attachments)} if attachments else {})}
         )  # fmt: skip
         return self.store.create(
             session_id=session_id, language=language, text=text, member_id=member_id,
             routine_id=routine_id,
         )  # fmt: skip
+
+    def task(self, task_id):
+        return self.store.get(task_id)
 
     def attach_turn(self, task_id, turn_id):
         self.attached.append((task_id, turn_id))
