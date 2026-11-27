@@ -44,7 +44,7 @@ async def test_narrated_prompt_contains_only_its_own_persona_and_thread(setup, c
         assert ("COACH-THREAD" if who.id == first.id else "TEACHER-THREAD") not in messages
         assert "Address the user according to your own personality" in system
     else:
-        assert "You are Raphael" in system and "主人" in system
+        assert "You are Raphael" in system and "主人" not in system
         assert "Quietly devoted" in system
         for secret in (first.personality, second.personality, "TEACHER-THREAD", "COACH-THREAD"):
             assert secret not in messages
@@ -57,7 +57,7 @@ async def test_voice_answer_keeps_raphael_persona_without_member_personalities(s
     client.replies.append(raphael_said("你好。"))
     await rig.ask("你好")
     system, told = client.json_calls[0]["system"], client.json_calls[0]["user"]
-    assert "You are Raphael" in system and "主人" in system
+    assert "You are Raphael" in system and "主人" not in system
     assert "MEMBER-ONLY-CHARACTER" not in system + told
     assert "<team_roster>" in told and "<team_roster>" not in system  # the team comes with the message
 

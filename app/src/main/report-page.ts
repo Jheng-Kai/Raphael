@@ -138,7 +138,7 @@ function nodeName(node: ReportNode, people: ReportPeople): string {
 
 function teamHTML(section: Extract<ReportSection, { kind: "team" }>, index: number, people: ReportPeople, file?: FileDrawing): string {
   const names = new Map(section.nodes.map(node => [node.id, nodeName(node, people)]));
-  // Read aloud as the arrows say it: 「主人 → 拉斐爾：交辦」.
+  // Read aloud as the arrows say it: 「你 → 拉斐爾：交辦」.
   const said = section.edges.map(edge => `${names.get(edge.from)} → ${names.get(edge.to)}${edge.label ? `: ${edge.label}` : ""}`).join("; ");
   const notes = section.notes?.length ? `<dl class="rp-notes">${section.notes.map(note => `<div><dt>${esc(note.label)}</dt><dd>${esc(note.text)}</dd></div>`).join("")}</dl>` : "";
   // In a file the team is drawn at once, for each width it may be read at; in the app once its width is known.

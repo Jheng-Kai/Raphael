@@ -16,7 +16,7 @@ sits at. So this is a foreground task, never a background one, and it has rules 
 - **What sends, deletes or buys asks every time** (T2), judged by the name of the element, the
   keys, and what the model itself declares (`safety`).
 - **Hand-off.** A password field, a sign-in, a payment form or an elevated (administrator) window
-  stops the run: 《告。這一步需要主人親自操作。》.
+  stops the run: 《告。這一步需要你親自操作。》.
 - **Visible and stoppable.** The overlay shows 「操作中」 and the current step; any real (not
   injected) mouse or keyboard input of the owner stops the run at once, and so do Esc and Right Alt:
   《了。已停止。》.

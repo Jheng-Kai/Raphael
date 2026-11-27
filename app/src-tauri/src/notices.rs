@@ -6,8 +6,8 @@
 //! for a memory, and `Notice.`, `Negative.` or `Understood.` in English.
 //!
 //! They are written in its manner: calm, exact and brief. A report states what happened and what
-//! was done about it, a refusal states why, and neither apologises, jokes or exclaims. It calls the
-//! person 主人, マスター or Master only where it addresses them, which here is the greeting alone.
+//! was done about it, a refusal states why, and neither apologises, jokes or exclaims. No notice
+//! calls the person by a title (主人, マスター, Master): the greeting stands by without one.
 //!
 //! A notice exists in every interface language, and the overlay is sent only the one for the
 //! language the person chose ([`Notice::text`]): never a Chinese and a Japanese line side by side.
@@ -291,12 +291,12 @@ pub const REMEMBERED: Notice = Notice {
 
 /// A question to Raphael has begun: its greeting beside the emblem while it listens. A dictation
 /// shows the emblem alone, so the two are never mistaken for each other. It stands by for an
-/// order, as a report rather than a question (問 is for what takes a yes or a no), and it is the
-/// one notice that addresses the person.
+/// order, as a report rather than a question (問 is for what takes a yes or a no), with no title
+/// for the person (R-RAPHAEL-07).
 pub const GREETING: Notice = Notice {
-    zh: "《告。主人，請下達指示。》",
-    en: "《Notice. Standing by, Master.》",
-    ja: "《告。マスター、ご指示をどうぞ。》",
+    zh: "《告。請下達指示。》",
+    en: "《Notice. Standing by.》",
+    ja: "《告。ご指示をどうぞ。》",
 };
 
 /// Words learned from the user's corrections after a paste, in one notice, in `language`:
@@ -495,8 +495,8 @@ mod tests {
             .sum()
     }
 
-    /// How Raphael addresses the person: 主人 in Chinese, マスター in Japanese, Master in English.
-    const ADDRESS: [&str; 3] = ["主人", "マスター", "Master"];
+    /// Titles no notice calls the person by: the greeting stands by without one (R-RAPHAEL-07).
+    const TITLES: [&str; 5] = ["主人", "主子", "ご主人", "マスター", "Master"];
 
     #[test]
     fn notices_are_raphael_lines() {
@@ -549,23 +549,21 @@ mod tests {
     }
 
     #[test]
-    fn only_the_greeting_addresses_the_person_and_in_the_word_of_its_language() {
-        // 主人 in Chinese, マスター in Japanese, Master in English: sparingly, as it does.
-        for (line, address) in [
-            (GREETING.zh, "主人"),
-            (GREETING.ja, "マスター"),
-            (GREETING.en, "Master"),
-        ] {
-            assert!(line.contains(address), "{line}");
-            for other in ADDRESS.iter().filter(|other| **other != address) {
-                assert!(!line.contains(other), "{line}");
+    fn no_notice_calls_the_person_by_a_title_in_any_language() {
+        for notice in ALL {
+            let mut lines = vec![notice.zh, notice.en, notice.ja];
+            lines.extend(
+                [
+                    "zh-CN", "ko", "es", "fr", "de", "pt-BR", "it", "ru", "vi", "th", "id", "tr",
+                ]
+                .iter()
+                .filter_map(|language| notice_words::text(notice.en, language)),
+            );
+            for line in lines {
+                assert!(!TITLES.iter().any(|title| line.contains(title)), "{line}");
             }
         }
-        for notice in ALL.iter().filter(|notice| **notice != GREETING) {
-            for line in [notice.zh, notice.en, notice.ja] {
-                assert!(!ADDRESS.iter().any(|word| line.contains(word)), "{line}");
-            }
-        }
+        assert_eq!(GREETING.zh, "《告。請下達指示。》");
     }
 
     #[test]
@@ -590,7 +588,7 @@ mod tests {
                 "{line}"
             );
             assert!(width_at_14px(line) <= CAPTION_ROOM_PX, "{line}");
-            assert!(!ADDRESS.iter().any(|word| line.contains(word)), "{line}");
+            assert!(!TITLES.iter().any(|word| line.contains(word)), "{line}");
         }
     }
 

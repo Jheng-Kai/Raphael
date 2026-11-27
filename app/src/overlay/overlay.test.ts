@@ -352,7 +352,7 @@ test("dictation never shows subtitles", () => {
   expect(view.log.filter((l) => l.startsWith("line"))).toEqual([]);
 });
 
-const GREETING = "《告。主人，請下達指示。》";
+const GREETING = "《告。請下達指示。》";
 
 test("a question is greeted beside the listening emblem until Raphael has heard it", () => {
   send({ type: "show", mode: "listening", line: GREETING });

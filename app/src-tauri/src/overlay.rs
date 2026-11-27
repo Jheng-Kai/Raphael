@@ -1616,9 +1616,9 @@ mod tests {
         assert_eq!(
             json(OverlayEvent::Show {
                 mode: Mode::Listening,
-                line: Some("《告。主人，請下達指示。》".into())
+                line: Some("《告。請下達指示。》".into())
             }),
-            r#"{"type":"show","mode":"listening","line":"《告。主人，請下達指示。》"}"#
+            r#"{"type":"show","mode":"listening","line":"《告。請下達指示。》"}"#
         );
         assert_eq!(
             json(OverlayEvent::Mode {

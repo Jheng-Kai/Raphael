@@ -146,7 +146,7 @@ async def test_a_password_field_hands_the_run_over_to_the_owner(make_run, shell)
     )
     run = make_run(model)
     _, final = await drive(run)
-    assert (final.which, final.text, final.kind) == ("notice", "這一步需要主人親自操作。", "handoff")
+    assert (final.which, final.text, final.kind) == ("notice", "這一步需要你親自操作。", "handoff")
     assert "act" not in shell.ops()
     assert run.take_steps()[-1].reason == "handoff"
 
