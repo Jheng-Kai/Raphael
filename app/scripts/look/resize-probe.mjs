@@ -12,12 +12,20 @@ import { summarizeTrace } from "./drag-probe.mjs";
  *  - how many style writes the app made (`widthWrites`) and how many ResizeObserver callbacks ran (`observerRuns`);
  *  - in a second, sampled pass, where the text stood: every watched element's first line is read each frame, and `shake` counts
  *    the frames in which a text moved against the edge it belongs to (`ref`: the left edge of its column; none: it stands still)
- *    or by a part of a pixel (`fractional`: a step that is not a whole pixel), and `rewraps` the changes of a paragraph's number of lines.
+ *    or by a part of a pixel (`fractional`: a step that is not a whole pixel), and `rewraps` the changes of a paragraph's number of lines;
+ *  - with `anchor`, what matters when the lines rewrap while the edge is held (R-PERF-27): the conversation takes the width it has,
+ *    so no text element's box may reach past the visible conversation area (`overflowMax`, in px, and `hscrollMax`: what the thread
+ *    scrolls sideways), the line the owner reads (the last visible line of a thread at its bottom, otherwise the first one fully in
+ *    view) keeps its place on the screen (`anchorDrift`, in px, over the frames of the press), and no word jumps up and down again in
+ *    the next frame (`flicker`);
+ *  - the work of each frame up to its layout (`workMsMax`, `workMsP95`: the time from the frame's start to a ResizeObserver told
+ *    after layout, so the style and layout of a frame and the scripts before them) and `framesOver20`, the frames later than 20 ms;
+ *  - `shots` frames of the press itself (`resize-<edge>-mid-<n>.png`), taken while the hand holds the edge.
  *
  * `toggle` instead of an edge opens and closes a pane (the list: "sidebar", the panel: a selector to press) and measures the same.
  * `limits` fails the step. Throws an error that carries `assertion`.
  */
-export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = [], everyWord = false, limits = {}, ...rest }, directory) {
+export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = [], everyWord = false, anchor = false, shots = 0, limits = {}, ...rest }, directory) {
   // `LOOK_RESIZE_THROTTLE=4` slows the page's CPU four times, as a PC with a quarter of this one's speed.
   const throttle = Number(process.env.LOOK_RESIZE_THROTTLE) || rest.throttle || 1;
   await page.waitForFunction(() => {
@@ -49,8 +57,8 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
       await page.mouse.move(grip.x, grip.y);
       await new Promise(resolve => setTimeout(resolve, 400));
     }
-    await page.evaluate((sampled, watch, everyWord) => {
-      const seen = window.__resize = { frames: [], loaf: [], longTasks: [], writes: 0, observerRuns: 0, samples: [], marks: [] };
+    await page.evaluate((sampled, watch, everyWord, anchor) => {
+      const seen = window.__resize = { frames: [], work: [], loaf: [], longTasks: [], writes: 0, observerRuns: 0, samples: [], marks: [] };
       seen.tasks = new PerformanceObserver(list => { for (const entry of list.getEntries()) seen.longTasks.push(Math.round(entry.duration)); });
       seen.tasks.observe({ entryTypes: ["longtask"] });
       try {
@@ -67,15 +75,75 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
       const lines = node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size; };
       // `everyWord`: besides the watched texts, every text the window shows is read each frame, by its height alone (a horizontal
       // drag moves words sideways with their column, never up or down unless their own paragraph rewraps).
-      const words = everyWord ? [...document.querySelectorAll("body *")].filter(node => {
+      const words = everyWord || anchor ? [...document.querySelectorAll("body *")].filter(node => {
         if (!(node instanceof HTMLElement) || node.closest("[hidden], [aria-hidden='true']")) return false;
         if (![...node.childNodes].some(child => child.nodeType === 3 && child.textContent.trim())) return false;
         const box = node.getBoundingClientRect();
         return box.width > 0 && box.height > 0 && box.bottom > 0 && box.top < innerHeight && box.right > 0 && box.left < innerWidth;
       }).slice(0, 400) : [];
       seen.wordNames = words.map(node => `${node.tagName.toLowerCase()}${node.className && typeof node.className === "string" ? "." + node.className.trim().split(/\s+/).join(".") : ""} «${node.textContent.trim().slice(0, 24)}»`);
+      // The conversation's own boxes (`anchor`): the area its words may fill (the stage between the panes), the line the owner reads, and
+      // every text of the stage, read each frame against that area.
+      const scroller = anchor ? document.querySelector(".page-agent:not([hidden]) .ra-scroll") : null, stage = scroller?.closest(".ra-stage") ?? scroller;
+      const area = () => { const box = stage.getBoundingClientRect(); return { left: Math.max(0, box.left), right: Math.min(innerWidth, box.right) }; };
+      const stageTexts = scroller ? [...stage.querySelectorAll("*")].filter(node => {
+        if (!(node instanceof HTMLElement) || node.closest("[hidden], [aria-hidden='true'], svg")) return false;
+        if (![...node.childNodes].some(child => child.nodeType === 3 && child.textContent.trim())) return false;
+        const box = node.getBoundingClientRect();
+        return box.width > 0 && box.height > 0 && box.bottom > 0 && box.top < innerHeight;
+      }).slice(0, 600) : [];
+      seen.stageNames = stageTexts.map(node => `${node.tagName.toLowerCase()}${typeof node.className === "string" && node.className ? "." + node.className.trim().split(/\s+/).join(".") : ""} «${node.textContent.trim().slice(0, 24)}»`);
+      // The line read: the last whole line in view of a thread at its bottom, else the first one. It is found by its text position,
+      // so it is the same text after the lines rewrap; its top is what must stay.
+      let line = null;
+      if (scroller) {
+        const view = scroller.getBoundingClientRect(), bottom = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= 4;
+        seen.anchorMode = bottom ? "bottom" : "top";
+        const walker = document.createTreeWalker(scroller, NodeFilter.SHOW_TEXT);
+        let best = null;
+        for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+          if (!text.textContent.trim() || text.parentElement.closest("[hidden], [aria-hidden='true'], svg, textarea")) continue;
+          const range = document.createRange();
+          range.selectNodeContents(text);
+          for (const rect of range.getClientRects()) {
+            if (rect.width < 4 || rect.height < 6 || rect.top < view.top + 2 || rect.bottom > view.bottom - 2) continue;
+            if (!best || (bottom ? rect.bottom > best.rect.bottom : rect.top < best.rect.top)) best = { text, rect };
+          }
+        }
+        if (best) {
+          // The character that starts that line: the first one whose own box is on the line's top and left edge.
+          const one = document.createRange();
+          let at = 0;
+          for (; at < best.text.length; at++) {
+            one.setStart(best.text, at); one.setEnd(best.text, at + 1);
+            const box = one.getBoundingClientRect();
+            if (box.width > 0 && Math.abs(box.top - best.rect.top) < 2 && Math.abs(box.left - best.rect.left) < 2) break;
+          }
+          line = { text: best.text, at: Math.min(at, best.text.length - 1) };
+          seen.anchorText = best.text.textContent.slice(line.at, line.at + 20);
+        }
+      }
+      const lineTop = () => {
+        if (!line?.text.isConnected) return null;
+        const one = document.createRange();
+        one.setStart(line.text, line.at); one.setEnd(line.text, line.at + 1);
+        const box = one.getBoundingClientRect();
+        return box.height ? box.top : null;
+      };
       const sample = () => {
         const row = { nav: nav.getBoundingClientRect().width, pressed: !!seen.pressed, text: [], words: [] };
+        if (scroller) {
+          const now = area();
+          let over = 0, who = "";
+          stageTexts.forEach((node, at) => {
+            if (!node.isConnected) return;
+            const box = node.getBoundingClientRect();
+            if (!box.width) return;
+            const out = Math.max(now.left - box.left, box.right - now.right);
+            if (out > over) { over = out; who = seen.stageNames[at]; }
+          });
+          row.over = over; row.overWho = who; row.hscroll = scroller.scrollWidth - scroller.clientWidth; row.line = lineTop(); row.scrollTop = scroller.scrollTop;
+        }
         for (const entry of watch) {
           const node = document.querySelector(entry.selector);
           const first = node?.getClientRects()[0], box = entry.ref ? document.querySelector(entry.ref)?.getBoundingClientRect() : null, ref = box ? (entry.refEdge === "right" ? box.right : box.left) : 0;
@@ -93,18 +161,22 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
       // The text is read where the owner sees it: a ResizeObserver on a 1 px probe that changes size each frame is told after layout, after
       // the app's own observers (made before it, which keep a thread at its bottom) and before paint (follow-probe.mjs).
       let beat = null, flip = false;
-      if (sampled) {
-        beat = document.createElement("div");
-        beat.setAttribute("aria-hidden", "true");
-        beat.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;pointer-events:none;opacity:0;contain:strict";
-        document.body.append(beat);
-        seen.observer = new ResizeObserver(() => { if (seen.frameLoop) sample(); });
-        seen.observer.observe(beat);
-      }
+      // Both passes have it: it also says how long each frame's own work took before it was drawn (`work`).
+      beat = document.createElement("div");
+      beat.setAttribute("aria-hidden", "true");
+      beat.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;pointer-events:none;opacity:0;contain:strict";
+      document.body.append(beat);
+      let frameStart = 0;
+      const onBeat = () => { if (!seen.frameLoop) return; seen.work.push(performance.now() - frameStart); if (sampled) sample(); };
+      seen.observer = new ResizeObserver(onBeat);
+      seen.observer.observe(beat);
+      // Observers are told in the order they were made: made again once the edge is held, this one is told after the one the drag
+      // makes for the conversation's place (reading-place.ts followLines), so it reads what the owner sees.
+      seen.rearm = () => { seen.observer.disconnect(); seen.observer = new ResizeObserver(onBeat); seen.observer.observe(beat); };
       seen.beat = beat;
-      const tick = now => { if (!seen.frameLoop) return; seen.frames.push(now - last); last = now; if (beat) { flip = !flip; beat.style.width = flip ? "2px" : "1px"; } requestAnimationFrame(tick); };
+      const tick = now => { if (!seen.frameLoop) return; seen.frames.push(now - last); last = now; frameStart = now; flip = !flip; beat.style.width = flip ? "2px" : "1px"; requestAnimationFrame(tick); };
       requestAnimationFrame(tick);
-    }, sampled, watch, everyWord);
+    }, sampled, watch, everyWord, anchor);
 
     const before = await read();
     if (toggle) {
@@ -118,7 +190,7 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
       await page.evaluate(() => window.__resize.marks.push(window.__resize.frames.length));
       await page.mouse.down();
       // The frames of the press: what the words do while the hand holds the edge (`everyWord`).
-      await page.evaluate(() => { window.__resize.pressed = true; });
+      await page.evaluate(() => { window.__resize.pressed = true; window.__resize.rearm(); });
       // A hand: a frame between two moves; out by `dx`, and back to where it began.
       for (let step = 1; step <= moves; step++) { await page.mouse.move(x + dx * step / moves, y); await new Promise(resolve => setTimeout(resolve, 16)); }
       for (let step = moves - 1; step >= 0; step--) { await page.mouse.move(x + dx * step / moves, y); await new Promise(resolve => setTimeout(resolve, 16)); }
@@ -137,14 +209,36 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
     const seen = await page.evaluate(() => {
       const seen = window.__resize;
       seen.tasks.disconnect(); seen.mutations.disconnect(); seen.frameObserver?.disconnect(); seen.observer?.disconnect(); seen.beat?.remove(); seen.frameLoop = false;
-      return { frames: seen.frames, loaf: seen.loaf, longTasks: seen.longTasks, writes: seen.writes, observerRuns: (window.__resizeRuns ?? 0) - seen.runsBefore, samples: seen.samples, wordNames: seen.wordNames, marks: seen.marks, end: seen.end };
+      return { frames: seen.frames, work: seen.work, anchorMode: seen.anchorMode, anchorText: seen.anchorText, loaf: seen.loaf, longTasks: seen.longTasks, writes: seen.writes, observerRuns: (window.__resizeRuns ?? 0) - seen.runsBefore, samples: seen.samples, wordNames: seen.wordNames, marks: seen.marks, end: seen.end };
     });
     return { before, after, events, seen };
   };
 
   const timed = await pass(false);
   await new Promise(resolve => setTimeout(resolve, 300));
-  const sampledPass = watch.length || everyWord ? await pass(true) : null;
+  const sampledPass = watch.length || everyWord || anchor ? await pass(true) : null;
+  // Frames of the press itself: the hand holds the edge a part of the way out, and the window is photographed as it stands.
+  const shotFiles = [];
+  if (shots && edge) {
+    const slug = edge.replace(/[^a-z0-9-]+/gi, "_");
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const handle = await (await page.$(edge)).boundingBox(), x = handle.x + handle.width / 2, y = handle.y + handle.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    let at = 0;
+    for (let n = 1; n <= shots; n++) {
+      const to = dx * n / shots;
+      for (let step = 1; step <= 20; step++) { await page.mouse.move(x + at + (to - at) * step / 20, y); await new Promise(resolve => setTimeout(resolve, 16)); }
+      at = to;
+      await new Promise(resolve => setTimeout(resolve, 120));
+      const file = `resize-${slug}-mid-${n}.png`;
+      await page.screenshot({ path: join(directory, file) });
+      shotFiles.push(file);
+    }
+    for (let step = 19; step >= 0; step--) { await page.mouse.move(x + at * step / 20, y); await new Promise(resolve => setTimeout(resolve, 16)); }
+    await page.mouse.up();
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
   if (throttle > 1) await client.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   await client.detach();
 
@@ -173,6 +267,10 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
     layoutMs: round(delta("LayoutDuration") * 1000), styleMs: round(delta("RecalcStyleDuration") * 1000), scriptMs: round(delta("ScriptDuration") * 1000), taskMs: round(delta("TaskDuration") * 1000),
     layoutMsPerFrame: round(delta("LayoutDuration") * 1000 / count, 2), styleMsPerFrame: round(delta("RecalcStyleDuration") * 1000 / count, 2),
     layoutObjectsPerFrame: Math.round(layoutObjects / count), paintMs: trace.paintMs,
+    // The work of a frame up to its layout, from its start to the ResizeObserver told after it, and the frames that came later than 20 ms.
+    workMsMax: round(Math.max(0, ...timed.seen.work.slice(1))), workMsP95: round([...timed.seen.work.slice(1)].sort((a, b) => a - b)[Math.floor(timed.seen.work.length * 0.95)] ?? 0, 2),
+    workMsMedian: round([...timed.seen.work.slice(1)].sort((a, b) => a - b)[Math.floor(timed.seen.work.length * 0.5)] ?? 0, 2),
+    framesOver20: frames.filter(gap => gap > 20).length, shots: shotFiles,
     // How many elements each width write restyled: the quantity the mechanism changes, the same on any PC (a width written where every
     // element inherits it restyles the window; one written on the elements that read it, a hundred or so).
     recalcElementsPerWrite: timed.seen.writes ? Math.round(recalcs.reduce((sum, event) => sum + (event.args?.elementCount ?? 0), 0) / timed.seen.writes) : 0,
@@ -206,7 +304,7 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
     // The steps of a part of a pixel of the texts that must move by whole pixels (`whole`: the reading column's, centred in its pane).
     const wholeSteps = perText.reduce((sum, entry, at) => sum + (watch[at].whole ? entry.fractionalFrames : 0), 0);
     Object.assign(result, { sampledFrames: rows.length, shake, fractional, wholeSteps, rewraps, perText });
-    if (everyWord) {
+    if (everyWord || anchor) {
       // A horizontal drag moves words sideways with their column and never up or down: every word that moved up or down in a
       // frame of the press (a line it gained or lost, or one gained above it) is counted, with how often and how far it went.
       // The one setting of the lines when the edge is let go is not the press's.
@@ -219,7 +317,34 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
         }
         return { name, frames, most: Math.round(most * 100) / 100 };
       }).filter(word => word.frames).sort((a, b) => b.frames - a.frames);
-      Object.assign(result, { wordsWatched: sampledPass.seen.wordNames?.length ?? 0, wordsMoved: moved.length, moved: moved.slice(0, 20) });
+      Object.assign(result, { wordsWatched: sampledPass.seen.wordNames?.length ?? 0, wordsJumped: moved.length, moved: moved.slice(0, 20) });
+      // A word that jumps one way and back the next frame is shaking (a correction that lags the layout it corrects); a jump that
+      // stays is the paragraph above it gaining or losing a line, which no place kept can avoid.
+      const flickering = new Set(), flickerWords = [];
+      (sampledPass.seen.wordNames ?? []).forEach((name, at) => {
+        let prev = null, before = 0;
+        rows.forEach((row, index) => {
+          const now = row.pressed ? row.words?.[at]?.[0] : null;
+          const step = now != null && prev != null ? now - prev : 0;
+          if (Math.abs(step) > 0.5 && Math.abs(before) > 0.5 && Math.sign(step) !== Math.sign(before) && Math.abs(step + before) <= 1) { flickering.add(index); if (flickerWords.length < 8) flickerWords.push(`${name} @${index} ${before > 0 ? "+" : ""}${round(before)},${step > 0 ? "+" : ""}${round(step)}`); }
+          before = step; prev = now;
+        });
+      });
+      Object.assign(result, { flicker: flickering.size, flickerWords });
+    }
+    if (anchor) {
+      const lines = rows.map(row => row.line).filter(value => value != null);
+      const base = lines[0] ?? 0;
+      Object.assign(result, {
+        anchorMode: sampledPass.seen.anchorMode, anchorText: sampledPass.seen.anchorText, anchorSamples: lines.length,
+        // The line read stays where it stood: its top is the same in every frame of the press and after it.
+        anchorDrift: round(Math.max(0, ...lines.map(value => Math.abs(value - base))), 2),
+        // No word of the stage is cut or covered by the list, the panel or the window.
+        overflowMax: round(Math.max(0, ...rows.map(row => row.over ?? 0)), 1), overflowFrames: rows.filter(row => (row.over ?? 0) > 1.5).length,
+        overflowWho: [...new Set(rows.filter(row => (row.over ?? 0) > 1.5).map(row => row.overWho))].slice(0, 6),
+        hscrollMax: Math.max(0, ...rows.map(row => row.hscroll ?? 0)),
+        ...(process.env.LOOK_SERIES ? { anchorSeries: rows.filter(row => row.pressed).map(row => [Math.round((row.line ?? -1) * 10) / 10, Math.round(row.scrollTop * 10) / 10, Math.round(row.nav)]) } : {}),
+      });
     }
   }
   const problems = [];

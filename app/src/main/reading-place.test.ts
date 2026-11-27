@@ -3,7 +3,7 @@
 // place it had, it does not read as "at the bottom". What stands under the thread growing or shrinking is the thread's one stick
 // to the bottom (message-rich.test.ts).
 import { afterEach, expect, test, vi } from "vitest";
-import { holdLines, keepReadingPlace, NUDGE_PX, SETTLE_MS } from "./reading-place";
+import { followLines, keepReadingPlace, NUDGE_PX, SETTLE_MS } from "./reading-place";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
@@ -93,35 +93,120 @@ function scrollerAt(top: number): { scroller: HTMLElement; view: { width: number
 }
 const frame = (frames: (() => void)[]): void => { frames.splice(0).forEach(run => run()); };
 
-test("while an edge is held the column keeps its lines: the pane's width changes and nothing is placed; let go, the place is kept once", () => {
+/**
+ * A conversation of one text whose lines this lays out: `perLine` characters to a line, `LINE` px to a line, the view `top` px down
+ * the thread. The observers the page made hand their callbacks back, in the order they were made.
+ */
+const LINE = 20;
+function textIn(scroller: HTMLElement, chars = 2000): { model: { perLine: number; base: number; top: number; client: number }; fire(): void; topOf(at: number): number } {
+  const callbacks: (() => void)[] = [];
+  vi.stubGlobal("ResizeObserver", class { constructor(callback: () => void) { callbacks.push(callback); } observe() {} disconnect() { callbacks.length = 0; } });
+  const item = document.createElement("div");
+  item.className = "item";
+  item.append(document.createTextNode("字".repeat(chars)));
+  scroller.append(item);
+  document.body.append(scroller);
+  const model = { perLine: 20, base: 100, top: 0, client: 600 };
+  const topOf = (at: number): number => model.base + Math.floor(at / model.perLine) * LINE - model.top;
+  const rect = (top: number, height: number): DOMRect => ({ top, bottom: top + height, left: 0, right: 10, width: 10, height } as DOMRect);
+  vi.spyOn(document, "createRange").mockImplementation(() => {
+    const range = {
+      at: 0, setStart(_node: Node, at: number) { this.at = at; }, setEnd() {}, selectNodeContents() {},
+      getBoundingClientRect: () => rect(topOf(range.at), LINE),
+      getClientRects: () => Array.from({ length: Math.ceil(chars / model.perLine) }, (_, line) => rect(model.base + line * LINE - model.top, LINE)),
+    };
+    return range as unknown as Range;
+  });
+  item.getBoundingClientRect = () => rect(model.base - model.top, Math.ceil(chars / model.perLine) * LINE);
+  scroller.getBoundingClientRect = () => rect(0, model.client);
+  Object.defineProperties(scroller, {
+    scrollTop: { configurable: true, get: () => model.top, set: (value: number) => { model.top = Math.max(0, value); } },
+    clientWidth: { configurable: true, get: () => 600 }, clientHeight: { configurable: true, get: () => model.client },
+    scrollHeight: { configurable: true, get: () => model.base + Math.ceil(chars / model.perLine) * LINE + 40 },
+  });
+  return { model, fire: () => callbacks.slice().forEach(run => run()), topOf };
+}
+
+test("a dragged edge leaves the column its own width: no word is held at an old width, covered or cut", () => {
   const at = scrollerAt(1200);
   const column = document.createElement("div");
   column.className = "ra-col";
   at.scroller.className = "ra-scroll";
   at.scroller.append(column);
   document.body.append(at.scroller);
-  // The line read stands 40 px under the view's top; the lines set again for a narrower column put it 300 px further down.
-  let itemAt = 1240;
-  const item = document.createElement("div");
-  item.className = "item";
-  item.getBoundingClientRect = () => ({ top: itemAt - at.view.top, bottom: itemAt - at.view.top + 300 } as DOMRect);
-  column.append(item);
-  let lines = 760;
-  Object.defineProperty(column, "clientWidth", { configurable: true, get: () => lines });
-  column.getBoundingClientRect = () => ({ width: lines, top: 0, bottom: 0 } as DOMRect);
-  column.getClientRects = () => [column.getBoundingClientRect()] as unknown as DOMRectList;
   keepReadingPlace(at.scroller, ".item", 4, false);
-  const letGo = holdLines();
-  expect(column.style.width).toBe("760px");
-  // The pane is dragged narrower: the scroller changes, the held column does not, and the view is not moved.
+  const letGo = followLines();
   at.view.width = 640; at.notify(); frame(at.frames);
-  expect(at.tops).toEqual([]);
-  // Let go: the column takes the pane's width again, its lines are set once, and the bottom-less place is kept.
   letGo();
-  expect(column.style.width).toBe("");
-  lines = 600; at.view.height = 4600; itemAt = 1540; at.notify(); frame(at.frames);
-  expect(at.view.top).toBe(1540 - 40);
+  expect(column.getAttribute("style")).toBeNull();
   at.scroller.remove();
+});
+
+test("a dragged edge keeps the line read where it stands on the screen while the lines wrap again around it, in every frame", () => {
+  vi.stubGlobal("requestAnimationFrame", (run: () => void) => { run(); return 1; });
+  const scroller = document.createElement("div");
+  scroller.className = "ra-scroll";
+  const at = textIn(scroller);
+  // The view's top is in the middle of the text.
+  at.model.top = 160;
+  keepReadingPlace(scroller, ".item", 4, false);
+  const held: string[] = [];
+  scroller.addEventListener("conversation-hold", () => held.push("hold"));
+  const letGo = followLines();
+  // The first line whole in view: the character that starts it.
+  const line = [...Array(2000).keys()].find(index => at.topOf(index) >= 0)!;
+  const stood = at.topOf(line);
+  expect(held).toEqual(["hold"]);
+  // The pane is dragged narrower, then wider: each step changes the lines, and the frame's own correction runs once.
+  for (const perLine of [19, 17, 14, 11, 12, 15, 18, 20]) {
+    at.model.perLine = perLine;
+    at.fire();
+    expect(at.topOf(line), `${perLine}`).toBeCloseTo(stood, 0);
+  }
+  letGo();
+  expect(at.topOf(line)).toBeCloseTo(stood, 0);
+  scroller.remove();
+});
+
+test("a dragged edge keeps a conversation at its bottom at its bottom, whatever the lines add", () => {
+  vi.stubGlobal("requestAnimationFrame", (run: () => void) => { run(); return 1; });
+  const scroller = document.createElement("div");
+  scroller.className = "ra-scroll";
+  const at = textIn(scroller);
+  at.model.top = scroller.scrollHeight - at.model.client;
+  keepReadingPlace(scroller, ".item", 4, false);
+  const held: string[] = [];
+  scroller.addEventListener("conversation-hold", () => held.push("hold"));
+  const letGo = followLines();
+  for (const perLine of [18, 14, 9, 12, 20]) {
+    at.model.perLine = perLine;
+    at.fire();
+    expect(scroller.scrollTop, `${perLine}`).toBe(scroller.scrollHeight);
+  }
+  // The bottom is not a place the owner holds in the middle: the thread goes on following its newest turn.
+  expect(held).toEqual([]);
+  letGo();
+  scroller.remove();
+});
+
+test("each frame is measured for its own lines before the line read is put back, and letting go ends the correction", () => {
+  vi.stubGlobal("requestAnimationFrame", (run: () => void) => { run(); return 1; });
+  const scroller = document.createElement("div");
+  scroller.className = "ra-scroll";
+  const at = textIn(scroller);
+  at.model.top = 160;
+  keepReadingPlace(scroller, ".item", 4, false);
+  const order: string[] = [];
+  scroller.addEventListener("conversation-measure", () => order.push("measure"));
+  const letGo = followLines();
+  at.model.perLine = 15;
+  at.fire();
+  expect(order).toEqual(["measure"]);
+  letGo();
+  order.length = 0;
+  at.fire();
+  expect(order).toEqual([]);
+  scroller.remove();
 });
 /** The width changes, the keeper's own frame runs, and what is written from then on is recorded. */
 function widen(at: ReturnType<typeof scrollerAt>, width = 700): void {
