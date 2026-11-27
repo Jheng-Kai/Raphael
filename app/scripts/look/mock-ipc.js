@@ -142,16 +142,16 @@ export function installMock(fixture, config = {}, target = window) {
   }
   // A long conversation as it is really written, for the drags of the panes' edges (R-PERF-27): turns of every length, so each one wraps
   // again at its own width and the lines change all the way down; owner messages long enough to reach the clip of their preview (eight
-  // lines) at the widths a drag goes through; lists, a code block and Latin words among the Chinese.
+  // lines) at the widths a drag goes through; lists, a code block and figures among the Chinese.
   if (variant.dragThread) {
     const base = data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11);
     const count = typeof variant.dragThread === "number" ? variant.dragThread : 120;
     const said = "這一段接著往下談，欄寬一變，每一行落在哪裡就跟著換，讀的那一行要留在原處。";
-    const latin = "Dragging an edge wraps every paragraph again around the line you are reading, so that line has to stay where your eyes are.";
+    const figures = "2026/11/27 的進度是 3.5 小時，預計 14:45 前完成 12 項，剩下 8 項排在 2026/12/04 之後，合計 40% 左右。";
     data.turns = data.turns.concat(Array.from({ length: count }, (_, i) => {
       const at = base.created_at_ms - (count - i) * 60000;
-      const paragraphs = Array.from({ length: 2 + (i * 7) % 4 }, (_, k) => k % 3 === 2 ? latin.slice(0, 40 + (i * 13 + k * 29) % 80) : said.repeat(1 + (i + k) % 3).slice(0, 18 + (i * 11 + k * 17) % 60));
-      const list = i % 3 === 0 ? `\n\n- ${said.slice(0, 12 + i % 9)}\n- ${latin.slice(0, 30 + i % 40)}\n- ${said.slice(4, 20 + (i * 3) % 14)}` : "";
+      const paragraphs = Array.from({ length: 2 + (i * 7) % 4 }, (_, k) => k % 3 === 2 ? figures.slice(0, 20 + (i * 13 + k * 29) % 50) : said.repeat(1 + (i + k) % 3).slice(0, 18 + (i * 11 + k * 17) % 60));
+      const list = i % 3 === 0 ? `\n\n- ${said.slice(0, 12 + i % 9)}\n- ${figures.slice(0, 24 + i % 30)}\n- ${said.slice(4, 20 + (i * 3) % 14)}` : "";
       const code = i % 7 === 4 ? `\n\n\`\`\`python\nresult = ${i}\n\`\`\`` : "";
       const text = `${i + 1}. ${paragraphs.join("\n\n")}${list}${code}`;
       // Every fourth question is a long one that fills the clip of its preview at a narrow pane and not at a wide one.

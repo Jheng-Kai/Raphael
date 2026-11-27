@@ -142,7 +142,7 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
             const out = Math.max(now.left - box.left, box.right - now.right);
             if (out > over) { over = out; who = seen.stageNames[at]; }
           });
-          row.over = over; row.overWho = who; row.hscroll = scroller.scrollWidth - scroller.clientWidth; row.line = lineTop(); row.scrollTop = scroller.scrollTop;
+          row.over = over; row.overWho = who; row.hscroll = scroller.scrollWidth - scroller.clientWidth; row.line = lineTop(); row.scrollTop = scroller.scrollTop; row.gap = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
         }
         for (const entry of watch) {
           const node = document.querySelector(entry.selector);
@@ -344,10 +344,12 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
     if (anchor) {
       const lines = rows.map(row => row.line).filter(value => value != null);
       const base = lines[0] ?? 0;
+      // A thread at its bottom keeps its bottom (what stands under a line may wrap again and move the line itself): the distance from the end
+      // is what must stay 0. Otherwise the line read keeps its top.
       Object.assign(result, {
         anchorMode: sampledPass.seen.anchorMode, anchorText: sampledPass.seen.anchorText, anchorSamples: lines.length,
         // The line read stays where it stood: its top is the same in every frame of the press and after it.
-        anchorDrift: round(Math.max(0, ...lines.map(value => Math.abs(value - base))), 2),
+        anchorDrift: sampledPass.seen.anchorMode === "bottom" ? round(Math.max(0, ...rows.filter(row => row.gap != null).map(row => Math.abs(row.gap))), 2) : round(Math.max(0, ...lines.map(value => Math.abs(value - base))), 2),
         // No word of the stage is cut or covered by the list, the panel or the window.
         overflowMax: round(Math.max(0, ...rows.map(row => row.over ?? 0)), 1), overflowFrames: rows.filter(row => (row.over ?? 0) > 1.5).length,
         overflowWho: [...new Set(rows.filter(row => (row.over ?? 0) > 1.5).map(row => row.overWho))].slice(0, 6),
