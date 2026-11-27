@@ -226,7 +226,7 @@ npm run look -- sidebar-rail sidebar-rail-dragged-open sidebar-dragged-wider pan
 The drags and toggles are measured too (R-PERF-25, R-PERF-26, R-PERF-27): frames, style work, elements restyled per write, how far any text reaches past the conversation's area, how far the line read moves, and whether a word jumps and comes back.
 
 ```powershell
-npm run look -- sidebar-resize-smooth sidebar-resize-busy sidebar-toggle-smooth panel-resize-smooth panel-resize-busy panel-toggle-smooth --theme both --width 1120,720,1920x1080
+npm run look -- sidebar-resize-smooth sidebar-resize-reading sidebar-resize-busy sidebar-toggle-smooth panel-resize-smooth panel-resize-reading panel-resize-busy panel-toggle-smooth --theme both --width 1120,720,1920x1080
 ```
 
 ### Rows, width, rail and foot (R-SIDE-01)
