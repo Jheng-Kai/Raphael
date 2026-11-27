@@ -81,7 +81,7 @@ def listing(folder, files, whole, *, binary=True, limit=LISTED):
             rest[top] = rest.get(top, 0) + 1
         where = ", ".join(f"{count} in {top}" for top, count in sorted(rest.items(), key=lambda item: -item[1])[:6])
         lines.append(f"- and more: {'over ' if not whole else ''}{len(files)} files in all{f' ({where})' if where else ''}; "
-                     "read a folder's name with skill_read and reference to list it")
+                     "the rest are the files the document names")
     return lines
 
 

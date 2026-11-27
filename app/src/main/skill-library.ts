@@ -252,7 +252,7 @@ function importBodyHTML(v: SkillLibraryView): string {
   if (v.busy) {
     const percent = importPercent(v.step);
     return `<div class="skl-import is-busy">` +
-      `<div class="skl-bar" role="progressbar" aria-label="${esc(importTitle(v))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><span style="width:${percent}%"></span></div>` +
+      `<div class="bar skl-bar" role="progressbar" aria-label="${esc(importTitle(v))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><i style="width:${percent}%"></i></div>` +
       `<p class="d skl-step" role="status">${esc(stepWords(v.step))}</p>` +
       actionRow({ secondary: btn(esc(t("common.cancel")), "", ` data-skl="import-cancel"${v.stopping || v.step.kind === "install" ? " disabled" : ""}`), cls: "skl-actions" }) +
       `</div>`;
@@ -609,7 +609,7 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
     const percent = importPercent(state.step);
     const bar = el.querySelector<HTMLElement>(".skl-bar");
     bar?.setAttribute("aria-valuenow", String(percent));
-    bar?.querySelector<HTMLElement>("span")?.style.setProperty("width", `${percent}%`);
+    bar?.querySelector<HTMLElement>("i")?.style.setProperty("width", `${percent}%`);
     const words = el.querySelector(".skl-step");
     if (words) words.textContent = stepWords(state.step);
     el.querySelector<HTMLButtonElement>('[data-skl="import-cancel"]')?.toggleAttribute("disabled", state.step.kind === "install");

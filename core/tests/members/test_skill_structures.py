@@ -233,16 +233,14 @@ async def test_the_files_a_document_names_are_looked_for_in_its_source_only(rig,
     assert not any("outside" in name for name in held)
 
 
-async def test_a_folder_of_a_skill_is_walked_on_demand_when_it_holds_more_than_the_listing_names(rig, tmp_path):
+async def test_a_listing_that_cuts_short_says_by_folder_where_the_rest_is(rig, tmp_path):
     files, _ = layout("beside", "template")
     files.update({f"actions/extra/{number:03d}.md": b"more" for number in range(90)})
     package = (await rig.call("skills.library.import", {"source": f"local:{write(tmp_path / 'src', files)}"}))["package"]
     await rig.call("skills.library.update", {"key": package["key"], "access": "all"})
     text = rig.service.skill_read(0, "lazy-mode")
-    # The listing names its first files and tells where the rest are, by folder.
     assert "and more:" in text and " in actions/" in text
-    listed = rig.service.skill_file(0, "lazy-mode", "actions/extra")
-    assert listed.startswith("Files in actions/extra/") and "- actions/extra/089.md " in listed
+    # Any file is read by its path, listed or not.
     assert rig.service.skill_file(0, "lazy-mode", "actions/extra/089.md") == "more"
     with pytest.raises(MemberError):
         rig.service.skill_file(0, "lazy-mode", "../outside")

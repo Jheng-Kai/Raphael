@@ -448,15 +448,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         if not there:
             raise MemberError("not_found", "the skill's folder has no such file")
         if not is_file:
-            # A folder of a skill is walked on demand, as the format has the model do: its files by name and size, each then read by its path.
-            from .skill_index import files_below, listing
-
-            files, whole = files_below(target)
-            shown = "/".join(parts)
-            if not files:
-                return f"{shown}/ holds no file."
-            rows = listing(folder, [(f"{shown}/{name}", size) for name, size in files], whole, limit=400)
-            return f"Files in {shown}/ (read one with its path):" + chr(10) + chr(10).join(rows)
+            raise MemberError("unreadable", "that path is a folder, not a file: it is there but cannot be read as one; name a file inside it")
         if size > MAX_SKILL_FILE_BYTES:
             raise MemberError("size", "that file is too large to read; it is over 256 KB")
         try:

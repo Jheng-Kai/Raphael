@@ -9,15 +9,15 @@
 .skl-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-2); min-height: calc(5 * var(--sp-6)); padding: var(--sp-5) var(--sp-4); border: 1px dashed var(--line-lit); border-radius: var(--r-md); text-align: center; }
 .skl-zone.is-over { background: var(--hover); border-color: var(--line-focus); }
 .skl-zone-icon { display: inline-flex; color: var(--text-3); }
-.skl-zone-icon .i { width: 24px; height: 24px; }
+.skl-zone-icon .i { width: 20px; height: 20px; }
 .skl-zone-words { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
 /* The address is one line with its small action at its end, which waits for something to send. */
 .skl-url { display: flex; align-items: center; gap: var(--sp-1); }
 .skl-url > .field { flex: 1 1 auto; min-width: 0; }
 .skl-error { margin: 0; color: var(--err); font-size: var(--fs-sm); }
 .skl-import > .skl-alone { justify-self: start; }
-.skl-bar { height: 6px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
-.skl-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 200ms ease; }
+/* The progress bar is the shared `.bar`; only its fill moves smoothly between the steps. */
+.skl-bar > i { transition: width 200ms ease; }
 .skl-step { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
 .skl-notice { margin: 0; color: var(--text); font-size: var(--fs-sm); line-height: 1.6; }
 .skl-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); margin: 0; padding: 0; }

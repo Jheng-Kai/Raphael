@@ -412,6 +412,7 @@ INTERACTION_RPCS = {
     **dict.fromkeys(("attachments.info", "attachments.upload"),
                    "Owner composer file selection and bounded upload; not model management tools."),
     "routines.run": "Only the owner's explicit routine test starts a manual run through the existing worker.",
+    "skills.library.cancel_import": "The owner's cancel of the import their own dialog started; it stops work and changes nothing.",
     **dict.fromkeys(("members.viewing", "members.greet", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract", "agent.history.send_now",
                      "worker.cancel", "worker.rerun", "pages.open", "pages.viewing", "pages.video_base"),
                    "Existing owner conversation, work or presentation entry; not team administration."),

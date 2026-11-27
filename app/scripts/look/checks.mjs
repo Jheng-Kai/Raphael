@@ -907,7 +907,7 @@ export function checkRendered(name, context = {}) {
       const expected = { 'skill-library-importing': ['正在匯入 slow-import', '讀取技能 3 / 7', 47], 'skill-library-fetching': ['正在匯入 handbook', '取得檔案', 10],
         'skill-library-import-chosen': ['正在匯入 pstack', '取得檔案', 10], 'skill-library-importing-install': ['正在匯入 slow-import', '安裝', 95] }[name];
       require(title === expected[0], `the title names the source (${title})`);
-      const bar = panel.querySelector('.skl-bar'), fill = bar.querySelector('span'), step = panel.querySelector('.skl-step');
+      const bar = panel.querySelector('.skl-bar'), fill = bar.querySelector('i'), step = panel.querySelector('.skl-step');
       require(bar.getAttribute('role') === 'progressbar' && bar.getAttribute('aria-valuenow') === String(expected[2]) && visible(fill), `a progress bar at ${expected[2]} %`);
       require(Math.abs(fill.getBoundingClientRect().width / bar.getBoundingClientRect().width * 100 - expected[2]) <= 1.5, 'its fill is as long as its value says');
       require(step.getAttribute('role') === 'status' && step.textContent.trim() === expected[1], `one line says the step (${step.textContent.trim()})`);
