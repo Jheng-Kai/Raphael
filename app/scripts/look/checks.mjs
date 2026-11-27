@@ -2885,7 +2885,9 @@ export function checkRendered(name, context = {}) {
       require(rows.every(row => row.querySelector('.mdesc')?.textContent), 'commands and skills have descriptions');
       // A long description takes one line, cut with an ellipsis, never several.
       require(rows.every(row => { const d = row.querySelector('.mdesc'), s = getComputedStyle(d); return s.whiteSpace === 'nowrap' && s.textOverflow === 'ellipsis' && d.getBoundingClientRect().height <= parseFloat(s.lineHeight) + 1; }), 'each description takes one line');
-      if (name === 'completion-slash' || name === 'completion-clash') require(heads.join('|') === '指令|技能', 'commands and skills have separate headings');
+      // A bare / also offers the app's own commands first, under 內建 (R-SLASH-APP-01); a typed name filters them out.
+      if (name === 'completion-slash') require(heads.join('|') === '內建|指令|技能' && values[0] === 'app:usage', `the app's commands, then the member's commands and skills, under their own headings: ${heads.join('|')}`);
+      if (name === 'completion-clash') require(heads.join('|') === '指令|技能', 'commands and skills have separate headings');
       if (name === 'completion-plugin') require(heads.join('|') === '技能' && menu.querySelector('.msource')?.textContent === 'Field Notes', 'the plugin is quiet small print, never a section');
       if (name === 'completion-clash') require(values.join('|') === 'review|field-notes:review|desk-notes:review', 'clashes show qualified plugin names');
     }
