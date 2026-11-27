@@ -8,13 +8,16 @@
 // The tab starts with its plugins and then its skills; the importer is 匯入 in the page's header, which opens one dialog
 // (member-dialogs.ts): one field that takes anything, whatever is dropped on it (files, a folder, a link) or pasted in it, or
 // chosen with 選擇檔案, and 匯入 (R-SKILL-26). The
-// core does the work: skills.library.* (members/service.py): what is a skill or a plugin imports at once, and what is not
-// is converted by the primary contact while the dialog says who is writing it and with which model. An import under way says
-// so in the dialog; a failure says its own cause with the file, size, limit or packages it names (the core's `[[json]]`
-// detail, R-SKILL-21); a skill of a package is renamed from its page (R-SKILL-25) and skills of one name prefix arrive as
-// one plugin (R-SKILL-20), with no question to the owner (#355).
+// core does the work: skills.library.* (members/service.py): what follows the rules (a skill, a pack, a plugin, from a file, an
+// archive, a folder, a GitHub address or a Git address) imports at once with no model and no agent, and the new package is the
+// answer. What is not one (text, a page, a document, a repository or an archive of other material) is no work of the dialog: it
+// closes, and Raphael's own conversation opens with the owner's words handing it over (R-SKILL-28). An import under way says
+// in place what it is doing (fetching from a host, reading a file); a failure says its own cause with the file, size, limit,
+// host or packages it names (the core's `[[json]]` detail, R-SKILL-21); a skill of a package is renamed from its page
+// (R-SKILL-25) and skills of one name prefix arrive as one plugin (R-SKILL-20), with no question to the owner (#355).
 
 import { core, membersList, pickImportSource, pickOutputFolder } from "./api";
+import type { WireAttachment } from "./types";
 import { IS_MAC } from "../shared/platform";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
@@ -44,8 +47,8 @@ export interface SkillLibraryView {
   page: string | null; busy: boolean; refreshing: Set<string>; error: string;
   /** What is typed or pasted in the importer's box, kept while the card is drawn again. */
   draft: string;
-  /** A conversion under way: the slime that writes the skill and the model it uses; the words of the one that just ended well. */
-  converting: { task: number; name: string; model: string } | null; converted: string;
+  /** What the import under way is doing, in plain words (fetching from a host, reading a file); empty when it is not. */
+  progress: string;
   /** The skill whose page is open (in its package's place), its document once read, or whether reading it failed. */
   skill: number | null; doc: { id: number; text: string } | null; docFailed: boolean;
   /** What the last import left out for the package it made (#313): said under the importer or on that package's page. */
@@ -55,7 +58,7 @@ export interface SkillLibraryView {
 }
 export const emptySkillLibraryView = (): SkillLibraryView => ({
   packages: [], members: [], loaded: false, failed: false, page: null, busy: false, refreshing: new Set(), error: "",
-  draft: "", converting: null, converted: "",
+  draft: "", progress: "",
   skill: null, doc: null, docFailed: false, skipped: null, renaming: null,
 });
 
@@ -73,8 +76,8 @@ const tooLarge = (name: string, size: number): string => t("skillLib.sizeUpload"
 const SKIPPED_FOLDERS = new Set(["node_modules", ".git", "__pycache__", "__MACOSX"]);
 /** And the files a Mac leaves beside every file (`.DS_Store`, `._name`): the core leaves them out too, so they are not even sent. */
 const leftover = (name: string): boolean => name === ".DS_Store" || name.startsWith("._");
-/** How often a conversion under way is asked how it stands. */
-const POLL_MS = 1500;
+/** The longest pasted text that is sent in Raphael's message as it is; a longer one goes as a file beside it. */
+const INLINE_TEXT = 1500;
 
 /** Who may use a package, in a few words: the whole team, nobody yet, the names of one or two, or how many. */
 export function accessText(access: Access, members: LibraryMember[]): string {
@@ -206,27 +209,23 @@ function skillPageHTML(p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryVi
 /** 匯入, in the page's header beside its close: it opens the importer's dialog. Quiet, and as wide as its word. */
 export const importButtonHTML = (): string => btn(esc(t("skillLib.import")), "sm skl-head-import", ' data-skl="import-open"');
 
-/** The importer's dialog: one field for whatever is dropped or pasted in it, or chosen with 選擇檔案; what is no skill yet is
- *  converted by the primary contact (core: members/skill_convert.py). What it is doing, and why it failed, are said in it. */
+/** The importer's dialog: one field for whatever is dropped or pasted in it, or chosen with 選擇檔案. What follows the rules
+ *  imports here, with no agent; what does not leaves for Raphael's conversation (core: members/skill_intake.py). What it is
+ *  doing stands in the row of 選擇檔案, where no line is added or taken away, and why it failed stands under the field. */
 function importBodyHTML(v: SkillLibraryView): string {
-  const working = v.busy || !!v.converting;
-  const busy = working ? " disabled" : "";
-  const progress = v.converting
-    ? t("skillLib.converting", { p0: v.converting.name, p1: v.converting.model })
-    : v.busy ? t("skillLib.importing") : "";
+  const busy = v.busy ? " disabled" : "";
   return `<div class="skl-import" data-skl-drop>` +
     `<textarea id="skl-input" class="mb-fin mb-ta skl-text" rows="2" spellcheck="false" placeholder="${esc(t("skillLib.importHint"))}" aria-label="${esc(t("skillLib.importHint"))}"${busy}>${esc(v.draft)}</textarea>` +
     `<div class="skl-import-row">` +
     btn(ico("file") + esc(t("skillLib.choose")), "sm", ` data-skl="pick"${IS_MAC ? "" : ' aria-haspopup="menu" aria-expanded="false"'}${busy}`) +
+    `<p class="d skl-progress" role="status">${esc(v.busy ? v.progress || t("skillLib.importing") : "")}</p>` +
     `</div>` +
-    (progress ? `<p class="d skl-progress" role="status">${esc(progress)}</p>` : "") +
-    (!working && v.converted ? `<p class="d skl-progress" role="status">${esc(v.converted)}</p>` : "") +
     (v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : "") +
     `<input type="file" id="skl-file" multiple hidden></div>`;
 }
 
 const importActions = (v: SkillLibraryView) => ({
-  primary: { label: esc(t("skillLib.import")), attrs: ` data-skl="import-go"${v.busy || v.converting ? " disabled" : ""}` },
+  primary: { label: esc(t("skillLib.import")), attrs: ` data-skl="import-go"${v.busy ? " disabled" : ""}` },
   cls: "mb-dlg-act",
 });
 
@@ -297,13 +296,6 @@ function reasonText(kind: string, d: Detail): string | null {
     case "download.git_failed": return t("skillLib.gitFailed", { p0: d.why ?? "" });
     case "source.linked": return t("skillLib.linkRefused", { p0: file });
     case "source.path": case "source.unreadable": case "io.disk": return t("skillLib.unreadable", { p0: file });
-    case "convert.no_model": return t("skillLib.noModel", { p0: t("providers.title") });
-    case "convert.empty": return t("skillLib.convertEmpty");
-    case "convert.no_skill": return d.why ? t("skillLib.convertNoSkill", { p0: d.why }) : t("skillLib.convertNoSkillPlain");
-    case "convert.unusable": return t("skillLib.convertUnusable");
-    case "convert.stopped": return t("skillLib.convertStopped");
-    case "convert.unavailable": return t("skillLib.convertUnavailable");
-    case "convert.failed": return t("skillLib.convertFailed");
     case "source.redirect": case "source.insecure": case "source.invalid": case "source.empty": case "source.not_skill_file":
     case "source.file_type": return t("skillLib.unsupported");
     default: return null;
@@ -342,8 +334,35 @@ export function failureText(error: unknown): string {
 /** A file or a file of a folder, with its path below the folder that was dropped (a lone file's is its name). */
 interface Picked { path: string; file: File }
 
-/** The model a conversion runs on, as its name alone (`openrouter/vendor/model` is `model`, `cli:codex` is `codex`). */
-const shortModel = (model: string): string => model.slice(Math.max(model.lastIndexOf("/"), model.lastIndexOf(":")) + 1) || model;
+/** What the core hands back when what was put in is no skill (members/skill_intake.py `hand_over`): the window says it in the
+ *  owner's words and gives it to Raphael's own conversation. */
+interface HandOff { kind: "text" | "file" | "link" | "path" | "folder"; label: string; address?: string; path?: string }
+/** What the window itself holds of what it sent, for a hand-off: the text that was pasted, the file that was dropped or chosen. */
+interface Held { text?: string; file?: File }
+
+/** The host an address names, when it is a Git address the core fetches with the system's git (an SSH address or an https
+ *  address that is not GitHub's own): what the dialog says it is fetching from. */
+export function gitHost(text: string): string {
+  const one = text.trim().replace(/^([\w.-]+@[A-Za-z0-9.-]+):\s+/, "$1:");
+  const found = /^(?:ssh:\/\/(?:[^@/\s]+@)?|[\w.-]+@)([A-Za-z0-9][A-Za-z0-9.-]*)(?::\s*[\w.~+%/-]|:\d+\/|\/)/.exec(one)
+    ?? /^https:\/\/(?:[^@/\s]+@)?([A-Za-z0-9][A-Za-z0-9.-]*)\//.exec(one);
+  const host = found?.[1]?.toLowerCase() ?? "";
+  return host && !/^(?:www\.)?(?:github\.com|skills\.sh)$|^raw\.githubusercontent\.com$/.test(host) && !/\s/.test(one) ? host : "";
+}
+
+/** What an import is doing, said while it works: where it fetches from, or what it reads. */
+function progressFor(params: Record<string, unknown>): string {
+  const text = typeof params.text === "string" ? params.text : typeof params.source === "string" ? params.source : "";
+  const host = gitHost(text);
+  if (host) return t("skillLib.fetching", { p0: host });
+  const file = params.file as { name?: string } | undefined;
+  if (file?.name) return t("skillLib.reading", { p0: file.name });
+  if (Array.isArray(params.files)) return t("skillLib.readingFiles");
+  if (typeof params.source === "string" && params.source.startsWith("local:")) {
+    return t("skillLib.reading", { p0: params.source.slice(6).split(/[\\/]/).filter(Boolean).pop() ?? "" });
+  }
+  return t("skillLib.importing");
+}
 
 /** What a drop holds: its files, and for a folder every file below it (without what a folder leaves behind), each with its
  *  path from the folder. A browser that cannot walk a folder gives its files as they come. */
@@ -370,7 +389,9 @@ async function droppedFiles(data: DataTransfer): Promise<Picked[]> {
 }
 
 /** `scroller` is what scrolls the tab: the list's place in it is kept while a package's page is open. */
-export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scroller: () => HTMLElement | null = () => root, pollMs = POLL_MS) {
+export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scroller: () => HTMLElement | null = () => root,
+  /** Gives what is no skill to Raphael's conversation as the owner's message; false when the last one is still being answered. */
+  handOff: (words: string, attachments: WireAttachment[]) => boolean = () => false) {
   const state = emptySkillLibraryView();
   /** The importer's dialog while it is open: it is drawn again with the tab, from the same state. */
   let dlg: Dialog | null = null;
@@ -385,8 +406,6 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
     if (typing && !field()?.disabled) field()?.focus({ preventScroll: true });
   };
   let epoch = 0;
-  /** Which watch of a conversion is the current one: leaving the tab or a new one ends the earlier. */
-  let watching = 0;
   /** How far the list was scrolled when a package's page took its place, and the package's page when a skill's did. */
   let listScroll = 0, pageScroll = 0;
   /** The members' faces by id, from the roster the rest of the window draws them from; without it a face is its id's own colour. */
@@ -395,16 +414,10 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
     const request = ++epoch;
     const roster = Promise.resolve().then(() => membersList()).then(list => list.members, () => null);
     try {
-      const result = await core<{ packages: LibraryPackage[]; members: LibraryMember[]; converting?: { task_id: number; member: { name: string }; model: string }[] }>("skills.library.list", {});
+      const result = await core<{ packages: LibraryPackage[]; members: LibraryMember[] }>("skills.library.list", {});
       const team = await roster;
       if (request !== epoch) return;
       state.packages = result.packages; state.members = result.members; state.loaded = true; state.failed = false;
-      // A conversion that was under way when the tab was left is picked up again where it stands.
-      const resumed = result.converting?.[0];
-      if (resumed && !state.converting && !state.busy) {
-        state.converting = { task: resumed.task_id, name: resumed.member.name, model: shortModel(resumed.model) };
-        void watch(resumed.task_id);
-      }
       if (team) faces = new Map(team.map(member => [member.id, member]));
     } catch { if (request === epoch) state.failed = true; }
     if (request !== epoch) return;
@@ -434,57 +447,60 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
     catch (error) { toaster.info(failureText(error)); }
     finally { state.refreshing.delete(key); redraw(); }
   };
-  /** A package the library now holds, as an import or a conversion made it: a plugin opens on its page, so whom it is for can
-   *  be chosen at once (a large set reaches nobody until then). */
+  /** A package the library now holds: a plugin opens on its page, so whom it is for can be chosen at once (a large set reaches
+   *  nobody until then). The new package in the list is the whole answer; the dialog closes and says nothing more. */
   const arrived = async (made: LibraryPackage, skipped: SkippedSkill[] | undefined): Promise<void> => {
     state.draft = "";
-    // An import that landed closes the dialog: the list is the result. A conversion keeps it open, to say who wrote the skill.
-    if (!state.converted) dlg?.close();
+    dlg?.close();
     // Skills whose names were taken are not in the library: the owner is told which, and who holds each name (#313).
     state.skipped = skipped?.length ? { key: made.key, items: skipped } : null;
     await load();
-    state.busy = false; state.converting = null;
+    state.busy = false; state.progress = "";
     if (hasPage(byKey(made.key))) open(made.key); else redraw();
   };
-  /** Asks how a conversion stands until it ends: the package it made lands like any import, or its cause is said under the card. */
-  const watch = async (task: number): Promise<void> => {
-    const turn = ++watching;
-    while (turn === watching) {
-      await new Promise(resolve => setTimeout(resolve, pollMs));
-      if (turn !== watching) return;
-      try {
-        const answer = await core<{ state: string; package?: LibraryPackage; skipped?: SkippedSkill[]; error?: string }>("skills.library.convert", { task_id: task });
-        if (turn !== watching || answer.state === "working") continue;
-        const slime = state.converting?.name ?? "";
-        watching++;
-        if (answer.state === "done" && answer.package) {
-          state.converted = t("skillLib.converted", { p0: slime, p1: answer.package.name });
-          await arrived(answer.package, answer.skipped);
-        } else {
-          state.converting = null; state.error = failureText(new Error(answer.error ?? "")); redraw();
-        }
-        return;
-      } catch (error) {
-        if (turn !== watching) return;
-        watching++; state.converting = null; state.error = failureText(error); redraw();
-        return;
+  /** The owner's words that hand what is no skill to Raphael: the source as readable words, a file as the message's own
+   *  attachment (a long text as a file too). */
+  const handOffWords = (found: HandOff, held: Held): { words: string; attachments: WireAttachment[] } | null => {
+    const attachments: WireAttachment[] = [];
+    switch (found.kind) {
+      case "link": return { words: t("skillLib.handoffLink", { p0: found.address ?? found.label }), attachments };
+      case "path": return { words: t("skillLib.handoffPath", { p0: found.path ?? found.label }), attachments };
+      case "folder":
+        return { words: found.address ? t("skillLib.handoffRepo", { p0: found.address, p1: found.path ?? "" })
+          : t("skillLib.handoffFolder", { p0: found.label, p1: found.path ?? "" }), attachments };
+      case "file": return held.file ? { words: t("skillLib.handoffFile", { p0: found.label }), attachments: [] } : null;
+      case "text": {
+        const text = held.text ?? "";
+        if (!text.trim()) return null;
+        if (text.length <= INLINE_TEXT) return { words: t("skillLib.handoffText", { p0: text.trim() }), attachments };
+        return { words: t("skillLib.handoffTextFile"), attachments };
       }
     }
   };
-  const bring = async (params: Record<string, unknown>): Promise<void> => {
-    state.busy = true; state.error = ""; state.converted = ""; state.skipped = null; redraw();
+  /** What is no skill leaves the dialog: it closes, and Raphael's conversation opens with these words (and the file) as the
+   *  owner's message. A hand-off that is still being answered is not sent twice: the dialog stays and says so. */
+  const handOver = async (found: HandOff, held: Held): Promise<void> => {
+    const said = handOffWords(found, held);
+    if (!said) { state.error = t("skillLib.failed"); state.busy = false; state.progress = ""; redraw(); return; }
+    if (found.kind === "file" && held.file) {
+      said.attachments.push({ name: found.label, mime: held.file.type || "application/octet-stream", data: base64(await held.file.arrayBuffer()) });
+    } else if (found.kind === "text" && (held.text ?? "").length > INLINE_TEXT) {
+      said.attachments.push({ name: "pasted-text.md", mime: "text/markdown", data: base64(new TextEncoder().encode(held.text).buffer as ArrayBuffer) });
+    }
+    if (!handOff(said.words, said.attachments)) {
+      state.error = t("skillLib.handoffBusy"); state.busy = false; state.progress = ""; redraw();
+      return;
+    }
+    state.draft = ""; state.busy = false; state.progress = "";
+    dlg?.close();
+  };
+  const bring = async (params: Record<string, unknown>, held: Held = {}): Promise<void> => {
+    state.busy = true; state.error = ""; state.skipped = null; state.progress = progressFor(params); redraw();
     try {
-      const answer = await core<{ package?: LibraryPackage; skipped?: SkippedSkill[]; converting?: { task_id: number; member: { name: string }; model: string } }>("skills.library.import", params);
-      if (answer.converting) {
-        // Not a skill yet: a slime converts it, and the card says which slime and with what model, in place.
-        state.busy = false;
-        state.converting = { task: answer.converting.task_id, name: answer.converting.member.name, model: shortModel(answer.converting.model) };
-        redraw();
-        void watch(answer.converting.task_id);
-        return;
-      }
+      const answer = await core<{ package?: LibraryPackage; skipped?: SkippedSkill[]; handoff?: HandOff }>("skills.library.import", params);
+      if (answer.handoff) { await handOver(answer.handoff, held); return; }
       await arrived(answer.package!, answer.skipped);
-    } catch (error) { state.error = failureText(error); state.busy = false; redraw(); }
+    } catch (error) { state.error = failureText(error); state.busy = false; state.progress = ""; redraw(); }
   };
   /** A package's page takes the list's place, from its top; the list's place is kept for the way back. */
   const open = (key: string): void => {
@@ -551,7 +567,7 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
   };
   const bringFile = async (file: File): Promise<void> => {
     if (file.size > MAX_FILE) { state.error = tooLarge(file.name, file.size); redraw(); return; }
-    await bring({ file: { name: file.name, data: base64(await file.arrayBuffer()) } });
+    await bring({ file: { name: file.name, data: base64(await file.arrayBuffer()) } }, { file });
   };
   /**
    * Who may use a package: the whole team, or the characters ticked; the menu stays open while names are ticked. Each row
@@ -733,7 +749,7 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
         // The text of the box is sent as it is: the core says whether it is a link, a place on this computer or text.
         const text = field()?.value ?? "";
         state.draft = text;
-        if (text.trim()) void bring({ text });
+        if (text.trim()) void bring({ text }, { text });
       } else if (target.dataset.skl === "pick") choose(target);
     });
     el.addEventListener("keydown", event => {
@@ -759,7 +775,7 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
       const types = event.dataTransfer?.types;
       if ((event.target as Element).closest?.("[data-skl-drop]") && (types?.includes("Files") || types?.includes("text/uri-list") || types?.includes("text/plain"))) {
         event.preventDefault();
-        if (!state.busy && !state.converting) lit(true);
+        if (!state.busy) lit(true);
       }
     });
     el.addEventListener("dragleave", event => {
@@ -768,13 +784,13 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
     });
     el.addEventListener("drop", event => {
       lit(false);
-      if (!(event.target as Element).closest?.("[data-skl-drop]") || state.busy || state.converting) return;
+      if (!(event.target as Element).closest?.("[data-skl-drop]") || state.busy) return;
       const data = event.dataTransfer;
       if (!data) return;
       // A link dragged from a page or some text dragged from a document goes into the box and is sent: no step between.
       const words = data.types?.includes("Files") ? "" : (data.getData("text/uri-list") || data.getData("text/plain")).trim();
       event.preventDefault();
-      if (words) { state.draft = words; void bring({ text: words }); return; }
+      if (words) { state.draft = words; void bring({ text: words }, { text: words }); return; }
       void droppedFiles(data).then(bringPicked);
     });
   };
@@ -782,7 +798,7 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
   const openImport = (): void => {
     if (dlg) return;
     closeMenu();
-    state.error = ""; if (!state.converting) state.converted = "";
+    state.error = "";
     dlg = openDialog({
       title: t("skillLib.import"), body: importBodyHTML(state), actions: importActions(state), cls: "skl-dlg",
       onAct: () => {}, onClose: () => { dlg = null; },
@@ -797,10 +813,9 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
       const page = root.querySelector<HTMLElement>(".skl-page");
       if (page) bindNavLayer(page, back, { step: direction => state.busy || direction === "back" && keepEditedField(page) });
     },
-    // A conversion goes on in the core while the tab is away; the next listing picks it up where it stands.
     reset: (): void => {
       dlg?.close();
-      epoch++; watching++; state.skipped = null; state.error = ""; state.converting = null; state.converted = ""; state.draft = "";
+      epoch++; state.skipped = null; state.error = ""; state.draft = "";
       state.page = null; state.skill = null; state.doc = null; state.renaming = null;
     },
   };

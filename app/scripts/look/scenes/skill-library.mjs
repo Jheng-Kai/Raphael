@@ -11,10 +11,19 @@ const REFUSALS = {
   "repo": ["owner/missing", ["not_found", "repo", { repo: "owner/missing" }]],
   "network": ["owner/offline", ["download", "network", {}]],
   "document": ["owner/bad-doc", ["skill", "front_matter", { file: "skills/bad/SKILL.md", line: 4 }]],
-  // The one box turns away what no slime could convert: no model to write it with, or nothing to make a skill of.
-  "no-model": ["https://example.com/handbook", ["convert", "no_model", {}]],
-  "no-skill": ["https://example.com/menu", ["convert", "no_skill", { why: "這是一份菜單，裡面沒有可以照著做的步驟。" }]],
+  // A Git address fetched by the system's git (members/skill_git.py): what is wrong, said with the one thing that helps.
+  "git-sign-in": ["git@gitlab.example.com:group/handbook.git", ["source", "git_sign_in", { host: "gitlab.example.com" }]],
+  "git-host-key": ["ssh://git@gitlab.example.com/group/handbook.git", ["source", "git_host_key", { host: "gitlab.example.com" }]],
+  "git-network": ["https://gitlab.example.com/group/handbook.git", ["download", "git_network", { host: "gitlab.example.com" }]],
+  "git-missing": ["git@git.example.org:team/tools.git", ["source", "git_missing", {}]],
 };
+/** What the core answers when what was put in is no skill: the facts the window hands to Raphael's conversation (members/skill_intake.py). */
+const HANDOFFS = [
+  { match: "https://example.com/handbook", handoff: { kind: "link", label: "https://example.com/handbook", address: "https://example.com/handbook" } },
+  { match: "team-handbook.pdf", handoff: { kind: "file", label: "team-handbook.pdf" } },
+  { match: "git@gitlab.example.com:group/handbook.git", handoff: { kind: "folder", label: "handbook", address: "git@gitlab.example.com:group/handbook.git",
+    path: "C:\\Users\\owner\\Raphael\\skill-sources\\handbook-1a2b3c" } },
+];
 const list = [...settings("skills"), wait(".skl-pack")];
 const opened = [...list, click('[data-skl="open"][data-key="set:1"]'), wait('.skl-page .skl-skills .skl-skill')];
 // 匯入 is in the page's header and opens the importer's dialog.
@@ -55,15 +64,24 @@ export default [
     click('[data-skl="import-go"]'), wait('.skl-pack[data-skl-pack="pack:13"]'), check("skill-library-imported")]),
   scene("skill-library-import-failed", "A source with no SKILL.md says so in the importer and keeps it open", [
     ...importing, type("#skl-input", "nothing/here"), click('[data-skl="import-go"]'), wait(".skl-error"), check("skill-library-import-failed")]),
-  // What is no skill yet is converted by the primary contact: the card says which slime and model while it works, and the
-  // skill it wrote is in the list when it is done.
-  scene("skill-library-converting", "A file dropped on the box that is no skill is converted by a slime: the card says which slime and which model, in place", [
-    ...importing, dropFile(".skl-import", "team-handbook.pdf", { mime: "application/pdf" }), wait('.skl-progress[role="status"]'), check("skill-library-converting")],
-    { skillConvert: { match: "team-handbook.pdf", ends: "never", task: { task_id: 31, member: { id: 0, name: "拉斐爾" }, model: "openrouter/anthropic/claude-sonnet-5" } } }),
-  scene("skill-library-converted", "The conversion ends: the skill the slime wrote is in the list for the whole team, and the card says who made it", [
-    ...importing, dropFile(".skl-import", "team-handbook.pdf", { mime: "application/pdf" }), wait('.skl-progress[role="status"]'),
-    wait('.skl-pack[data-skl-pack="skill:weekly"]', 12000), check("skill-library-converted")],
-    { skillConvert: { match: "team-handbook.pdf", ends: "done", task: { task_id: 31, member: { id: 0, name: "拉斐爾" }, model: "openrouter/anthropic/claude-sonnet-5" } } }),
+  // What is no skill is no work of the dialog: it closes, and Raphael's own conversation opens with the owner's words (the source as
+  // readable words, a file as the message's own attachment) and Raphael's first answer, its choices as a question card.
+  scene("skill-library-handoff", "A web page that is no skill closes the dialog and opens Raphael's conversation with the owner's words and Raphael's choices as a question card", [
+    ...importing, type("#skl-input", "https://example.com/handbook"), click('[data-skl="import-go"]'),
+    wait('[data-owner-question="skill-choice"]'), check("skill-library-handoff")], { skillHandoff: HANDOFFS }),
+  scene("skill-library-handoff-file", "A file dropped on the box that is no skill goes to Raphael's conversation as the message's own file", [
+    ...importing, dropFile(".skl-import", "team-handbook.pdf", { mime: "application/pdf" }),
+    wait('[data-owner-question="skill-choice"]'), check("skill-library-handoff-file")], { skillHandoff: HANDOFFS }),
+  scene("skill-library-handoff-repo", "A Git repository of other material is fetched, and Raphael is told where it was put", [
+    ...importing, type("#skl-input", "git@gitlab.example.com:group/handbook.git"), click('[data-skl="import-go"]'),
+    wait('[data-owner-question="skill-choice"]'), check("skill-library-handoff-repo")], { skillHandoff: HANDOFFS }),
+  scene("skill-library-handoff-back", "Back in Settings after a hand-off, Team skills shows nothing half-done: no dialog, no draft, no error", [
+    ...importing, type("#skl-input", "https://example.com/handbook"), click('[data-skl="import-go"]'),
+    wait('[data-owner-question="skill-choice"]'), ...settings("skills"), wait(".skl-pack"), click('[data-skl="import-open"]'), wait(".skl-dlg #skl-input"),
+    check("skill-library-handoff-back")], { skillHandoff: HANDOFFS }),
+  scene("skill-library-fetching", "A Git address being fetched says where from, in the row of the choose button, and nothing moves", [
+    ...importing, type("#skl-input", "git@gitlab.example.com:group/handbook.git"), click('[data-skl="import-go"]'),
+    wait('.skl-progress[role="status"]:not(:empty)'), check("skill-library-fetching")], { skillImportPending: true }),
   // Importing: the progress, the plugin it makes, what it leaves out, an empty library and each failure in its own words.
   scene("skill-library-empty", "A library with nothing in it says so, and 匯入 stays in the header", [
     ...settings("skills"), wait(".skl-empty"), check("skill-library-empty")], { skillLibraryEmpty: true }),

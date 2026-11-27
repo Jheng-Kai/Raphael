@@ -242,7 +242,7 @@ export const agentHistorySearch = (query: string, memberId = 0, conversationId?:
  */
 /** What a button pressed on a panel asks of the member, beside the words it sends (core agent/intents.py). */
 /** A press done in the conversation; `connect-app:<slug>` hands Raphael an app that is not one click (connections.ts). */
-export type AskIntent = "setup-telegram" | "setup-slack" | "setup-discord" | "setup-docker" | "share-template" | "settings" | `connect-app:${string}`;
+export type AskIntent = "setup-telegram" | "setup-slack" | "setup-discord" | "setup-docker" | "share-template" | "settings" | "import-skill" | `connect-app:${string}`;
 export const agentAskText = (text: string, attachments: WireAttachment[] = [], memberId = 0, options: { requestId?: string; replaceTurnId?: number; quote?: import("./types").MessageQuote; conversationId?: number; intent?: AskIntent } = {}): Promise<void> =>
   invoke("agent_ask_text", {
     text,
