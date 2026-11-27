@@ -6329,10 +6329,11 @@ export function checkRendered(name, context = {}) {
       require(field.querySelectorAll('ul ul > li').length === 2 && style(field.querySelector('ul ul')).listStyleType === 'circle' && field.querySelector('strong')?.textContent === "新鮮", "two levels of bullets, the inner ones hollow, and the bold word");
       return { check: name };
     }
-    if (name === "composer-rich-bubble-lists" || name === "composer-rich-bubble-blocks") {
-      // Each sent message is drawn again from its finished turn (SENT_LISTS, SENT_BLOCKS in rich-composer.mjs).
-      const lists = name === "composer-rich-bubble-lists", box = node => node.getBoundingClientRect();
-      const bubbles = (lists ? [700, 701, 702, 703] : [704, 705, 706, 707]).map(id => document.querySelector(`.tn[data-id="${id}"] .owner-message .bubble`));
+    if (name === "composer-rich-bubble-lists" || name === "composer-rich-bubble-blocks" || name === "composer-rich-bubble-marks") {
+      // Each sent message is drawn again from its finished turn (SENT_LISTS, SENT_BLOCKS, SENT_MARKS in rich-composer.mjs).
+      const lists = name === "composer-rich-bubble-lists", marks = name === "composer-rich-bubble-marks", box = node => node.getBoundingClientRect();
+      const from = lists ? 700 : marks ? 708 : 704;
+      const bubbles = [0, 1, 2, 3].map(index => document.querySelector(`.tn[data-id="${from + index}"] .owner-message .bubble`));
       require(bubbles.every(bubble => bubble?.querySelector('.message-text')), "every sent message is drawn in its bubble");
       const measures = [];
       for (const bubble of bubbles) {
@@ -6361,6 +6362,21 @@ export function checkRendered(name, context = {}) {
         const inner = nested.querySelector('ol > li > ul');
         require(inner && inner.children.length === 2 && style(inner).listStyleType === 'circle' && style(inner).marginTop === '0px' && style(inner).marginBottom === '0px', "the bullets inside an item are hollow and hug it");
         require(box(inner.firstElementChild).left > box(nested.querySelector('ol > li')).left + 8 && nested.querySelectorAll('ol > li').length === 3, "they stand in under their item, and the numbers go on after them");
+      } else if (marks) {
+        const [words, table, toggle, math] = bubbles, own = style(words.querySelector('.message-text')).color;
+        const strong = words.querySelector('strong'), em = words.querySelector('em'), del = words.querySelector('del'), code = words.querySelector('code'), link = words.querySelector('a.message-link');
+        // Bold reads as bold: the interface's 500 next to 400 did not show on a bubble.
+        require(strong?.textContent === "粗體" && Number(style(strong).fontWeight) >= 600 && Number(style(strong).fontWeight) - Number(style(words).fontWeight) >= 200 && em?.textContent === "斜體" && style(em).fontStyle === 'italic', `bold and italic: ${style(strong).fontWeight} against ${style(words).fontWeight}, ${style(em).fontStyle}`);
+        require(del?.textContent === "刪除線" && style(del).textDecorationLine.includes('line-through') && code?.textContent === "程式碼", "strike and code");
+        require(link?.textContent === "https://example.com/docs" && [strong, em, del, code, link].every(node => style(node).color === own), "the link and every mark wear the bubble's words colour");
+        const cells = [...table.querySelectorAll('.owner-table th, .owner-table td')];
+        require(cells.length === 6 && cells.every(cell => style(cell).color === own && style(cell).borderTopStyle === 'solid') && box(table.querySelector('table')).right <= box(table).right - parseFloat(style(table).paddingRight) + 1, "the table's six cells, ruled, inside the bubble");
+        const details = toggle.querySelector('details.owner-details');
+        require(details?.open && details.querySelector('summary')?.textContent === "點開看細節" && visible(details.querySelector('.details-body')) && details.querySelector('.details-body').textContent.includes("收起來的內容"), "the open toggle with its title and what is under it");
+        const hr = math.querySelector('hr');
+        require(visible(math.querySelector('.math-display .katex')) && style(math.querySelector('.katex')).color === own && math.querySelector('p')?.textContent === "結尾", "the display equation in the bubble's colour and the last words");
+        // The divider is the words colour at 40%, never the browser's grey (hr { color: gray }) that vanished on the bubble.
+        require(visible(hr) && style(hr).color === own && style(hr).borderTopWidth === '1px' && box(hr).width >= box(math.querySelector('.katex')).width - 1, `the divider wears the bubble's words colour across the words: ${style(hr).borderTopColor} (${style(hr).color} / ${own})`);
       } else {
         const [numbers, tasks, quote, code] = bubbles;
         require(numbers.querySelector('ol')?.getAttribute('start') === "8" && numbers.querySelectorAll('ol > li').length === 4, "the numbers start at 8 and reach 11");

@@ -47,6 +47,12 @@ export const SENT_BLOCKS = [
   "> 先引用上一句\n\n然後接著說",
   "```\nnpm run look\n```",
 ];
+export const SENT_MARKS = [
+  "**粗體**、*斜體*、~~刪除線~~、`程式碼` 和 https://example.com/docs",
+  "| 項目 | 狀態 |\n| --- | --- |\n| 報告 | 完成 |\n| 數據 | 進行中 |",
+  "<details open>\n<summary>點開看細節</summary>\n\n收起來的內容\n\n</details>",
+  "$$\nE = mc^2\n$$\n\n---\n\n結尾",
+];
 const sentThread = (questions, from) => ({ turns: questions.map((question, index) => sentTurn(question, from + index)) });
 
 export default [
@@ -66,6 +72,8 @@ export default [
     [member(1), wait('.tn[data-id="703"] .owner-message .bubble ol ul'), check("composer-rich-bubble-lists")], sentThread(SENT_LISTS, 0)),
   scene("composer-rich-bubble-blocks", "Sent numbers past 9, tasks in the bubble's colours, and bubbles that start with a quote or hold only code, on the bubble's own padding",
     [member(1), wait('.tn[data-id="707"] .owner-message .bubble .owner-code'), check("composer-rich-bubble-blocks")], sentThread(SENT_BLOCKS, 4)),
+  scene("composer-rich-bubble-marks", "Sent marks, a table, an open toggle, a display equation and a divider, drawn again in the bubble's colours on its own padding",
+    [member(1), wait('.tn[data-id="711"] .owner-message .bubble .math-display .katex'), check("composer-rich-bubble-marks")], sentThread(SENT_MARKS, 8)),
   scene("composer-rich-room", "A group's composer takes the same typing shortcuts", [room(1), typing("#room-message", "## 會議", SHIFT, "1. 開場", SHIFT, "討論", SHIFT, SHIFT, "> 結論先寫下來"), wait("#room-message blockquote"), check("composer-rich-room")]),
   scene("composer-rich-docs", "A Google Docs copy with nested lists and a Word copy with numbered paragraphs keep their lists", [member(1),
     paste(field, { html: '<meta charset="utf-8"><b style="font-weight:normal;" id="docs-internal-guid-1"><ul><li><p>水果</p></li><ul><li><p>蘋果</p></li><li><p>香蕉</p></li></ul><li><p>蔬菜 <strong>新鮮</strong></p></li></ul></b>', text: "水果\n蘋果\n香蕉\n蔬菜 新鮮" }),

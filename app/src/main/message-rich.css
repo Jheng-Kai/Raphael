@@ -65,6 +65,8 @@
 .message-text h1, .message-text h2, .message-text h3, .message-text h4, .message-text h5, .message-text h6 { margin: .6em 0 .3em; font-size: var(--fs-md); line-height: 1.5; font-weight: var(--weight-semibold); }
 .message-text h1 { font-size: var(--fs-h1); }
 .message-text h2 { font-size: var(--fs-lg); }
+/* `**words**` reads as bold in what is written, in the composer as in the message it becomes (the interface's own 500 does not). */
+.message-text :is(strong, b), .cmp-input :is(strong, b) { font-weight: var(--weight-bold); }
 .message-text :is(h1, h2, h3, h4, h5, h6):first-child { margin-top: 0; }
 .message-text blockquote { margin: .6em 0; padding-inline-start: var(--sp-3); border-inline-start: 3px solid var(--edge); color: var(--text-2); }
 .message-text hr { border: 0; border-top: 1px solid var(--edge); margin: var(--sp-3) 0; }
@@ -163,7 +165,8 @@
 /* The owner's own Markdown in the bubble, drawn in the bubble's colours: no card, no panel fill, the words' own colour with a tint. */
 .owner-message .message-text code { background: color-mix(in srgb, currentColor 16%, transparent); color: inherit; }
 .owner-message .message-text blockquote { color: inherit; border-inline-start-color: color-mix(in srgb, currentColor 55%, transparent); }
-.owner-message .message-text hr { border-top-color: color-mix(in srgb, currentColor 40%, transparent); }
+/* A divider's own colour is the browser's grey (`hr { color: gray }`): it takes the bubble's words colour first. */
+.owner-message .message-text hr { color: inherit; border-top-color: color-mix(in srgb, currentColor 40%, transparent); }
 .owner-message .message-task input { border-color: currentColor; }
 .owner-message .message-task input:checked { background: currentColor; }
 .owner-message .message-task input:checked::after { border-color: var(--bubble); }

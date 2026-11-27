@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { messagePlainText, ownerMessageHTML, replyContentHTML } from "./message-content";
 import { mentionRanges, type MentionTarget } from "./mention-text";
@@ -94,4 +96,25 @@ test("a group draws the owner's address as the chip a reply's is", () => {
   const el = document.createElement("div");
   el.innerHTML = ownerMessageHTML("see https://example.com/page", "", [], undefined, true);
   expect(el.querySelector("a.link-chip")?.getAttribute("data-url")).toBe("https://example.com/page");
+});
+
+describe("a sent message's words in its bubble (R-COMPOSER-RICH-06; look: composer-rich-bubble-*)", () => {
+  const css = (name: string): string => readFileSync(join(__dirname, name), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const rich = css("message-rich.css"), agent = css("agent.css");
+  test("a list, a quote or code that starts or ends the words adds no space on the bubble's padding", () => {
+    // After the owner bubble's own block margins (.owner-code, .owner-table), so these win.
+    const first = rich.indexOf(".message-text > :first-child, .owner-message .message-text > :first-child { margin-top: 0; }");
+    const last = rich.indexOf(".message-text > :last-child, .owner-message .message-text > :last-child { margin-bottom: 0; }");
+    expect(first).toBeGreaterThan(rich.indexOf(".owner-message .message-text .owner-details {"));
+    expect(last).toBeGreaterThan(first);
+    expect(agent).toContain(".message-text li > :is(ul, ol) { margin-block: 0; }");
+    expect(agent).toContain(".message-text :is(ul, ol) ul { list-style-type: circle; }");
+  });
+  test("a task's box is drawn in the bubble's colours, the divider takes them too, and bold reads as bold", () => {
+    expect(rich).toMatch(/\.message-task input \{ appearance: none;/);
+    expect(rich).toContain(".owner-message .message-task input:checked::after { border-color: var(--bubble); }");
+    expect(rich).toContain(".owner-message .message-text hr { color: inherit;");
+    expect(rich).toContain(".message-text :is(strong, b), .cmp-input :is(strong, b) { font-weight: var(--weight-bold); }");
+    expect(css("styles.css")).toMatch(/--weight-bold: 6\d\d;/);
+  });
 });
