@@ -34,7 +34,8 @@ async def test_shared_packages_reach_every_member_and_grants_are_individual(rig,
     for identifier in (0, member):
         [visible] = (await rig.call("members.skills.list", {"member_id": identifier}))["skills"]
         assert visible["shared"] and visible["enabled"]
-        assert "REFERENCE-2048" in rig.service.skill_read(identifier, "writing")
+        assert "- references/check.md" in rig.service.skill_read(identifier, "writing")  # named, read when needed (R-SKILL-31)
+        assert "REFERENCE-2048" in rig.service.skill_file(identifier, "writing", "references/check.md")
         assert "Skill folder:" in cap.expand(identifier, "/writing current request")
         target = cap._path(identifier, skill["id"]).parent
         for relative in ("scripts/check.py", "references/check.md", "assets/sample.bin"):
@@ -87,7 +88,7 @@ async def test_plugin_cache_namespaces_and_private_shared_collisions(rig, tmp_pa
     names = [s["slash_name"] for s in cap.skills(0)]
     assert len(set(names)) == 3
     assert "desk:writing" in names and "field:writing" in names
-    assert "REFERENCE-2048" in cap.expand(0, "/desk:writing request")
+    assert "- references/check.md" in cap.expand(0, "/desk:writing request")
     assert cap.expand(0, "/writing request") == "Review request"
 
 
@@ -110,7 +111,7 @@ async def test_raphael_uses_the_same_admin_import_and_command_contract(rig, tmp_
     assert imported["skill"]["name"] == "writing"
     await rig.service.admin_tool(0, "member_command_save", {"member_id": 0, "name": "review", "template": "Review {input}"}, interactive=True)
     assert cap.expand(0, "/review notes") == "Review notes"
-    assert "REFERENCE-2048" in cap.expand(0, "/writing notes")
+    assert "- references/check.md" in cap.expand(0, "/writing notes")
 
 
 def test_unknown_local_source_and_oversized_package_are_refused(rig, tmp_path, monkeypatch):
