@@ -5455,7 +5455,7 @@ export function checkRendered(name, context = {}) {
     require(text.includes('intranet.example.test') && !text.includes('{p'), `the line names the site and is whole: ${text}`);
     if (document.documentElement.lang === "zh-TW") {
       require(/憑證/.test(text) && /登入/.test(text), `the words say the certificate signs in: ${text}`);
-      require(keychain === /一律允許/.test(text), `only the first time on a Mac names “一律允許”: ${text}`);
+      require(keychain === /永遠允許/.test(text), `only the first time on a Mac names macOS’s own “永遠允許”: ${text}`);
     } else require(keychain === /macOS/.test(text) || document.documentElement.lang !== "en", `the Mac words appear only for the first time: ${text}`);
     require(!document.querySelector('[data-computer-card]') && !document.querySelector('.desktop-request:not([hidden])'), 'nothing waits for the owner');
     require(!line[0].closest('.desktop-panel')?.hasAttribute('data-request'), 'the panel has no owner request');
