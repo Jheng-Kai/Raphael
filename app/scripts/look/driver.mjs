@@ -786,7 +786,6 @@ export async function perform(page, step, evidenceDirectory) {
     case "send-probe": return await sendProbe(page, step);
     case "typing-probe": return await typingProbe(page);
     case "drag-probe": return await dragProbe(page, step, evidenceDirectory);
-    case "tmp-dump": { const html = await page.evaluate(sel => [...document.querySelectorAll(sel)].slice(0,3).map(n=>n.outerHTML.slice(0,1500)).join(String.fromCharCode(10)+"---"+String.fromCharCode(10)), step.selector); await writeFile("tmp-dump.txt", html); return { check: "tmp-dump" }; }
     case "resize-probe": return await resizeProbe(page, step, evidenceDirectory);
     case "follow-probe": return await followProbe(page, step);
     case "advance-time":
