@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { Selection } from "prosemirror-state";
 import { mountRichField, richFieldOf } from "./composer-rich-field";
 
 let host: HTMLElement, input: HTMLTextAreaElement;
@@ -234,6 +235,31 @@ describe("Tab, Shift+Tab and Backspace", () => {
     input.setSelectionRange(3, 3);
     press("Backspace");
     expect(input.value).toBe("Head");
+  });
+  test("Backspace under a list goes back into its last item, and never makes an item that the next press takes away again", () => {
+    // The owner's numbered list, the caret on the empty line under it: Backspace once made an empty item 5, the next one lifted it out
+    // to the empty line again, and so on, while 「gg」 was never reached.
+    input.value = "1. 真的\n2. 假的\n3. 哈哈\n4. gg";
+    const editor = view();
+    editor.dispatch(editor.state.tr.setSelection(Selection.atEnd(editor.state.doc)));
+    expect(editor.state.selection.$from.parent.content.size).toBe(0);
+    for (let press_ = 0; press_ < 3; press_++) {
+      press("Backspace");
+      expect(input.value).toBe("1. 真的\n2. 假的\n3. 哈哈\n4. gg");
+      expect(input.selectionStart).toBe(input.value.length);
+      expect(view().state.selection.$from.parent.textContent).toBe("gg");
+    }
+    // In the middle of the words, the empty line after a quote goes away and the caret is at the quote's end. (The line the field
+    // keeps under the quote is that empty line once words follow it.)
+    input.value = "> quoted";
+    const doc = view().state.doc;
+    view().dispatch(view().state.tr.insert(doc.content.size, doc.type.schema.nodes.paragraph.create(null, doc.type.schema.text("after"))));
+    expect(view().state.doc.childCount).toBe(3);
+    expect(view().state.doc.child(1).content.size).toBe(0);
+    view().dispatch(view().state.tr.setSelection(Selection.near(view().state.doc.resolve(view().state.doc.child(0).nodeSize + 1))));
+    press("Backspace");
+    expect(input.value).toBe("> quoted\n\nafter");
+    expect(view().state.selection.$from.parent.textContent).toBe("quoted");
   });
   test("Backspace joins a paragraph to the one before it as it always did", () => {
     input.value = "one\ntwo";

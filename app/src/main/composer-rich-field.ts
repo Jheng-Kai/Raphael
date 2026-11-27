@@ -160,7 +160,30 @@ const backspaceBlock: Command = (state, dispatch) => {
   return false;
 };
 
-const backspace = chainCommands(undoInputRule, openMath, backspaceBlock, deleteSelection, joinBackward, selectNodeBackward);
+/**
+ * Backspace in an empty line right after a block that holds other blocks (a list, a quote, a toggle, a table) goes back to the end
+ * of that block's last words. Joining would pull the line into it as a new item, the next Backspace would lift that item out again,
+ * and the empty line kept under a last block (`keepTail`) came back each time: the owner pressed Backspace and nothing was ever
+ * deleted. A line in the middle of the words goes away; the one under a last block stays, as `keepTail` would put it back.
+ */
+const backspaceIntoBlock: Command = (state, dispatch) => {
+  const { selection } = state;
+  if (!selection.empty || selection.$from.parentOffset !== 0) return false;
+  const { $from } = selection, parent = $from.parent;
+  if (parent.type !== N.paragraph || parent.content.size !== 0 || $from.depth !== 1) return false;
+  const index = $from.index(0);
+  if (index === 0 || state.doc.child(index - 1).isTextblock) return false;
+  if (dispatch) {
+    const last = index === state.doc.childCount - 1;
+    const tr = last ? state.tr : state.tr.delete($from.before(), $from.after());
+    const back = Selection.findFrom(tr.doc.resolve($from.before()), -1, true);
+    if (back) tr.setSelection(back);
+    dispatch(tr.scrollIntoView());
+  }
+  return true;
+};
+
+const backspace = chainCommands(undoInputRule, openMath, backspaceBlock, backspaceIntoBlock, deleteSelection, joinBackward, selectNodeBackward);
 const forwardDelete = chainCommands(deleteSelection, joinForward, selectNodeForward);
 
 // ------------------------------------------------------------------------------------------------------------- typing
