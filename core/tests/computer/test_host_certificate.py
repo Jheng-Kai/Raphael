@@ -882,12 +882,13 @@ async def test_native_chrome_on_a_mac_chooses_a_client_certificate_by_itself_and
         await browser.show_for_owner(again)
         assert browser.shown
         if (found := await windows()) is not None:
-            assert len(found) == 1  # the one the owner chooses in
+            assert found, "the owner's window is on the screen"  # and Chrome's own chooser, which is a window of its own
         await browser.tuck_away(again)
         member = await browser.new_tab(2, tmp_path, 11)
         await browser.activate(member)
         await browser.activate(again)
         if (found := await windows()) is not None:
-            assert found == []  # nothing is on the screen after the owner is done, nor for a new member window or a selected one
+            # Nothing is on the screen after the owner is done, nor for a new member window or a selected one.
+            assert found == [], f"windows on the screen: {found}"
     finally:
         await browser._stop()
