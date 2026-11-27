@@ -1,0 +1,37 @@
+/* The guided tour (tour/): a dim with one cut-out, Raphael's slime and its bubble. Flat, the window's own tokens in both
+   themes. It sits over the pages and Settings (50) and under menus, toasts and the caption strip (130 and up). */
+.tour { position: fixed; inset: 0; z-index: 100; overflow: hidden; pointer-events: none; }
+/* While the walk is on, nothing under the dim takes a press: the catch is the window's one surface. */
+.tour-catch { position: absolute; inset: 0; display: none; pointer-events: auto; }
+.tour[data-mode="step"] .tour-catch { display: block; }
+.tour[data-dim="all"] .tour-catch { background: var(--scrim); }
+/* The cut-out is a box whose shadow is the dim; it moves with the step. */
+.tour-spot { position: absolute; box-shadow: 0 0 0 100vmax var(--scrim); pointer-events: none; transition: left 300ms ease, top 300ms ease, width 300ms ease, height 300ms ease, border-radius 300ms ease; }
+.tour-slime { position: absolute; width: 56px; height: 56px; transform-origin: 50% 100%; pointer-events: none; }
+
+/* The bubble floats like a menu: the floating surface and its edge, controls filled with the control colour. */
+:where(.tour-bubble) {
+  --btn: var(--float-ctl); --btn-edge: var(--float-ctl-edge); --btn-hover: var(--float-ctl-hover); --btn-pressed: var(--float-pressed);
+  --key: var(--float-ctl); --key-edge: var(--float-ctl-edge);
+  --hover: var(--float-hover); --pressed: var(--float-pressed); --edge: var(--float-edge); --line: var(--float-edge);
+  --panel: var(--float); --surface-2: var(--float-ctl); --field: var(--float-ctl);
+}
+/* As narrow as its words allow, never wider than 300 px or than the window less Raphael's room. */
+.tour-bubble { position: absolute; box-sizing: border-box; width: max-content; max-width: min(300px, calc(100% - 136px)); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--float-edge); border-radius: var(--r-md); background: var(--float); color: var(--text); box-shadow: var(--pop); font-size: var(--fs-sm); line-height: 1.5; pointer-events: auto; }
+.tour-text { margin: 0; overflow-wrap: anywhere; }
+.tour[data-mode="step"] .tour-text { padding-inline-end: var(--sp-4); }
+.tour-x { position: absolute; top: var(--sp-1); inset-inline-end: var(--sp-1); }
+.tour-keys { margin-top: var(--sp-2); }
+.tour-keys .keys { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--text-3); }
+.tour-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin-top: var(--sp-3); }
+.tour-count { color: var(--text-3); font-size: var(--fs-2xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tour-buttons { display: flex; align-items: center; gap: var(--sp-2); margin-inline-start: auto; }
+.tour[data-mode="bye"] .tour-bubble { cursor: default; }
+
+/* The words come once Raphael has landed (the delay is set by the view). */
+.tour-bubble.is-arriving { animation: tour-bubble-in 160ms var(--tour-in-delay, 0ms) ease-out both; }
+@keyframes tour-bubble-in { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+.tour.is-leaving { opacity: 0; transition: opacity 200ms ease; }
+@media (prefers-reduced-motion: reduce) {
+  .tour, .tour * { transition: none !important; animation: none !important; }
+}

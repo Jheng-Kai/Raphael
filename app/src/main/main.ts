@@ -21,6 +21,7 @@ import { applyAppearance } from "./owner-settings";
 import { DeviceState } from "./device";
 import { resumeModels } from "./models";
 import { mountOnboarding } from "./onboarding";
+import { createTour, type Tour } from "./tour";
 import { fitGuideWindow, releaseGuideWindow } from "./guide-window";
 import { clearLayerForward, setLayerPlace, type NavStep } from "./nav-history";
 import { PlaceHistory, stepPlace, type MainPlace } from "./place-history";
@@ -170,6 +171,8 @@ async function start(): Promise<void> {
   prefetchEmojiWhenIdle();
 
   const listeners = new Set<(event: MainEvent) => void>();
+  /** Raphael's guided tour of the window: offered once after the first-run guide, started again from the account menu. */
+  let tour: Tour | null = null;
   const ctx: AppContext = {
     go,
     showDay(date) {
@@ -186,7 +189,9 @@ async function start(): Promise<void> {
     undo: new Undoable(toaster),
     cleared: new Cleared(),
     closeSettings: () => closeSettings(),
+    startTour: () => tour?.start(),
   };
+  tour = createTour(ctx);
 
   bindMissing(document, go);
   const history = createHistory(ctx);
@@ -440,6 +445,8 @@ watchChipRows(document.body);
           tellAgentPage();
           go(START_PAGE);
           firstViewShown();
+          // The first time the window shows after the guide, Raphael offers its tour (once, never again on its own).
+          tour?.offerOnce();
           void openPendingTemplate(templateFile).catch((err) => console.warn("main: the opened template file was not shown", err));
           // The speech models that the guide did not wait for come on in the background.
           void resumeModels({ status: api.modelsStatus, ensure: api.modelsEnsure }, (message) => console.warn("main:", message));
