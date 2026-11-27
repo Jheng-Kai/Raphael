@@ -32,7 +32,8 @@ from git (everything that differs from where the branch left `origin/main`, comm
 
 1. `tsc`, the app's own TypeScript check.
 2. The Vitest tests related to each changed frontend file (`vitest related`: the tests that import it, and
-   changed test files themselves).
+   changed test files themselves), and the tests that read a changed file as text (a stylesheet's rules;
+   `textReaders` in `verify-checks.mjs`).
 3. The repository's rule tests, which read the whole tree: the product rules (RULES.md and its area files in
    `.agents/product/rules/`) and their named tests, the feature maps,
    design tokens, focus rings, layout, UI rules, every locale and the history marks (`repo-clean`).

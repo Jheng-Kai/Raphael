@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { coreCheck } from "./guardian.mjs";
 
@@ -41,6 +41,23 @@ export function coreTargets(changed, exists = path => existsSync(join(root, "cor
   return [...targets].filter(target => ![...targets].some(other => other !== target && target.startsWith(`${other}/`))).sort();
 }
 
+/** Every frontend test file, as `vitest related` names them (relative to app/). */
+function frontendTests() {
+  return ["src", "scripts"].flatMap(folder => readdirSync(join(app, folder), { recursive: true })
+    .map(path => `${folder}/${String(path).replaceAll("\\", "/")}`)
+    .filter(path => /\.test\.(ts|mjs)$/.test(path) && !path.includes("node_modules/")));
+}
+
+/** The frontend tests that read a changed file as text (a stylesheet's rules, a source's words) instead of importing it:
+ *  `vitest related` follows imports alone, so a change to agent.css never ran the agent-sizing test that reads it. A test
+ *  file that names a changed file in quotes, by its base name or a path ending in it, runs too. */
+export function textReaders(front, tests = frontendTests(), read = path => readFileSync(join(app, path), "utf8")) {
+  const names = [...new Set(front.map(file => file.split("/").pop()))].filter(name => !/\.test\.(ts|mjs)$/.test(name));
+  if (!names.length) return [];
+  const named = new RegExp(`["'\`/](?:${names.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})["'\`]`);
+  return tests.filter(test => !front.includes(test) && named.test(read(test)));
+}
+
 /** The checks one verify run makes, in order. `directory` is the run's own folder, `judge` a look run to review,
  *  `changed` the repository paths the change touched (for --changed: committed since it left origin/main, or not yet). */
 export function verifyChecks({ args, directory, judge, environment = process.env, changed = [] }) {
@@ -59,7 +76,7 @@ export function verifyChecks({ args, directory, judge, environment = process.env
     // What a change touched, not the whole tree (AGENTS.md, "Test what changed"): the frontend tests that import a changed
     // file, the rule tests, the core tests of the changed packages, and contrast or formatting only for their own files.
     const front = changed.filter(file => /^app\/(src|scripts)\/.+\.(ts|mjs|js|css)$/.test(file)).map(file => file.slice("app/".length));
-    if (front.length) checks.push({ name: "related", command: process.execPath, args: [...vitest, "related", "--run", "--passWithNoTests", ...vitestOptions, ...front], cwd: app });
+    if (front.length) checks.push({ name: "related", command: process.execPath, args: [...vitest, "related", "--run", "--passWithNoTests", ...vitestOptions, ...front, ...textReaders(front)], cwd: app });
     checks.push({ name: "rules", command: process.execPath, args: [...vitest, "run", ...vitestOptions, ...RULE_TESTS], cwd: app });
     if (changed.some(file => /^app\/src\/.+\.css$/.test(file))) checks.push({ name: "contrast", command: process.execPath, args: [join(app, "scripts/check-palette.mjs")], cwd: app });
     const targets = coreTargets(changed);

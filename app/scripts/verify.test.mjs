@@ -50,7 +50,10 @@ describe("a verify run of only what changed (--changed)", () => {
     expect(checks.map(check => check.name)).toEqual(["tsc", "related", "rules"]);
     const related = checks[1].args;
     expect(related.slice(1, 4)).toEqual(["related", "--run", "--passWithNoTests"]);
-    expect(related.slice(-3)).toEqual(["src/main/desktop-viewer.ts", "src/main/desktop-viewer.test.ts", "scripts/look/checks.mjs"]);
+    const front = ["src/main/desktop-viewer.ts", "src/main/desktop-viewer.test.ts", "scripts/look/checks.mjs"], at = related.indexOf(front[0]);
+    expect(related.slice(at, at + 3)).toEqual(front);
+    // After them, the tests that read one of them as text, which vitest related does not follow.
+    expect(related.slice(at + 3)).toEqual(verifyModule.textReaders(front));
     expect(of([], "rules").args).toEqual(expect.arrayContaining(["run", "src/architecture", "guardian-contract", "feature-map", "scripts/repo-clean"]));
   });
   it("runs the test folder of each changed core package, a changed module's test file and changed test files, once", () => {
@@ -79,6 +82,17 @@ describe("a verify run of only what changed (--changed)", () => {
     }
     expect(reads.length).toBeGreaterThan(3);
     for (const [file, test] of reads) expect(READ_BY_CORE_TESTS[file] ?? [], `${test} reads ${file}`).toContain(test);
+  });
+  it("runs the frontend tests that read a changed file as text, which vitest related does not follow", () => {
+    const { textReaders } = verifyModule;
+    const texts = { "src/main/agent-sizing.test.ts": 'read("agent.css")', "src/main/other.test.ts": 'import "./agent"', "scripts/look/a.test.mjs": 'join(app, "src/main/agent.css")' };
+    const tests = Object.keys(texts), read = path => texts[path];
+    expect(textReaders(["src/main/agent.css"], tests, read)).toEqual(["src/main/agent-sizing.test.ts", "scripts/look/a.test.mjs"]);
+    expect(textReaders(["src/main/agent-sizing.test.ts"], tests, read)).toEqual([]);
+    // The real tree: the test that failed only in the whole suite, after a change to agent.css, is run by --changed.
+    expect(textReaders(["src/main/agent.css"])).toContain("src/main/agent-sizing.test.ts");
+    const related = run(["app/src/main/agent.css"]).find(check => check.name === "related");
+    expect(related.args).toContain("src/main/agent-sizing.test.ts");
   });
   it("checks contrast only when CSS changed and Rust formatting only when Rust changed", () => {
     expect(run(["app/src/main/agent.ts"]).map(check => check.name)).not.toContain("contrast");

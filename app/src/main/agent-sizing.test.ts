@@ -108,8 +108,9 @@ describe("the page's responsive sizes", () => {
 });
 
 test("the composer field sizes itself to its text, so a keystroke never lays out the thread from script", () => {
-  expect(read("agent.css")).toMatch(/\.cmp-input \{[^}]*max-height: min\([^}]*6lh[^}]*field-sizing: content;/);
-  for (const source of [read("pages/agent.ts"), read("chat-composer.ts")]) {
+  // The rich field (composer-rich-field.ts) grows with its blocks up to a height of the window's, never measured from script.
+  expect(read("agent.css")).toMatch(/\.cmp-input \{[^}]*max-height: min\([^}]*field-sizing: content;[^}]*overflow-y: auto;/);
+  for (const source of [read("pages/agent.ts"), read("chat-composer.ts"), read("composer-rich-field.ts"), read("composer-rich-views.ts")]) {
     expect(source).not.toMatch(/input\.style\.height|input\.scrollHeight/);
   }
 });
