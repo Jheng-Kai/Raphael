@@ -10,6 +10,16 @@ function shortcutOverlayOpen(allowPalette = false): boolean {
   );
 }
 
+/**
+ * Whether the key's target is the composer's rich field (an editor: its element carries ProseMirror's class). Ctrl or ⌘ with B is its
+ * bold and with K its link, and nothing else in the window takes them while the focus is there; the sidebar's B and the palette's K
+ * belong to everywhere else. (The palette stays reachable from the field with Shift+P.)
+ */
+const inEditor = (event: KeyboardEvent): boolean => {
+  const target = event.target instanceof Element ? event.target : document.activeElement;
+  return !!target?.closest(".ProseMirror");
+};
+
 export function shortcut(event: KeyboardEvent, mac = IS_MAC): string | null {
   // The system's other key is never the window's: the Windows key, or on a Mac Control, whose combinations are a
   // text field's own editing keys (⌃K deletes to the end of the line, ⌃F and ⌃B move the caret).
@@ -20,13 +30,14 @@ export function shortcut(event: KeyboardEvent, mac = IS_MAC): string | null {
   const typed = event.key.toLowerCase();
   const letter = /^[a-z0-9]$/.test(typed) ? typed
     : /^Key[A-Z]$/.test(event.code) ? event.code.slice(3).toLowerCase() : /^Digit[0-9]$/.test(event.code) ? event.code.slice(5) : typed;
-  if (primary && !event.altKey && !event.shiftKey && letter === "k") return shortcutOverlayOpen(true) ? null : "palette";
+  const editing = primary && !event.altKey && inEditor(event);
+  if (primary && !event.altKey && ((!event.shiftKey && letter === "k" && !editing) || (event.shiftKey && letter === "p"))) return shortcutOverlayOpen(true) ? null : "palette";
   if (shortcutOverlayOpen()) return null;
   // ⌘/Ctrl+F, +Shift+F, +B, +N and +1..9 type nothing, so they also work while a text field has the focus.
   // Every combination a field uses itself (A, C, V, X, Z, Y, Enter, the arrows) is not in this list and stays with the field.
   if (primary && !event.altKey) {
     if (letter === "f") return event.shiftKey ? "search" : "find";
-    if (!event.shiftKey && ["b", "n"].includes(letter)) return letter === "b" ? "sidebar" : "new";
+    if (!event.shiftKey && ["b", "n"].includes(letter) && !(editing && letter === "b")) return letter === "b" ? "sidebar" : "new";
     if (!event.shiftKey && /^[1-9]$/.test(letter)) return `member:${letter}`;
   }
   // Alt (Option) + arrows move the caret by a paragraph or a word, so a text field keeps them.

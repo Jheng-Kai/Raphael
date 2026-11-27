@@ -31,6 +31,33 @@ test.each(["input", "textarea", "select", "div[contenteditable]", "div[role=text
   expect(press(field, "ArrowUp", { ctrlKey: false, altKey: true })).toBeNull();
 });
 
+test("the composer's editor keeps Ctrl+B (bold) and Ctrl+K (link), and every other field and the page keep the sidebar and the palette (R-COMPOSER-RICH-06)", () => {
+  const editor = document.createElement("div");
+  editor.className = "ProseMirror"; editor.setAttribute("contenteditable", "true");
+  document.body.append(editor);
+  const inside = document.createElement("span");
+  editor.append(inside);
+  for (const target of [editor, inside]) {
+    expect(press(target, "b"), "bold").toBeNull();
+    expect(press(target, "k"), "link").toBeNull();
+    expect(press(target, "B", { shiftKey: true }), "quote").toBeNull();
+    // The palette is still one key away, and what no format uses stays the window's.
+    expect(press(target, "P", { shiftKey: true })).toBe("palette");
+    expect(press(target, "n")).toBe("new");
+    expect(press(target, "f")).toBe("find");
+    expect(press(target, "3")).toBe("member:3");
+  }
+  // Outside the editor, in a plain field and on the page, B is the sidebar and K the palette, as before.
+  const plain = document.createElement("input");
+  document.body.append(plain);
+  for (const target of [plain, document.body]) { expect(press(target, "b")).toBe("sidebar"); expect(press(target, "k")).toBe("palette"); }
+  // A ⌘ on a Mac is the same.
+  const mac = (target: HTMLElement, key: string) => { const event = new KeyboardEvent("keydown", { key, metaKey: true, bubbles: true, cancelable: true }); target.dispatchEvent(event); return shortcut(event, true); };
+  expect(mac(editor, "b")).toBeNull();
+  expect(mac(editor, "k")).toBeNull();
+  expect(mac(plain, "b")).toBe("sidebar");
+});
+
 test("a field takes no navigation shortcut while an IME composes or a dialog is open", () => {
   const field = document.createElement("textarea");
   document.body.append(field);

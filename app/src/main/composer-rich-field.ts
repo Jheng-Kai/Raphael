@@ -4,7 +4,7 @@
 // dictation, the @ and / menus, the attachments and the send all keep working on words, as before (composer-rich-markdown.ts has the
 // map between the two, composer-rich-extensions.ts the formats, composer-rich-behavior.ts the keys, composer-rich-toolbar.ts what
 // floats over a selection).
-import { Editor, type EditorOptions, Extension } from "@tiptap/core";
+import { Editor, Extension } from "@tiptap/core";
 import type { Node as PMNode, Schema } from "prosemirror-model";
 import { AllSelection, EditorState, Plugin, PluginKey, Selection, TextSelection, type Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
@@ -107,10 +107,12 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
     return DecorationSet.create(doc, found);
   };
 
-  /** What the field draws over the words: the placeholder, and the chips the page asks for. */
+  /** What the field draws over the words (the placeholder, the chips the page asks for), and the line it keeps open under a last block. */
   const chrome = Extension.create({
     name: "composerChrome",
     addProseMirrorPlugins() { return [new Plugin({ key: new PluginKey("composer-chrome"), props: { decorations } })]; },
+    // TipTap's own dispatch follows (it applies the transaction and says what changed), with the tail kept in the same transaction.
+    dispatchTransaction({ transaction, next }) { keepTail(transaction, this.editor.state.doc); next(transaction); },
   });
 
   const editor: Editor = new Editor({
@@ -118,7 +120,7 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
     extensions: [...composerExtensions(), composerBehavior({ link: () => openLink() }), chrome],
     // Enter is the page's (it sends), and no word the owner typed is rewritten by a paste rule.
     enableCoreExtensions: { keymap: false, tabindex: false },
-    enablePasteRules: false, injectCSS: false, enableExtensionDispatchTransaction: false,
+    enablePasteRules: false, injectCSS: false,
     editorProps: {
       attributes: { class: "cmp-input", role: "textbox", "aria-multiline": "true", enterkeyhint: "send", autocapitalize: "off" },
       // Escape is the page's (it cancels a task, closes a menu), and so is Enter, which sends: no extension is asked for either.
@@ -136,18 +138,15 @@ export function mountRichField(host: HTMLElement): HTMLTextAreaElement {
         if (linked) { editorView.dispatch(linked.scrollIntoView()); return true; }
         return false;
       },
-      // TipTap hands every transaction of the view to this one (it reads the prop though its type leaves it out).
-      dispatchTransaction(tr: Transaction) {
-        const current = editor.view;
-        keepTail(tr, current.state.doc);
-        const next = current.state.apply(tr);
-        current.updateState(next);
-        host.toggleAttribute("data-empty", next.doc.childCount === 1 && isBlankLine(next.doc.firstChild!));
-        if (tr.docChanged && !tr.getMeta(SILENT)) { const type = inputType || "insertText"; inputType = ""; emit(type); }
-      },
-    } as EditorOptions["editorProps"],
+    },
   });
   view = editor.view;
+  // After TipTap has applied a transaction: the field says whether it is empty, and every change of the words says `input`, once.
+  editor.on("transaction", ({ transaction, appendedTransactions }) => {
+    const doc = editor.state.doc;
+    host.toggleAttribute("data-empty", doc.childCount === 1 && isBlankLine(doc.firstChild!));
+    if ([transaction, ...appendedTransactions].some(tr => tr.docChanged) && !transaction.getMeta(SILENT)) { const type = inputType || "insertText"; inputType = ""; emit(type); }
+  });
   const schema = editor.schema;
   // The browser's own `input` comes before the editor has read what it changed: the words are announced once, after it has.
   host.addEventListener("input", event => {
