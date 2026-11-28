@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { navInputs, pressLayer } from "../test-support/nav-layer-input";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -439,11 +441,68 @@ describe("step 2: the services", () => {
   });
 
   test("a catalog that cannot be read offers another try", async () => {
-    api.integrationsCatalog.mockRejectedValueOnce(new Error("down"));
+    // The read that began with the guide and the one that the step makes when it finds that one failed.
+    api.integrationsCatalog.mockRejectedValueOnce(new Error("down")).mockRejectedValueOnce(new Error("down"));
     await toServices();
     expect(root.querySelector('[data-ob="conn-reload"]')).not.toBeNull();
     await press('[data-ob="conn-reload"]');
     expect(root.querySelector(".ob-tile")).not.toBeNull();
+  });
+
+  test("the store is read from the guide's first page, so the step opens on its apps and never on a lone spinner", async () => {
+    await open();
+    // Nothing of the services step is on screen, and its apps are already being read.
+    expect(root.dataset.step).toBe("welcome");
+    expect(api.integrationsCatalog).toHaveBeenCalledTimes(1);
+    expect(api.connectorsStatus).toHaveBeenCalledTimes(1);
+    expect(api.connectorsCatalog).toHaveBeenCalledTimes(1);
+    await press('[data-ob="next"]');
+    nameFirst("Mochi");
+    await press('[data-ob="next"]');
+    await press('[data-ob="next"]');
+    expect(root.dataset.step).toBe("services");
+    expect(root.querySelector(".spin")).toBeNull();
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["gmail", "notion", "github"]);
+    // The step did not read it again.
+    expect(api.integrationsCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  test("a step opened before the read has answered shows the spinner as a fallback, and the same read fills it", async () => {
+    let answer!: (value: unknown) => void;
+    api.integrationsCatalog.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    await toServices();
+    expect(root.querySelector("#ob-conn .spin")).not.toBeNull();
+    expect(api.integrationsCatalog).toHaveBeenCalledTimes(1);
+    answer({ services: [entry("notion", "Notion")] });
+    await flush();
+    expect(root.querySelector(".spin")).toBeNull();
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["gmail", "notion"]);
+    expect(api.integrationsCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  test("a read that failed before the step is tried again when the step opens", async () => {
+    api.integrationsCatalog.mockRejectedValueOnce(new Error("down"));
+    await toServices();
+    expect(api.integrationsCatalog).toHaveBeenCalledTimes(2);
+    expect(root.querySelector(".ob-tile")).not.toBeNull();
+  });
+
+  test("saving Composio's key reads the store again behind the apps already shown, with no spinner between", async () => {
+    api.connectorsStatus.mockResolvedValueOnce({ composio_configured: false, connectors: [] });
+    api.connectorsSetKey.mockResolvedValue({ configured: true });
+    await toServices();
+    let answer!: (value: unknown) => void;
+    api.integrationsCatalog.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    await press('[data-ob="composio-open"]');
+    const field = root.querySelector<HTMLInputElement>("#ob-composio-input")!;
+    field.value = "ak_synthetic";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await flush();
+    expect(root.querySelector(".spin")).toBeNull();
+    expect(root.querySelector('[data-item="notion"]')).not.toBeNull();
+    answer({ services: [entry("notion", "Notion"), entry("github", "GitHub")] });
+    await flush();
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["gmail", "notion", "github"]);
   });
 
   test("a store that never answers offers another try instead of spinning on", async () => {
@@ -559,6 +618,29 @@ describe("step 3: the abilities", () => {
     expect(root.querySelector(".ob-card #svc-dialog")).not.toBeNull();
   });
 
+  test("an ability's dialog opens and closes over a page that stays as it is: its title, slimes and list are the same elements, the list not coming in again", async () => {
+    await toAbilities();
+    const page = ["h2", ".ob-floaters", "[data-ob-abilities]", ".ob-col", ".ob-foot"].map((selector) => [selector, root.querySelector(selector)] as const);
+    expect(page.every(([, node]) => node)).toBe(true);
+    const same = (): void => { for (const [selector, node] of page) expect(root.querySelector(selector), selector).toBe(node); };
+    await press('[data-svc="open"][data-id="vision"]');
+    expect(root.querySelector(".ob-card #svc-dialog")).not.toBeNull();
+    same();
+    // A list that was already shown stands still, as in Settings: it is not marked to come in a second time.
+    expect(root.querySelector(".cs-list[data-stagger]")!.classList.contains("again")).toBe(true);
+    vi.useFakeTimers();
+    try {
+      root.querySelector<HTMLElement>('#svc-dialog [data-svc="close"]')!.click();
+      await vi.advanceTimersByTimeAsync(400);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(root.querySelector(".cs-scrim")).toBeNull();
+    same();
+    expect(root.querySelector(".cs-list[data-stagger]")!.classList.contains("again")).toBe(true);
+    expect(root.querySelector<HTMLElement>('[data-svc="open"][data-id="vision"]')).not.toBeNull();
+  });
+
   test("the guide can be finished even when the abilities could not be read", async () => {
     api.servicesStatus.mockRejectedValue(new Error("down"));
     await toAbilities();
@@ -630,5 +712,59 @@ describe("the first slime is a real member, and the chief of staff", () => {
     await press('[data-ob="next"]');
     expect(api.membersCreate).not.toHaveBeenCalled();
     expect(root.dataset.step).toBe("slime");
+  });
+});
+
+describe("every slime of the guide answers a press", () => {
+  const pressDown = (selector: string): MouseEvent => {
+    const target = root.querySelector<HTMLElement>(selector);
+    if (!target) throw new Error(`nothing to press: ${selector}`);
+    const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    target.dispatchEvent(event);
+    return event;
+  };
+
+  test("the one being made and the ones floating by a title are pressed for the squish alone: the focus stays and nothing else happens", async () => {
+    await open();
+    await press('[data-ob="next"]');
+    nameFirst("Mochi");
+    const field = root.querySelector<HTMLInputElement>("#ob-first-name")!;
+    field.focus();
+    expect(pressDown(".ob-first-face .slime-surface").defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(field);
+    await press(".ob-first-face .slime-surface");
+    expect(root.dataset.step).toBe("slime");
+    expect(api.membersCreate).not.toHaveBeenCalled();
+    await press('[data-ob="next"]');
+    expect(root.dataset.step).toBe("tools");
+    for (const step of ["tools", "services", "abilities"]) {
+      expect(root.dataset.step).toBe(step);
+      const floaters = root.querySelectorAll(".ob-fl .slime-surface");
+      expect(floaters, step).toHaveLength(3);
+      for (const floater of floaters) {
+        const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+        floater.dispatchEvent(down);
+        expect(down.defaultPrevented, step).toBe(true);
+        floater.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      }
+      await flush();
+      expect(root.dataset.step, step).toBe(step);
+      if (step !== "abilities") await press('[data-ob="next"]');
+    }
+    expect(done).not.toHaveBeenCalled();
+  });
+
+  test("a press on a picker slime still chooses it, and is not held back", async () => {
+    await open();
+    await press('[data-ob="next"]');
+    expect(pressDown('.ob-first-picker [data-slime-character="horns-red"]').defaultPrevented).toBe(false);
+    await press('.ob-first-picker [data-slime-character="horns-red"]');
+    expect(root.querySelector('.ob-first-picker [data-slime-character="horns-red"]')!.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  test("the stylesheet lets a press reach a floating slime, though its decoration takes no pointer", () => {
+    const css = readFileSync(resolve(__dirname, "../styles.css"), "utf8");
+    expect(css).toMatch(/\.ob-floaters \{[^}]*pointer-events: none;/);
+    expect(css).toMatch(/\.ob-fl \{[^}]*pointer-events: auto;/);
   });
 });

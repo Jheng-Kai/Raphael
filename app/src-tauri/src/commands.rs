@@ -1942,6 +1942,8 @@ impl Effects for AppEffects {
         if let Err(err) = window.set_theme(theme) {
             log::warn!("could not set the theme of the main window: {err}");
         }
+        // The colour behind the page follows the theme, so a resize or a show never flashes the other one.
+        crate::paint_backdrop(&window);
         if let Some(overlay) = self.app.get_webview_window(crate::OVERLAY_WINDOW)
             && let Err(err) = overlay.set_theme(theme)
         {

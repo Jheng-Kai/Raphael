@@ -856,7 +856,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 /* The team's characters float by a step's title, each where screens.ts puts it: they take no room, and a narrow card
    drops them. */
 .ob-floaters { position: relative; height: 0; pointer-events: none; }
-.ob-fl { position: absolute; display: block; }
+.ob-fl { position: absolute; display: block; pointer-events: auto; }
 /* Every choice is a store of tiles, three to a row where they fit, each one row as
    a store's app is:
    the mark in a soft square, the name over one quiet line that ends in … rather than wrapping, and on the right the

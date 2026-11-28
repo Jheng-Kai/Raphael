@@ -5997,6 +5997,44 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name };
   }
+  if (name === "onboarding-abilities-still-before" || name === "onboarding-abilities-still-open" || name === "onboarding-abilities-still-closed") {
+    // Opening an ability's dialog and closing it again leaves the page as it was: the same elements in the same places, the page
+    // not scrolled, and no row, title or slime coming in again under the dimmed page or after it (the page used to be drawn
+    // again whole, so its rows played their entrance once more at the open and at the close, a flash).
+    const body = document.querySelector('.ob-body');
+    const things = { card: '.ob-card', pane: '.ob-pane', col: '.ob-col', title: '.ob-col > h2', floaters: '.ob-floaters', main: '[data-ob-abilities]', foot: '.ob-foot' };
+    const rect = element => { const box = element.getBoundingClientRect(); return [box.left, box.top, box.width, box.height].map(Math.round).join(); };
+    const comingIn = () => document.getAnimations().filter(animation => animation.animationName === 'row-in' || (animation.effect?.target?.closest?.('.ob-col') && !animation.effect.target.closest('.cs-scrim') && animation.animationName && animation.playState === 'running' && !/^(?:ob-pulse|ob-caret)$/.test(animation.animationName)))
+      .map(animation => `${animation.animationName} on ${animation.effect.target.className || animation.effect.target.tagName}`);
+    if (name === "onboarding-abilities-still-before") {
+      window.__abilitiesStill = { nodes: Object.fromEntries(Object.entries(things).map(([key, selector]) => [key, document.querySelector(selector)])), rects: Object.fromEntries(Object.entries(things).map(([key, selector]) => [key, rect(document.querySelector(selector))])), scroll: body.scrollTop, width: body.clientWidth };
+      require(Object.values(window.__abilitiesStill.nodes).every(Boolean), "every part of the page is there before the dialog opens");
+      require(comingIn().length === 0, `nothing is still coming in before the dialog opens (${comingIn()})`);
+      return { check: name };
+    }
+    const before = window.__abilitiesStill;
+    require(before, "the page was read before the dialog opened");
+    if (name === "onboarding-abilities-still-open") {
+      require(document.querySelector('.cs-scrim #svc-dialog'), "the dialog is open");
+    } else {
+      require(!document.querySelector('.cs-scrim'), "the dialog is closed");
+    }
+    for (const [key, selector] of Object.entries(things)) {
+      const now = document.querySelector(selector);
+      require(now === before.nodes[key], `${key} is the same element, not one drawn again (${selector})`);
+      require(rect(now) === before.rects[key], `${key} stays where it was: ${before.rects[key]} then ${rect(now)}`);
+    }
+    require(body.scrollTop === before.scroll && body.clientWidth === before.width, `the page is not scrolled and no scrollbar comes or goes (${before.scroll}/${before.width} then ${body.scrollTop}/${body.clientWidth})`);
+    require(comingIn().length === 0, `no row, title or slime comes in again: ${comingIn()}`);
+    return { check: name };
+  }
+  if (name === "onboarding-services-ready") {
+    // The store was read from the guide's first page: the step opens on its apps the moment it is drawn, never on a lone spinner.
+    require(document.querySelector('#ob')?.dataset.step === 'services', "the services step is open");
+    require(!document.querySelector('#ob-conn .spin'), "the services step shows no loading spinner");
+    require(document.querySelector('[data-ob-services] .ob-tile'), "the services step already shows its apps");
+    return { check: name };
+  }
   if (name === "onboarding-tools" || name === "onboarding-services" || name === "onboarding-abilities") {
     // Each first-run choice is one calm centred column in one card of a designed size: a title with two small slimes
     // floating by it, the choice as tiles in a grid of three (rows for the abilities), one wide black pill and, beside
@@ -6738,6 +6776,19 @@ export function checkRendered(name, context = {}) {
     require(!turns.at(-1).querySelector('.me'), "no empty owner bubble above it");
     const field = document.querySelector('.page-agent .composer .cmp-input');
     require(field?.getAttribute('placeholder') === "關於 Slack 的設定，直接問我", `the field asks about the Slack setup that waits: ${field?.getAttribute('placeholder')}`);
+    return { check: name };
+  }
+  if (name === "guide-window-kept") {
+    // Leaving the guide gives the window its resizing back and nothing else: the one size request is the guide's own, and no
+    // size, place or maximize request follows it, so the app is entered at the bounds the guide had (R-GUIDE-04).
+    const calls = (window.__look.windowCalls ?? []).map(call => call.command);
+    require(document.documentElement.dataset.windowFixed === undefined, "the window is no longer fixed once the guide is over");
+    require(calls.filter(command => command === "set_size").length === 1, `one size request in all, the guide's own: ${calls.join(", ")}`);
+    require(!calls.some(command => ["set_position", "maximize"].includes(command)), `no place or maximize request at all: ${calls.join(", ")}`);
+    // The guide's own start ends with its centring; what follows is the end of the guide, which gives back the resizing only.
+    const end = (window.__look.windowCalls ?? []).slice(calls.lastIndexOf("center") + 1);
+    require(end.every(call => ["set_resizable", "set_maximizable"].includes(call.command)), `nothing but the resizing comes back at the end: ${end.map(call => call.command).join(", ")}`);
+    require(end.some(call => call.command === "set_resizable" && call.args.value === true) && end.some(call => call.command === "set_maximizable" && call.args.value === true), "the window is resizable and maximizable again");
     return { check: name };
   }
   if (name === "guide-window-fixed") {
