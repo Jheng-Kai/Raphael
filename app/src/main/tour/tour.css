@@ -69,6 +69,17 @@
   box-shadow: 0 0 0 var(--key-side), 0 1px 3px color-mix(in srgb, black 25%, transparent), inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
 }
 .tour-plus { font-size: var(--fs-md); }
+/* The practice's stand-in for Raphael's quick ask, in the window's lower right as the real one stands in the screen's. */
+.tour-summon {
+  position: absolute; right: 24px; bottom: 24px; z-index: 2; display: flex; align-items: center; gap: var(--sp-3); max-width: min(360px, calc(100% - 48px));
+  padding: var(--sp-3) var(--sp-4) var(--sp-3) var(--sp-3); border: 1px solid var(--float-edge); border-radius: var(--r-pill); background: var(--float);
+  box-shadow: var(--pop); color: var(--text); pointer-events: none; animation: tour-summon-in 240ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+.tour-summon.is-going { animation: tour-summon-out 220ms ease-in both; }
+.tour-summon-face { display: flex; flex: none; }
+.tour-summon-words { margin: 0; font-size: var(--fs-sm); line-height: 1.5; line-break: strict; text-wrap: pretty; }
+@keyframes tour-summon-in { from { opacity: 0; transform: translateY(12px) scale(0.92); } to { opacity: 1; transform: none; } }
+@keyframes tour-summon-out { to { opacity: 0; transform: translateY(8px) scale(0.96); } }
 /* In the air Raphael turns to its side: its eyes move toward where it goes and draw closer, as a face seen from the side. */
 .tour .tour-slime .slime-follow, .tour .tour-slime .slime-gaze { transition: translate 140ms ease-out, scale 140ms ease-out; }
 .tour[data-facing="left"] .tour-slime .slime-follow { translate: -7px 0; }

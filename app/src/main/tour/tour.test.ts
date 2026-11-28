@@ -440,6 +440,7 @@ test("every step is one action, and what it opens is lit and explained until 好
   emit({ type: "Dictation", phase: "listening", agent: false });
   expect(button("done")).toBeNull();
   emit({ type: "Dictation", phase: "listening", agent: true });
+  await settle(3000);
   expect(button("done")).not.toBeNull();
   await press("done");
   expect(mode()).toBe("bye");
@@ -480,7 +481,7 @@ test("a missing target skips immediately and keeps the original progress count",
   expect(count()).toBe("2/12");
 });
 
-test("the shortcut's keys are large caps that light while held, and Finish comes only once all are down together", async () => {
+test("the shortcut's keys are large caps that light while held, and all of them down calls a stand-in Raphael before Finish", async () => {
   const { tour, emit } = harness();
   await offer(tour);
   for (const selector of ['[data-col="add"]', ".conversation-trigger", ".mp-trigger", ".sidebar-apps", ".sidebar-account"]) find(selector).remove();
@@ -499,10 +500,13 @@ test("the shortcut's keys are large caps that light while held, and Finish comes
   expect(caps().map(cap => cap.hasAttribute("data-down"))).toEqual([false, true]);
   expect(button("done")).toBeNull();
   keyAt("keydown", "AltRight", "Alt");
-  expect(button("done")?.classList.contains("pri")).toBe(true);
   expect(caps().map(cap => cap.hasAttribute("data-down"))).toEqual([true, true]);
-  emit({ type: "Dictation", phase: "listening", agent: true });
-  expect(button("done")).not.toBeNull();
+  // A stand-in Raphael answers in the corner for a moment, listening to nothing; Finish comes once it has gone.
+  expect(find(".tour-summon")?.textContent).toContain("演習");
+  expect(button("done")).toBeNull();
+  await settle(3000);
+  expect(find(".tour-summon")).toBeNull();
+  expect(button("done")?.classList.contains("pri")).toBe(true);
 });
 
 test("between a press and what it opens, Raphael stays where it is instead of hopping into the page and back", async () => {
@@ -520,6 +524,8 @@ test("between a press and what it opens, Raphael stays where it is instead of ho
   await settle(300);
   expect(state()).toBe("do");
   expect(find(".tour-ground").style.left).toBe(before);
+  // The frame went with the words at once; the next one comes with the next words, so no frame lingers on the pressed row.
+  expect(spot().hidden).toBe(true);
   await settle(300);
   expect(state()).toBe("see");
 });
@@ -539,6 +545,7 @@ test("the shortcut is practised: the hook's keys light the caps and start nothin
   expect(down()).toEqual([false, false]);
   emit({ type: "Hotkey", kind: "agent_down" });
   expect(down()).toEqual([true, true]);
+  await settle(3000);
   expect(button("done")?.classList.contains("pri")).toBe(true);
   await press("done");
   expect(practiseKeys).toHaveBeenLastCalledWith(false);

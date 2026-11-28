@@ -274,7 +274,12 @@ export function createTour(host: TourHost): Tour {
   function showHeld(): void {
     const codes = askCodes();
     view?.pressKeys(codes.map((_, at) => held.has(at)));
-    if (codes.length && held.size === codes.length) showFinish();
+    if (codes.length && held.size === codes.length) summon();
+  }
+  /** The keys worked: a stand-in Raphael answers in the corner for a moment (nothing listens), and then Finish shows. */
+  function summon(): void {
+    if (finishReady || !view) return;
+    view.summon(t("tour.summon"), () => { if (phase === "step" && stepNow().keys) showFinish(); });
   }
   /** A key the window itself sees (the hook takes Raphael's keys first, and reports them as `Hotkey` events instead). */
   function trackKeys(event: KeyboardEvent): void {
@@ -552,7 +557,7 @@ export function createTour(host: TourHost): Tour {
     const events = host.onEvent(event => {
       if (phase !== "step" || !stepNow().keys || confirmation) return;
       if (event.type === "Hotkey") hookKey(event.kind);
-      else if (event.type === "Dictation" && event.agent && event.phase === "listening") showFinish();
+      else if (event.type === "Dictation" && event.agent && event.phase === "listening") summon();
     });
     unlisten = () => {
       cancelAnimationFrame(frame);
