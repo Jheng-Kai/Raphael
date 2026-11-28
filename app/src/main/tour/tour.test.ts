@@ -482,7 +482,7 @@ test("a missing target skips immediately and keeps the original progress count",
 });
 
 test("the shortcut's keys are large caps that light while held, and all of them down calls a stand-in Raphael before Finish", async () => {
-  const { tour, emit } = harness();
+  const { tour } = harness();
   await offer(tour);
   for (const selector of ['[data-col="add"]', ".conversation-trigger", ".mp-trigger", ".sidebar-apps", ".sidebar-account"]) find(selector).remove();
   button("start").click();
