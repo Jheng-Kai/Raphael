@@ -1302,6 +1302,7 @@ export const id = {
   "status.groupNeeds": "Menunggumu",
   "status.groupBusy": "Bekerja",
   "cardFloat.back": "Kembali ke kartu",
+  "cardFloat.collapse": "Ciutkan",
   "agent.searchClose": "Tutup pencarian",
   "agent.attach": "Lampirkan berkas",
   "agent.dropFiles": "Lepaskan untuk menambah berkas",

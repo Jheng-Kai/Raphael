@@ -1302,6 +1302,7 @@ export const de = {
   "status.groupNeeds": "Wartet auf dich",
   "status.groupBusy": "Arbeitet",
   "cardFloat.back": "Zurück zur Karte",
+  "cardFloat.collapse": "Einklappen",
   "agent.searchClose": "Suche schließen",
   "agent.attach": "Datei anhängen",
   "agent.dropFiles": "Dateien zum Hinzufügen ablegen",

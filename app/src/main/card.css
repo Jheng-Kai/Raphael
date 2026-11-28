@@ -146,18 +146,18 @@
 .template-where { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); color: var(--text-2); }
 .template-path { overflow-wrap: anywhere; user-select: text; }
 
-/* A waiting card scrolled out of sight (card-float.ts): a pill at the top of the conversation names it, on the floating
-   surface; its press stands the card itself over the thread, and its arrow scrolls back to where the card was born. */
-.card-float { position: absolute; top: calc(var(--pa-top) + var(--sp-2)); left: 50%; z-index: 4; display: flex; align-items: center; gap: 2px; max-width: min(420px, calc(100% - 2 * var(--sp-4))); padding: 3px; border: 1px solid var(--float-edge); border-radius: var(--r-pill); background: var(--float); box-shadow: var(--pop); transform: translateX(-50%); }
+/* A waiting card scrolled out of sight (card-float.ts): a pill in its member's colour names it at the top of the conversation.
+   Its press stands the card itself over the thread, and its arrow scrolls back to where the card was born. */
+.card-float { position: absolute; top: calc(var(--pa-top) + var(--sp-2)); left: 50%; z-index: 4; display: flex; align-items: center; gap: 2px; max-width: min(420px, calc(100% - 2 * var(--sp-4))); padding: 4px; border-radius: var(--r-pill); background: var(--card-float-fill); box-shadow: var(--pop); transform: translateX(-50%); }
 .card-float[hidden] { display: none; }
-.card-float .btn { height: var(--h-menu); min-height: var(--h-menu); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--text); font-size: var(--fs-sm); }
-.card-float .btn:hover:not(:disabled) { background: var(--float-ctl-hover); }
-.card-float-open { display: inline-flex; align-items: center; gap: var(--sp-2); min-width: 0; padding: 0 var(--sp-2) 0 var(--sp-3); }
+.card-float .btn { height: var(--h-menu); min-height: var(--h-menu); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--card-float-ink); font-size: var(--fs-sm); }
+.card-float .btn:hover:not(:disabled) { background: color-mix(in srgb-linear, var(--card-float-fill), var(--card-float-ink) min(5%, calc(var(--card-float-mix) / 2))); }
+.card-float .btn:active:not(:disabled) { background: color-mix(in srgb-linear, var(--card-float-fill), var(--card-float-ink) min(10%, var(--card-float-mix))); }
+.card-float-open { display: inline-flex; align-items: center; gap: var(--sp-2); min-width: 0; padding: 0 var(--sp-4) 0 calc(var(--sp-3) + var(--sp-2)); }
 .card-float-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card-float-dot { flex: none; width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--warn); }
-.card-float-chev { display: inline-flex; align-items: center; color: var(--text-3); }
+.card-float-chev { display: inline-flex; align-items: center; }
 .card-float-open[aria-expanded="true"] .card-float-chev .i { transform: rotate(180deg); }
-.card-float-back { width: var(--h-menu); padding: 0; color: var(--text-2); }
+.card-float-back { width: var(--h-menu); padding: 0; }
 .conversation-card.is-floating { position: fixed; top: var(--float-top); left: var(--float-left); z-index: 5; width: var(--float-width); max-height: calc(100vh - var(--float-top) - 140px); overflow-x: hidden; overflow-y: auto; box-shadow: var(--pop); }
 .conversation-card.is-flash { box-shadow: 0 0 0 2px var(--text-3); transition: box-shadow 300ms ease; }
 @media (prefers-reduced-motion: reduce) { .conversation-card.is-flash { transition: none; } }

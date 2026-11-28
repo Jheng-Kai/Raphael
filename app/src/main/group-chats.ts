@@ -254,8 +254,21 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   el.innerHTML=`<header class="page-head mb-head" data-window-drag><span class="room-picker"></span><div class="au-room-heading"></div><div class="ra-tools">${iconButton("more",t("members.more",{p0:t("rooms.title")}), ' data-room-menu')}</div></header><div class="ra-find" hidden></div><div class="ra-stage"><div class="ra-scroll"><div class="ra-col"><div class="ra-older"></div><ol class="thread au-room-thread"></ol></div></div><div class="ra-dock"></div></div>`;
   const thread=el.querySelector<HTMLElement>(".thread")!,scroll=el.querySelector<HTMLElement>(".ra-scroll")!,older=el.querySelector<HTMLElement>(".ra-older")!;
   keepReadingPlace(scroll, ".thread > *");
-  mountCardFloat({ stage: el.querySelector<HTMLElement>(".ra-stage")!, scroller: scroll, thread });
   let room:Room|undefined,list:MembersList={members:[],groups:[]},messages:RoomMessage[]=[],generation=0,opened=false,canOlder=false,loadingOlder=false;
+  const cardFloat = mountCardFloat({ stage: el.querySelector<HTMLElement>(".ra-stage")!, scroller: scroll, thread, memberOfCard(card) {
+    const messageId = Number(card.closest<HTMLElement>("[data-room-message]")?.dataset.roomMessage);
+    const message = messages.find(item => item.id === messageId);
+    const turn = message?.turn;
+    const { ownerQuestion, connector, secretCard, pairingCard, permissionCard, computerCard, mailCard, mailOffer, mcpProposal } = card.dataset;
+    const cardId = connector ?? secretCard ?? permissionCard ?? computerCard ?? pairingCard ?? mailCard ?? mailOffer ?? mcpProposal;
+    const speaker = turn?.owner_questions?.find(question =>
+      ownerQuestion ? question.id === ownerQuestion : !!cardId && question.card_id === cardId && question.state === "asked");
+    const pairing = pairingCard ? turn?.pairings?.find(item => item.id === pairingCard) : undefined;
+    const draftId = mailCard ?? mailOffer;
+    const draft = draftId ? turn?.drafts?.find(item => item.id === draftId) : undefined;
+    const id = speaker?.member_id ?? pairing?.member_id ?? draft?.holder_id ?? message?.member_id ?? turn?.member_id ?? RAPHAEL_ID;
+    return memberOf(list, id) ?? { id };
+  } });
   // Navigation identity remains available while the complete room is loading.
   let roomId: number | undefined;
   let closeSideThread: (() => void) | undefined;
@@ -510,6 +523,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
         return () => { node.before(made); restorePages(); restoreSetup(); node.remove(); restoreTyped(); restoreMail(); };
       },
     });
+    cardFloat.sync();
     newestMessage = Math.max(newestMessage, ...messages.map(message => message.id)); drewOnce = true;
     if (changed) {
     updateLiveTimes(thread);

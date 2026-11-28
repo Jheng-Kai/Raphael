@@ -10,6 +10,7 @@ import { getLocale, setLocale, t } from "./i18n";
 import { setAvatar } from './avatar';
 import { stepOpenLayer } from "./dismissals";
 import { installNavInput } from "./nav-input";
+import { memberColor } from "./owner-bubble";
 
 test('an avatar repaint uses the loaded room and roster without IPC reads', async () => {
   const section=createRoomsSection();document.body.append(section);await flush();
@@ -25,6 +26,35 @@ let event:(e:any)=>void;
 let app:AppContext;
 const pane=async()=>{const view=createRoomPane(app,vi.fn());document.body.append(view.el);await view.open(1);return view;};
 const draft=(text:string)=>{const input=document.querySelector<HTMLTextAreaElement>("#room-message")!;input.value=text;input.dispatchEvent(new Event("input"));return input;};
+
+test.each([
+  ["owner question", 2, { owner_questions: [{ id: "date", member_id: 2, kind: "ask_owner", state: "asked", question: "Choose a date", options: [], free_text: true }] }],
+  ["pairing", 2, { pairings: [{ id: "pair", member_id: 2, platform: "telegram", code: "12345", who: "Alex", state: "pending" }] }],
+  ["key request", 1, { secrets: [{ id: "room-key", name: "Notes", secret: "NOTES_KEY", state: "pending" }] }],
+])("a room pill uses the card's speaker or asking member for a %s", async (_kind, memberId, turn) => {
+  type Intersection = (entries: Pick<IntersectionObserverEntry, "target" | "isIntersecting">[]) => void;
+  const callbacks = new Map<Element, Intersection>();
+  vi.stubGlobal("IntersectionObserver", class {
+    constructor(private callback: Intersection) {}
+    observe(target: Element) { callbacks.set(target, this.callback); }
+    unobserve(target: Element) { callbacks.delete(target); }
+    disconnect() {}
+  });
+  let view: Awaited<ReturnType<typeof pane>> | undefined;
+  try {
+    api.roomMessages.mockResolvedValue({ messages: [{ id: 22, member_id: 1, text: "Question", created: 1, status: "done", turn }] });
+    view = await pane();
+    const card = view.el.querySelector<HTMLElement>(".conversation-card")!;
+    const pill = view.el.querySelector<HTMLElement>(".card-float")!;
+    await vi.waitFor(() => expect(callbacks.has(card)).toBe(true));
+    callbacks.get(card)!([{ target: card, isIntersecting: false }]);
+    const { members } = await api.membersList();
+    expect(pill.style.getPropertyValue("--card-float-fill")).toBe(memberColor(members.find((m: Member) => m.id === memberId)));
+  } finally {
+    view?.close();
+    vi.unstubAllGlobals();
+  }
+});
 
 test("a room page appends to its composer and waits for the owner's send", async () => {
   const page = { id: "room-page-draft", title: "Sample page", rev: 0, height: 320, source: "html", server: null };

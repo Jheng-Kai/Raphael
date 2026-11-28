@@ -1302,6 +1302,7 @@ export const es = {
   "status.groupNeeds": "Te esperan",
   "status.groupBusy": "Trabajando",
   "cardFloat.back": "Volver a la tarjeta",
+  "cardFloat.collapse": "Contraer",
   "agent.searchClose": "Cerrar búsqueda",
   "agent.attach": "Adjuntar archivo",
   "agent.dropFiles": "Suelta para añadir archivos",

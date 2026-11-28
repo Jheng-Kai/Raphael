@@ -1302,6 +1302,7 @@ export const vi = {
   "status.groupNeeds": "Đang chờ bạn",
   "status.groupBusy": "Đang làm việc",
   "cardFloat.back": "Quay lại thẻ",
+  "cardFloat.collapse": "Thu gọn",
   "agent.searchClose": "Đóng tìm kiếm",
   "agent.attach": "Đính kèm tệp",
   "agent.dropFiles": "Thả để thêm tệp",

@@ -33,6 +33,14 @@ export function ownerBubble(color: string): { fill: string; words: "light" | "da
 export const memberColor = (member: { id: number; avatar?: string | null }): string =>
   slimeColorOf(member.id === 0 ? { id: 0, avatar: RAPHAEL_SLIME } : member);
 
+/** Pick the stronger ink and cap the linear-sRGB hover mix so that it also keeps 4.5:1. */
+export function cardFloatInk(fill: string): { ink: string; maxMix: number } {
+  const light = luminance(channels(fill));
+  const darkInk = (light + 0.05) / 0.05 >= 1.05 / (light + 0.05);
+  const limit = darkInk ? (light - (4.5 * 0.05 - 0.05)) / light : (1.05 / 4.5 - 0.05 - light) / (1 - light);
+  return { ink: hexOf(darkInk ? [0, 0, 0] : WHITE), maxMix: limit * 0.9 };
+}
+
 /**
  * The member's colour on the controls of its conversation (send, stop, its computer): darkened on the white
  * theme and lightened on the black one only until it stands 3:1 off the panel, the least a control needs.

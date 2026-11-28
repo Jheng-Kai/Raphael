@@ -1302,6 +1302,7 @@ export const it = {
   "status.groupNeeds": "Ti aspettano",
   "status.groupBusy": "Al lavoro",
   "cardFloat.back": "Torna alla scheda",
+  "cardFloat.collapse": "Riduci",
   "agent.searchClose": "Chiudi ricerca",
   "agent.attach": "Allega file",
   "agent.dropFiles": "Rilascia per aggiungere file",

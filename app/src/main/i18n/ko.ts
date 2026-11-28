@@ -1302,6 +1302,7 @@ export const ko = {
   "status.groupNeeds": "당신을 기다림",
   "status.groupBusy": "작업 중",
   "cardFloat.back": "원래 위치로",
+  "cardFloat.collapse": "접기",
   "agent.searchClose": "검색 닫기",
   "agent.attach": "파일 첨부",
   "agent.dropFiles": "파일을 놓아 추가하세요",

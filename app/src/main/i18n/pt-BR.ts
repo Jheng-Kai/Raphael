@@ -1302,6 +1302,7 @@ export const ptBR = {
   "status.groupNeeds": "Esperando você",
   "status.groupBusy": "Trabalhando",
   "cardFloat.back": "Voltar ao cartão",
+  "cardFloat.collapse": "Recolher",
   "agent.searchClose": "Fechar busca",
   "agent.attach": "Anexar arquivo",
   "agent.dropFiles": "Solte para adicionar arquivos",

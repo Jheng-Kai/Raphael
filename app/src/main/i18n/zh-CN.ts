@@ -1302,6 +1302,7 @@ export const zhCN = {
   "status.groupNeeds": "等你",
   "status.groupBusy": "工作中",
   "cardFloat.back": "回到原位",
+  "cardFloat.collapse": "收起",
   "agent.searchClose": "关闭搜索",
   "agent.attach": "附加文件",
   "agent.dropFiles": "放开以加入文件",

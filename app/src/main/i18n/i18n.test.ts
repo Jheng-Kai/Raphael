@@ -46,6 +46,16 @@ test("the all-day toggle labels and month overflow count are in every language",
   expect(catalogs["zh-TW"]["common.showLess"]).toBe("收合");
 });
 
+test("the floating card's collapse action has its own label in all fifteen locales", () => {
+  expect(Object.keys(catalogs)).toHaveLength(15);
+  for (const [locale, catalog] of Object.entries(catalogs)) {
+    const messages = catalog as Record<string, string>;
+    expect(messages["cardFloat.collapse"]?.trim(), locale).toBeTruthy();
+    expect(messages["cardFloat.collapse"], locale).not.toBe(messages["common.cancel"]);
+  }
+  expect((catalogs["zh-TW"] as Record<string, string>)["cardFloat.collapse"]).toBe("收起");
+});
+
 const CJK = /[\u3400-\u9fff\u3040-\u30ff]/;
 
 /** The string literals in `files` (TypeScript sources) that hold Chinese or Japanese text, except 《…》 notices. */
