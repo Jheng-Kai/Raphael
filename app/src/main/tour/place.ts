@@ -150,6 +150,25 @@ export function placeAroundLayer(input: PlaceInput, layer: Box, header?: Box): P
 }
 
 /**
+ * A strip beside a layer too narrow for Raphael beside its words (a narrow sidebar, a long language): the bubble fills the strip
+ * against the layer's edge and Raphael stands on its top edge, `foot` being where the portrait's drawn foot is in its box.
+ */
+export function placeStacked(input: PlaceInput, strip: Box, against: "left" | "right", foot: number): Placement | null {
+  const { bubble, slime, view, spot } = input;
+  if (bubble.width > strip.width) return null;
+  const bubbleLeft = against === "right" ? strip.left + strip.width - bubble.width : strip.left;
+  const middle = spot ? spot.top + spot.height / 2 : view.height / 2;
+  const top = Math.round(clamp(middle - (foot + bubble.height) / 2 + foot, EDGE_TOP + foot, view.height - EDGE - bubble.height));
+  const slimeLeft = Math.round(against === "right" ? bubbleLeft + bubble.width - slime - 16 : bubbleLeft + 16);
+  const placed: Placement = {
+    side: against === "right" ? "left" : "right",
+    slime: { left: slimeLeft, top: top - foot, width: slime, height: slime },
+    bubble: { left: Math.round(bubbleLeft), top, width: bubble.width, height: bubble.height },
+  };
+  return within(placed.slime, view) && within(placed.bubble, view) ? placed : null;
+}
+
+/**
  * The last resort while something that fills the window is looked at: the group stands on it, at its lower right, clear of what
  * must stay readable there (its title, a composer). A box that covers most of the area is what is looked at itself, not a control.
  */

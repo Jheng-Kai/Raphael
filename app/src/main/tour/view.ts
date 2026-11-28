@@ -6,7 +6,7 @@ import { bindNavLayer } from "../nav-layers";
 import { btn, esc, headerCloseButton, reducedMotion, replay } from "../ui";
 import { dimClip } from "./dim";
 import { NUDGE_PX, cheerPlan, facingOf, groundOffset, hopPlan, playHops, popPlan, poseOf, type HopPlan, type PlayingHops, type Rig } from "../slime-hop";
-import { EDGE, GROUP_GAP, SPOT_GAP, placeAroundLayer, placeGroup, placeInside, type Box, type PlaceInput, type Placement, type Side } from "./place";
+import { EDGE, GROUP_GAP, SPOT_GAP, placeAroundLayer, placeGroup, placeInside, placeStacked, type Box, type PlaceInput, type Placement, type Side } from "./place";
 import { boxOf, type Spot } from "./steps";
 import "./tour.css";
 
@@ -70,8 +70,9 @@ export interface TourView {
 
 const SLIME = 64;
 const GROUND_INSET = 16;
-/** The narrowest the bubble gets to stand beside an open layer. */
+/** The narrowest the bubble gets to stand beside an open layer, and its widest (tour.css `.tour-bubble`). */
 const MIN_BUBBLE = 200;
+const MAX_BUBBLE = 300;
 /** How long the words being left fade out in place (tour.css `tour-words-out`, with a little room). */
 const GHOST_MS = 220;
 // The 64 px portrait has padding around its drawing. Anchor the pose and light at the drawn foot.
@@ -177,13 +178,24 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
 
   /** Beside a layer with a strip too narrow for the words at their width: the bubble narrows to the strip (not below 200 px) and tries again. */
   function besideNarrowed(input: PlaceInput, box: Box, header?: Box): Placement | null {
-    const strip = Math.max(box.left - SPOT_GAP - EDGE, input.view.width - EDGE - (box.left + box.width + SPOT_GAP));
+    const leftStrip = box.left - SPOT_GAP - EDGE, rightStrip = input.view.width - EDGE - (box.left + box.width + SPOT_GAP);
+    const strip = Math.max(leftStrip, rightStrip);
     const width = Math.floor(strip - (GROUND_INSET + SLIME + GROUP_GAP)) - 2;
-    if (width < MIN_BUBBLE || width >= input.bubble.width) return null;
-    bubble.style.maxWidth = `${width}px`;
-    const placed = placeAroundLayer({ ...input, bubble: { width: bubble.offsetWidth, height: bubble.offsetHeight } }, box, header);
-    if (!placed) bubble.style.removeProperty("max-width");
-    return placed;
+    if (width >= MIN_BUBBLE && width < input.bubble.width) {
+      bubble.style.maxWidth = `${width}px`;
+      const placed = placeAroundLayer({ ...input, bubble: { width: bubble.offsetWidth, height: bubble.offsetHeight } }, box, header);
+      if (placed) return placed;
+    }
+    // Too narrow for Raphael beside its words: it stands on top of the bubble, which fills the strip next to the layer.
+    const fill = Math.min(MAX_BUBBLE, Math.floor(strip) - 2);
+    if (fill < MIN_BUBBLE) { bubble.style.removeProperty("max-width"); return null; }
+    bubble.style.maxWidth = `${fill}px`;
+    const onLeft = leftStrip >= rightStrip;
+    const area = onLeft ? { left: EDGE, top: 0, width: leftStrip, height: input.view.height }
+      : { left: box.left + box.width + SPOT_GAP, top: 0, width: rightStrip, height: input.view.height };
+    const stacked = placeStacked({ ...input, bubble: { width: bubble.offsetWidth, height: bubble.offsetHeight } }, area, onLeft ? "right" : "left", FOOT);
+    if (!stacked) bubble.style.removeProperty("max-width");
+    return stacked;
   }
 
   // The window's own layers never move for the tour: Raphael stands beside what is open, or, when that fills the window, on it.

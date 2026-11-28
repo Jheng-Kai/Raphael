@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { EDGE, EDGE_TOP, GROUP_GAP, SPOT_GAP, groundBox, placeAroundLayer, placeGroup, placeInside, type Box, type PlaceInput } from "./place";
+import { EDGE, EDGE_TOP, GROUP_GAP, SPOT_GAP, groundBox, placeAroundLayer, placeGroup, placeInside, placeStacked, type Box, type PlaceInput } from "./place";
 
 const view = { width: 1120, height: 900 };
 const bubble = { width: 260, height: 110 };
@@ -152,4 +152,16 @@ test("a page looked at from a narrow window keeps its composer clear", () => {
   const found = placeInside({ ...base, view: { width: 720, height: 900 }, spot: page, prefer: ["right"], controls: [page, composer] }, page);
   expect(apart(found.bubble, composer) && apart(found.slime, composer)).toBe(true);
   expect(bottom(found.bubble)).toBeLessThanOrEqual(composer.top);
+});
+test("in a strip too narrow for Raphael beside its words, it stands on top of the bubble against the layer's edge", () => {
+  const page: Box = { left: 300, top: 0, width: 1620, height: 1018 };
+  const strip: Box = { left: EDGE, top: 0, width: 276, height: 1018 };
+  const found = placeStacked({ ...base, view: { width: 1920, height: 1018 }, bubble: { width: 274, height: 150 }, slime: 64, spot: page, prefer: ["right"] }, strip, "right", 52)!;
+  expect(found.side).toBe("left");
+  expect(found.bubble.left + found.bubble.width).toBe(strip.left + strip.width);
+  // Its drawn foot is on the bubble's top edge, near the page.
+  expect(found.slime.top + 52).toBe(found.bubble.top);
+  expect(found.slime.left + 64).toBeLessThanOrEqual(found.bubble.left + found.bubble.width);
+  expect(found.bubble.left + found.bubble.width).toBeLessThanOrEqual(page.left);
+  expect(placeStacked({ ...base, view: { width: 1920, height: 1018 }, bubble: { width: 300, height: 150 }, slime: 64, spot: page, prefer: ["right"] }, strip, "right", 52)).toBeNull();
 });
