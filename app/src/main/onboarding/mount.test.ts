@@ -19,6 +19,10 @@ const api = vi.hoisted(() => ({
   settingsGet: vi.fn(),
   settingsSet: vi.fn(),
   brainsCli: vi.fn(),
+  providersKinds: vi.fn(),
+  providersList: vi.fn(),
+  providersTest: vi.fn(),
+  providersAdd: vi.fn(),
   chatgptStatus: vi.fn(),
   chatgptSignIn: vi.fn(),
   chatgptCancel: vi.fn(),
@@ -117,6 +121,8 @@ beforeEach(() => {
   for (const fn of Object.values(api)) fn.mockReset();
   api.secretsStatus.mockResolvedValue({ has_key: false });
   api.brainsCli.mockResolvedValue({ clis: [cli("claude"), cli("codex", { available: false }), cli("gemini", { installed: false, available: false })] });
+  api.providersKinds.mockResolvedValue({ kinds: [] });
+  api.providersList.mockResolvedValue({ providers: [] });
   api.chatgptStatus.mockResolvedValue({ signed_in: false });
   api.integrationsCatalog.mockResolvedValue({ services: [entry("notion", "Notion"), entry("github", "GitHub")] });
   api.connectorsStatus.mockResolvedValue({ composio_configured: true, connectors: [] });
@@ -134,6 +140,54 @@ beforeEach(() => {
 afterEach(() => {
   root.replaceChildren();
   setLocale("zh-TW");
+});
+
+test("the guide connects a provider by testing its form before saving and updates the tool tile", async () => {
+  const kind = { kind: "openai", name: "OpenAI", group: "official", fields: ["key"], available: true };
+  const provider = { id: "p1", kind: "openai", name: "OpenAI", has_key: true, enabled: true, status: "ok", models: 1 };
+  api.providersKinds.mockResolvedValue({ kinds: [kind] });
+  api.providersTest.mockResolvedValue({ ok: true, models: 1, found: [{ id: "gpt-x", name: "GPT X" }] });
+  api.providersAdd.mockResolvedValue({ provider });
+  await open(); await toTools();
+  await press('[data-pv="add"][data-id="openai"]');
+  const key = root.querySelector<HTMLInputElement>('input[type="password"]')!;
+  key.value = "guide-key";
+  key.dispatchEvent(new Event("input", { bubbles: true }));
+  await press('[data-pv="connect"]');
+  expect(api.providersTest).toHaveBeenCalledExactlyOnceWith({ kind: "openai", key: "guide-key" });
+  expect(api.providersAdd).toHaveBeenCalledExactlyOnceWith({ kind: "openai", key: "guide-key" });
+  expect(api.providersTest.mock.invocationCallOrder[0]).toBeLessThan(api.providersAdd.mock.invocationCallOrder[0]);
+  expect(text(".pv-model-list")).toContain("GPT X");
+  await press('[data-pv="close"]');
+  expect(root.querySelector('[data-pv="open"][data-id="p1"]')).not.toBeNull();
+});
+
+test.each(["paste", "file"])("the guide accepts a service account by %s in the provider dialog", async (method) => {
+  const kind = { kind: "vertex", name: "Vertex AI", group: "official", fields: ["service_account", "project", "location"], available: true };
+  const provider = { id: "p2", kind: "vertex", name: "Vertex AI", has_key: true, enabled: true, status: "ok", models: 0 };
+  const account = '{"client_email":"test@example.com","private_key":"guide-account"}';
+  api.providersKinds.mockResolvedValue({ kinds: [kind] });
+  api.providersTest.mockResolvedValue({ ok: true, models: 0, found: [] });
+  api.providersAdd.mockResolvedValue({ provider });
+  await open(); await toTools();
+  await press('[data-pv="add"][data-id="vertex"]');
+  const project = root.querySelector<HTMLInputElement>('[id$="-project"]')!;
+  project.value = "guide-project";
+  project.dispatchEvent(new Event("input", { bubbles: true }));
+  if (method === "paste") {
+    const field = root.querySelector<HTMLTextAreaElement>(".pv-account textarea")!;
+    field.value = account;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  } else {
+    const field = root.querySelector<HTMLInputElement>(".pv-file")!;
+    Object.defineProperty(field, "files", { value: [new File([account], "service.json")] });
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush();
+  }
+  expect(text(".pv-setup")).toContain("Configured");
+  await press('[data-pv="connect"]');
+  expect(api.providersTest).toHaveBeenCalledExactlyOnceWith({ kind: "vertex", service_account: account, project: "guide-project", location: "us-central1" });
+  expect(root.querySelector("#pv-model-search")).not.toBeNull();
 });
 
 describe("the guide", () => {

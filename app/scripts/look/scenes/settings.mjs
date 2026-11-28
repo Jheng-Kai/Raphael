@@ -1,4 +1,4 @@
-import { scene, click, hover, type, wait, waitGone, codexArrives, page, settings, scroll, key, navKey, check, member, rightClick, sideButton } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitGone, codexArrives, page, settings, scroll, key, navKey, check, member, rightClick, sideButton, waitCall } from "./steps.mjs";
 
 const connections = settings("connections");
 // A long 關於我: eight sentences, more than the four lines the field shows at rest.
@@ -29,6 +29,10 @@ const pasteRecorded = [...keysDialog, click('.kd-dialog [data-field="paste_last_
 // The first slime (the guide's step 1): the owner names it and dresses it in the red horned slime; its way on waits for the name.
 const pickFirstSlime = [click('.ob-first-picker [data-slime-tab="red"]'), click('.ob-first-picker [data-slime-character="horns-red"]')];
 const named = [click('[data-ob="next"]'), wait('#ob-first-name'), type('#ob-first-name', '小藍'), ...pickFirstSlime, click('[data-ob="next"]')];
+// The same narrow dialog opens on setup from the directory and on models for saved connections.
+const providerEditor = kind => [...settings("models"), click('[data-pv="directory"]'), wait('#pv-dialog'), click(`[data-pv="add"][data-id="${kind}"]`), wait('#pv-dialog[data-pv-view="setup"]')];
+const savedProviderEditor = id => [...settings("models"), wait(`[data-pv="open"][data-id="${id}"]`), click(`[data-pv="open"][data-id="${id}"]`), wait('#pv-dialog .pv-test-status.is-ok'), wait('#pv-dialog .pv-model-list li')];
+const guideEditor = [...named, wait('[data-ob-tools]'), type('#ob-tools-find', 'LM Studio'), wait('[data-ob-tools] [data-pv="add"][data-id="lmstudio"]'), click('[data-ob-tools] [data-pv="add"][data-id="lmstudio"]'), wait('#pv-dialog[data-pv-view="setup"]')];
 export default [
   scene("nav-layer-settings", "Back closes Settings from Usage analysis and Forward restores analysis", [
     ...analysis, navKey("back"), check("nav-settings-closed"),
@@ -91,6 +95,12 @@ export default [
   // 連接其他來源 from speech to text: only the services that turn speech into text, and no subscription (R-DEFAULT-05).
   scene("settings-provider-directory-stt", "Connecting another source from speech to text lists only the services that can do it, says why, and keeps its x in view", [...settings("models"), click('.modal-scrim [data-model-picker="stt"] .mp-trigger'), wait('.model-chooser [data-dlg="sources"]'), click('.model-chooser [data-dlg="sources"]'), wait("#pv-dialog .pv-for"), check("provider-directory-stt")]),
   scene("settings-provider-directory", "新增供應商 lists every way to connect, subscriptions first, each kind saying what it means and what it costs", [...settings("models"), click('[data-pv="directory"]'), wait('#pv-dialog'), check("provider-directory")]),
+  scene("settings-provider-editor", "OpenAI setup offers its key page beside the key and one Connect button", [...providerEditor("openai"), type('#pv-openai-key', 'look-synthetic-key'), wait('[data-pv="connect"]:enabled'), check("provider-editor")], { moreProviders: true }),
+  scene("settings-provider-editor-refused", "A refused key leaves setup open with one error line below the field", [...providerEditor("openai"), type('#pv-openai-key', 'look-refused-key'), click('[data-pv="connect"]'), wait('.pv-test-status.is-error'), check("provider-editor")], { moreProviders: true }),
+  scene("settings-provider-editor-local", "LM Studio setup has a name and address, and can connect without credentials", [...providerEditor("lmstudio"), wait('[data-pv="connect"]:enabled'), check("provider-editor")], { moreProviders: true }),
+  scene("settings-provider-editor-saved", "A saved server tests on open and shows its searchable models and a framed button to add another", [...savedProviderEditor("p-lmstudio"), check("provider-editor")], { moreProviders: true, lmstudioSaved: true }),
+  scene("settings-provider-editor-settings", "The gear opens OpenRouter settings, with a configured key, Back, trash and no Save until a value changes", [...savedProviderEditor("openrouter"), click('#pv-dialog .cs-dlg-head [data-pv="settings"]'), wait('#pv-dialog[data-pv-view="settings"]'), check("provider-editor")]),
+  scene("onboarding-provider-editor", "The AI tools step connects LM Studio through the same editor and shows the tested models", [...guideEditor, check("provider-editor"), click('[data-pv="connect"]'), waitCall("providers.add"), wait('#pv-dialog .pv-test-status.is-ok'), wait('#pv-dialog .pv-model-list li'), check("provider-editor")], { onboarding: true, moreProviders: true }),
   scene("settings-local-stt", "Speech to text on this PC reads SenseVoice · 本機 with no mark of the cloud model kept for later", [...settings("models"), wait('.modal-scrim [data-model-picker="stt"] .mp-trigger'), check("settings-local-stt")], { localSpeech: true }),
   scene("model-choices-local", "Local speech choices keep subtle borders, spacing and readable metadata", [...localChooser, scroll('.lm-row:last-child'), check("model-choice-scroll"), scroll('.lm-row:first-child'), check("model-choice-layout")]),
   scene("model-choices-local-selected", "Preview a local model without downloading and keep keyboard focus visible", [...localChooser, click('.lm-main[data-name="qwen3-asr"]'), key("Tab"), { action: "focus", selector: '.lm-main[data-name="qwen3-asr"]' }, check("model-choice-selection"), check("model-choice-layout")]),

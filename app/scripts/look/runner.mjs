@@ -25,6 +25,8 @@ export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Google", "Gm
 LATIN_NAMES.push("1Password");
 // A project's branches are Git's, named as Git names itself (the branch card's notices).
 LATIN_NAMES.push("Git");
+// A local model of the provider editor's scenes is named as its maker names it.
+LATIN_NAMES.push("Gemma");
 // The shell a host repair is pasted into on Windows is named as Windows names it.
 LATIN_NAMES.push("PowerShell");
 // The app's own slash commands (app-commands.ts) are typed as they are in every language, as Claude Code's are.

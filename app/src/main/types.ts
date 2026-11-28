@@ -110,6 +110,8 @@ export interface ProviderTest {
   ok: boolean;
   kind?: "auth" | "offline" | "error";
   models: number;
+  /** What a test of an unsaved form found: kept by nothing, shown under the fields. */
+  found?: ProviderModel[];
 }
 export interface ProviderModel {
   id: string;

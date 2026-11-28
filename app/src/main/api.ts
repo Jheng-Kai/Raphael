@@ -181,7 +181,8 @@ export const providersList = (): Promise<{ providers: ModelProvider[] }> => core
 export const providersAdd = (patch: ProviderPatch & { kind: string }): Promise<{ provider: ModelProvider }> => core("providers.add", patch);
 export const providersUpdate = (patch: ProviderPatch & { id: string }): Promise<{ provider: ModelProvider }> => core("providers.update", patch);
 export const providersRemove = (id: string): Promise<{ removed: boolean }> => core("providers.remove", { id });
-export const providersTest = (id: string): Promise<ProviderTest> => core("providers.test", { id });
+/** A saved provider by its id, or the form as it stands (saved or not; the core keeps nothing of a draft). */
+export const providersTest = (target: { id: string } | (ProviderPatch & { id?: string; kind?: string })): Promise<ProviderTest> => core("providers.test", target);
 export const providersModels = (id: string): Promise<{ models: ProviderModel[] }> => core("providers.models", { id });
 
 // ---------- history ----------
