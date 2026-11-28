@@ -86,7 +86,7 @@ export default [
   scene("tour-end", "Finish sends Raphael back to the sidebar foot with a short goodbye",
     [...to(KEYS), ...act(KEYS), click(FINISH), ...goodbye, check("page-unshifted")], returning),
   scene("tour-end-closed", "The goodbye fades and the window is ready for input",
-    [...to(KEYS), wait(FINISH, 10000), click(FINISH), wait(BYE), waitGone(".tour"), check("tour-closed")], returning),
+    [...to(KEYS), ...act(KEYS), click(FINISH), wait(BYE), waitGone(".tour"), check("tour-closed")], returning),
   scene("tour-end-ask", "The shared End tour confirmation takes input above the dim and open model menu",
     [...to(MODEL_LIST), click(CLOSE), wait(CONFIRM), check("tour-confirm-end")], returning),
   scene("tour-close", "Escape resumes the same step, then confirming End tour clears the tour and open menu",
