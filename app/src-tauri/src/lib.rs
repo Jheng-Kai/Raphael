@@ -26,6 +26,7 @@ mod mic_access;
 mod notices;
 mod overlay;
 mod paste;
+mod permission_guide;
 mod rpc;
 mod schedule_awake;
 mod template_file;
@@ -217,6 +218,10 @@ pub fn run() {
             learned::learned_subscribe,
             learned::learned_layout,
             learned::learned_finish,
+            permission_guide::permission_guide_open,
+            permission_guide::permission_guide_subscribe,
+            permission_guide::permission_guide_layout,
+            permission_guide::permission_guide_close,
             commands::pick_import_source,
             commands::pick_output_folder,
             commands::member_template_file,

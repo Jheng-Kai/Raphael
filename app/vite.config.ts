@@ -28,13 +28,15 @@ export default defineConfig(() => ({
     },
   },
   build: {
-    // Two pages: the main window and the overlay window (created in Rust).
+    // The main window's page and the passive windows' pages (the overlay, the learned-word pill and the
+    // permission guide), which Rust creates.
     // `rollupOptions` is a deprecated alias of `rolldownOptions` in Vite 8.
     rolldownOptions: {
       input: {
         main: resolve(import.meta.dirname, "index.html"),
         overlay: resolve(import.meta.dirname, "overlay.html"),
         learned: resolve(import.meta.dirname, "learned.html"),
+        "permission-guide": resolve(import.meta.dirname, "permission-guide.html"),
       },
     },
   },

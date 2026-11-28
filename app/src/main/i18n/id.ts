@@ -1280,6 +1280,7 @@ export const id = {
   "settings.052": "Core tidak merespons. Buka ulang Pengaturan sebentar lagi; jika tetap tidak tersedia, mulai ulang Raphael.",
   "settings.054": "Keyboard memakai Alt kanan sebagai AltGr. Pilih pintasan lain.",
   "settings.micUndecided": "Raphael belum punya izin mikrofon. Tekan Uji mikrofon dan macOS akan bertanya sekali.",
+  "permissionGuide.drag": "Seret {p0} di bawah ke daftar di atas, lalu aktifkan sakelarnya.",
   "settings.micAsk": "Uji mikrofon",
   "settings.055": "Mode dikte",
   "settings.059": "Bahasa antarmuka",

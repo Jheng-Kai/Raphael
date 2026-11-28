@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Raphael</title>
+    <link rel="stylesheet" href="/src/overlay/permission-guide.css" />
+  </head>
+  <body>
+    <div id="permission-guide" role="dialog" hidden>
+      <div class="guide-head">
+        <span class="guide-arrow"></span>
+        <p class="guide-text"></p>
+        <button type="button" class="btn icon row guide-close"></button>
+      </div>
+      <div class="guide-tile">
+        <img class="guide-icon" src="/brand/app-icon.png" alt="" draggable="false" />
+        <span class="guide-name"></span>
+      </div>
+    </div>
+    <script type="module" src="/src/overlay/permission-guide-entry.ts"></script>
+  </body>
+</html>

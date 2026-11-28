@@ -1280,6 +1280,7 @@ export const tr = {
   "settings.052": "Çekirdek yanıt vermiyor. Ayarlar’ı biraz sonra açın; kullanılamıyorsa Raphael’i yeniden başlatın.",
   "settings.054": "Klavyeniz Sağ Alt’ı AltGr olarak kullanıyor. Başka kısayol seçin.",
   "settings.micUndecided": "Raphael’in henüz mikrofon izni yok. Mikrofonu test et’e basın, macOS bir kez soracak.",
+  "permissionGuide.drag": "Aşağıdaki {p0} öğesini yukarıdaki listeye sürükleyin, ardından anahtarını açın.",
   "settings.micAsk": "Mikrofonu test et",
   "settings.055": "Dikte modu",
   "settings.059": "Arayüz dili",

@@ -1280,6 +1280,7 @@ export const it = {
   "settings.052": "Il core non risponde. Riapri le Impostazioni tra poco; se restano indisponibili, riavvia Raphael.",
   "settings.054": "La tastiera usa Alt destro come AltGr. Scegli un’altra scorciatoia.",
   "settings.micUndecided": "Raphael non ha ancora il permesso per il microfono. Premi Prova microfono e macOS lo chiederà una volta.",
+  "permissionGuide.drag": "Trascina {p0} qui sotto nell’elenco qui sopra, poi attiva il suo interruttore.",
   "settings.micAsk": "Prova microfono",
   "settings.055": "Modalità dettatura",
   "settings.059": "Lingua dell’interfaccia",
