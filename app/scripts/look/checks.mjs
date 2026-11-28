@@ -4628,8 +4628,9 @@ export function checkRendered(name, context = {}) {
       return { check: name, text, bubble: [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)] };
     }
     const pressable = 'button, a[href], input:not([type="hidden"]), select, textarea, summary, [contenteditable], [role="button"], [role="menuitem"], [role="tab"], [role="radio"], [role="switch"], [data-conn][data-row]';
-    const panel = [...document.querySelectorAll('.modal-scrim:not(.leaving) > .modal, .mb-scrim:not(.leaving) > .cr-dialog, .cb-menu, .account-menu, ' +
-      '.page-agent:not([hidden]) .ms-pane, .page-agent:not([hidden]) .mb-det:not([hidden])')].find(visible);
+    // The layer on top, in this order: a wide window keeps the slime's panel open beside a dialog the step opened.
+    const panel = ['.modal-scrim:not(.leaving) > .modal', '.mb-scrim:not(.leaving) > .cr-dialog', '.cb-menu', '.account-menu',
+      '.page-agent:not([hidden]) .ms-pane', '.page-agent:not([hidden]) .mb-det:not([hidden])'].map(selector => [...document.querySelectorAll(selector)].find(visible)).find(Boolean);
     const clipped = control => {
       if (!visible(control) || !control.checkVisibility({ visibilityProperty: true })) return null;
       let { left, right, top, bottom } = control.getBoundingClientRect();
