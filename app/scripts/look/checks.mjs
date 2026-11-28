@@ -3887,6 +3887,23 @@ export function checkRendered(name, context = {}) {
       const scroller = scope.querySelector('.message-table .rich-scroll');
       require(getComputedStyle(scroller).overflowX === 'auto', "wide table has a local horizontal scrollport");
       if (innerWidth < 1920) require(scroller.scrollWidth > scroller.clientWidth, "many columns use the card's local fallback scrolling");
+      // With a mouse a hidden bar cannot be dragged: a table that scrolls keeps its thin bar along its bottom, where every
+      // other part hides it (R-UI-167). The headless browser draws no bar at all, so the style is what is read.
+      require(getComputedStyle(scroller).scrollbarWidth === 'thin', "the table's scroller keeps a thin bar to drag");
+    }
+    if (name === "rich-file-link-table") {
+      const card = scope.querySelector('.message-table'), scroller = card.querySelector('.rich-scroll');
+      require(!card.textContent.includes('file://') && !card.textContent.includes(']('), "the file link is never shown as its raw words");
+      const path = card.querySelector('td code[data-message-path]');
+      require(path?.dataset.messagePath === '/Users/owner/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw', `the link presses the path it names (${path?.dataset.messagePath})`);
+      require(path.textContent === 'Docker.raw' && path.title === path.dataset.messagePath, `a file linked under its own name shows that name, its path as the title (${path.textContent})`);
+      require(path.getBoundingClientRect().width <= path.closest('td').clientWidth + 1, "the name stays inside its cell");
+      const last = card.querySelector('thead th:last-child').getBoundingClientRect(), box = scroller.getBoundingClientRect();
+      if (innerWidth >= 1000) {
+        require(scroller.scrollWidth <= scroller.clientWidth + 1, `the whole table fits its card (${scroller.scrollWidth} > ${scroller.clientWidth})`);
+        require(last.right <= box.right + 1, "the last column is inside the card");
+      }
+      require(getComputedStyle(scroller).scrollbarWidth === 'thin', "a table still wider than its card keeps a thin bar to drag");
     }
     if (name === "rich-line-breaks") {
       // A label's <br/>, <br> or <br /> is a line break: the two halves are drawn one under the other, never the tag as words.

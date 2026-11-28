@@ -37,6 +37,8 @@ export default [
   scene("rich-line-breaks", "A flowchart whose labels break a line with <br/> is drawn, each label on two lines", [wait(diagram), check("rich-diagram"), check("rich-line-breaks")], { richReply: "breaks" }),
   ...["class", "state", "er", "architecture"].map(type => scene(`rich-${type}`, `${type} Mermaid diagram uses the same strict renderer`, [wait(diagram), check("rich-diagram")], { richReply: type })),
   scene("rich-wide-table", "Wide tables scroll inside their card as a last resort", [wait(table), check("rich-wide-table")], { richReply: "wide" }),
+  // A file linked by its file:// address stood as one long run of words and pushed the table's last columns out of the card.
+  scene("rich-file-link-table", "A file linked by its file:// address shows its path, which wraps, and the whole table fits its card", [wait(table), scroll(table), check("rich-file-link-table")], { richReply: "fileLinkTable" }),
   // #307: four columns of short words beside one of long text once squeezed that column to one character a line.
   scene("rich-table-short-columns", "A long column beside many short ones keeps room for several words and never splits 12V or CAN", [wait(table), scroll(table), check("rich-table-short-columns")], { richReply: "shortColumns" }),
 ];
