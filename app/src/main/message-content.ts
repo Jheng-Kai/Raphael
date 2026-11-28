@@ -299,7 +299,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
 export type MessageBlock =
   | { type: "text"; source: string }
   | { type: "table"; source: string; headers: string[]; align: ("left" | "center" | "right")[]; rows: string[][] }
-  | { type: "code" | "diagram"; source: string; language: string; complete: boolean }
+  | { type: "code" | "diagram"; source: string; language: string; info: string; complete: boolean }
   | { type: "image"; source: string; alt: string; url: string }
   /** A toggle, `<details>` with its `<summary>`: `body` is Markdown of its own. */
   | { type: "details"; source: string; summary: string; body: string; open: boolean; complete: boolean };
@@ -311,13 +311,13 @@ export function parseMessageBlocks(text: string, streaming = false): MessageBloc
   const blocks: MessageBlock[] = [], pending: string[] = [];
   const flush = (): void => { const source = pending.join("\n").trim(); if (source) blocks.push({ type: "text", source }); pending.length = 0; };
   for (let i = 0; i < lines.length; i++) {
-    const fence = /^\s*(`{3,}|~{3,})\s*([^\s`]*)[^`]*$/.exec(lines[i]);
+    const fence = /^\s*(`{3,}|~{3,})\s*(([^\s`]*)[^`]*)$/.exec(lines[i]);
     if (fence) {
       flush(); const source: string[] = [];
       const end = new RegExp(`^\\s*${fence[1][0]}{${fence[1].length},}\\s*$`);
       while (++i < lines.length && !end.test(lines[i])) source.push(lines[i]);
-      const language = fence[2].toLowerCase();
-      blocks.push({ type: language === "mermaid" ? "diagram" : "code", source: source.join("\n"), language, complete: i < lines.length }); continue;
+      const language = fence[3].toLowerCase();
+      blocks.push({ type: language === "mermaid" ? "diagram" : "code", source: source.join("\n"), language, info: fence[2].trimEnd(), complete: i < lines.length }); continue;
     }
     if (DETAILS_OPEN.test(lines[i])) {
       flush();
@@ -439,9 +439,9 @@ function blockHTML(block: MessageBlock, query: string, urls: Set<string>, stream
   if (block.type === "image") return `<section class="rich-block message-image" data-image-url="${esc(block.url)}"><header class="rich-head"><span>${esc(block.alt || t("chat.image"))}</span><span>${esc(new URL(block.url).host)}</span></header><div class="rich-image-body"><button type="button" class="btn sm" data-rich-act="load-image">${esc(t("chat.loadImage"))}</button></div></section>`;
   const diagram = block.type === "diagram";
   // A form still arriving is half a JSON document: the owner sees that a card is coming, not its source.
-  if (!diagram && !block.complete && streaming && isAnswerFormKind(block.language)) return `<section class="rich-block answer-form-pending" role="status"><header class="rich-head"><span>${esc(t("chat.formPending"))}</span></header></section>`;
+  if (!diagram && !block.complete && streaming && isAnswerFormKind(block.info)) return `<section class="rich-block answer-form-pending" role="status"><header class="rich-head"><span>${esc(t("chat.formPending"))}</span></header></section>`;
   if (!diagram && block.complete) {
-    const form = parseAnswerForm(block.language, block.source);
+    const form = parseAnswerForm(block.info, block.source);
     if (form) return answerFormHTML(form, block.source);
   }
   const showSource = diagram && !!query && block.source.toLocaleLowerCase().includes(query.toLocaleLowerCase());
@@ -512,7 +512,7 @@ export function messagePlainText(text: string, markdown = false, action?: string
   return parseMessageBlocks(composioText(text, action)).map(block => {
     if (block.type === "text") return plainTextBlock(block.source);
     if (block.type === "code" && block.complete) {
-      const form = parseAnswerForm(block.language, block.source);
+      const form = parseAnswerForm(block.info, block.source);
       if (form) return answerFormText(form);
     }
     return block.source;
