@@ -75,6 +75,9 @@
 
 /* A mention: its mark stands where the @ is (the @ keeps its width, unseen), then the name. */
 .cmp-input .mention-slot { position: relative; display: inline-block; width: 0; height: 1lh; vertical-align: top; }
+/* The slot stands at the @'s start, so the 16 px mark leans 5 px left to end 2 px before the name of a 13 px @, as in the sent
+   bubble (agent.css `.mention-at > .mention-ico`): at 3 px it ended where the name began. */
+.cmp-input .mention-slot > .mention-ico { translate: -5px 0; }
 .cmp-input .mention-at { -webkit-text-fill-color: transparent; }
 
 /* The bar over a selection (composer-rich-toolbar.ts): the menu's surface, the app's icon buttons at 26 px, one row. It stands above

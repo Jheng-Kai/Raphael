@@ -8036,8 +8036,11 @@ export function checkRendered(name, context = {}) {
       require(mark && visible(mark), `${chipText(chip)} shows its mark`);
       const markBox = mark.getBoundingClientRect(), nameRange = document.createRange();
       nameRange.selectNodeContents(chip.nameNode);
-      // The mark leans 3 px left of the @ it covers (agent.css `.mention-ico`), so it keeps air before the name.
-      require(markBox.left >= box.left - 3.5 && markBox.right <= nameRange.getBoundingClientRect().left + 1, `${chipText(chip)}: the mark stands before its name inside the chip (mark ${markBox.left}..${markBox.right}, chip from ${box.left}, name from ${nameRange.getBoundingClientRect().left})`);
+      // The mark covers the @ and ends about 2 px before the name, in the bubble (agent.css `.mention-at > .mention-ico`) and in
+      // the field (composer-rich.css `.mention-slot > .mention-ico`): leaning 3 px it ended exactly where the name began, and the
+      // generic app mark of an app with no logo ran into the first letter.
+      const nameLeft = nameRange.getBoundingClientRect().left;
+      require(markBox.left >= box.left - 6.5 && markBox.right <= nameLeft - 1.5, `${chipText(chip)}: the mark stands before its name inside the chip, clear of it (mark ${markBox.left}..${markBox.right}, chip from ${box.left}, name from ${nameLeft})`);
       require(markBox.width >= 10 && markBox.width <= 18 && Math.abs(markBox.height - markBox.width) <= 2, `${chipText(chip)}: the mark is a small square (${markBox.width} x ${markBox.height})`);
       require(style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.boxShadow === 'none' && parseFloat(style.borderTopWidth) === 0, `${chipText(chip)}: the logo and the name alone, with no frame or fill`);
       require(!chip.control && getComputedStyle(at).webkitTextFillColor === 'rgba(0, 0, 0, 0)', `${chipText(chip)} is not a control and does not show its @`);
@@ -8104,6 +8107,22 @@ export function checkRendered(name, context = {}) {
       require(bubble.querySelector('.message-text').textContent === "請用 @Notion 整理這份報告，再問 @小森", "the bubble's words are the plain text, so copying and quoting read as typed");
       require(input.value === "" && !fieldChips(input).length, "sending empties the field and its chips");
       return { check: name, chips, sent: sent[0].text };
+    }
+    if (name === "mention-chip-generic") {
+      // In the field (its mark in a slot before the @) and in the sent bubble, the generic mark is whole and clear of the name.
+      const sent = [...document.querySelectorAll('.owner-message .bubble .mention-chip')].filter(visible).find(node => node.textContent.includes("Onyx"));
+      const field = [...document.querySelectorAll('.cmp-input .mention-chip')].filter(visible).find(node => node.textContent.includes("Onyx"));
+      const chip = sent ?? field;
+      require(chip, "the Onyx chip is drawn");
+      const mark = sent ? chip.querySelector('.mention-ico') : chip.parentElement.querySelector('.mention-slot .mention-ico'), art = mark?.querySelector('svg');
+      require(art?.classList.contains('logo-generic'), `an app with no logo of its own draws the generic app mark: ${mark?.innerHTML.slice(0, 400)}`);
+      const range = document.createRange(), words = sent ? [...chip.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.includes("Onyx")) : chip;
+      range.selectNodeContents(words);
+      const artBox = art.getBoundingClientRect(), nameBox = range.getBoundingClientRect(), markBox = mark.getBoundingClientRect();
+      const result = { art: [artBox.left, artBox.right, artBox.width, artBox.height], mark: [markBox.left, markBox.right], name: nameBox.left };
+      require(artBox.width >= 12 && artBox.height >= 12, `the mark is drawn at its size: ${JSON.stringify(result)}`);
+      require(artBox.right <= nameBox.left + 0.5, `the mark ends before the name begins, never under its first letter: ${JSON.stringify(result)}`);
+      return { check: name, ...result };
     }
     if (name === "mention-chip-delete") {
       require(input.value === "請問 " && input.selectionStart === 3 && input.selectionEnd === 3, `one Backspace removed the whole chip: ${JSON.stringify(input.value)}`);

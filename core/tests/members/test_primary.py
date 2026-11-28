@@ -368,3 +368,19 @@ for line in sys.stdin:
     assert says(first).startswith('"%s" (id %d).' % (chief.name, chief.id))
     assert 'And now?' in second
     assert says(second).startswith('"Writer" (id %d).' % writer.id)
+
+
+async def test_every_member_is_told_raphael_is_no_member_and_how_to_ask_it(rig):
+    # The owner asked a member to "ask 拉斐爾". Raphael is no slime, so the snapshot never lists it; told only of a chief,
+    # the member took the primary contact for Raphael (「盧米納斯（原拉斐爾）」) and asked the wrong one.
+    luminous, knowledge = await make(rig, "盧米納斯"), await make(rig, "知識庫")
+    await rig.call("members.set_primary", {"id": luminous})
+    for language, name in (("zh-TW", "拉斐爾"), ("en", "Raphael"), ("ja", "ラファエル")):
+        text = roster_prompt(rig.service, rig.service.speaker(knowledge), language)
+        assert f"{name} (Raphael) is the app itself" in text
+        assert "never the primary contact and never a member renamed" in text
+        assert f'ask_member (member "{name}")' in text
+    # Raphael itself is not told about itself.
+    assert "is the app itself" not in roster_prompt(rig.service, rig.service.speaker(0), "zh-TW")
+    # And ask_member reaches it by that name.
+    assert rig.service.find("拉斐爾").id == 0

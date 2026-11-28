@@ -1954,6 +1954,11 @@ selection whole, and a caret or selection edge dropped inside one goes to its ne
 textarea paints no text and an aria-hidden copy (`.cmp-mirror`, no click) is drawn over it; the caret, selection and input
 method stay the textarea's own.
 
+A chip's mark ends about 2 px before its name in the field and the sent bubble, however wide the font draws the @
+(R-UI-57). `mention-chip-generic-sent` @-addresses an MCP server added by hand with no logo (the owner's Onyx): its generic
+app mark once ran into the name's first letter and read as a broken character; the scene measures the mark against the name
+in the field and the bubble.
+
 The mention menu never takes the focus while an input method composes: it is drawn as the words are composed and takes the
 focus, as before, once they are committed (`bindTeamMentions`). The old behaviour typed an @ twice with a Chinese input method:
 the composing `input` opened the menu, the menu took the focus, the focus change ended the composition (events:
@@ -1961,7 +1966,7 @@ compositionstart, compositionupdate, input(composing), compositionend, blur, foc
 nothing to replace and inserted its text again.
 
 ```powershell
-npm run look -- mention-ime-open mention-ime-at mention-ime-filter mention-ime-compose mention-ime-commit mention-chip-composer mention-chip-sent mention-chip-delete mention-chip-arrow mention-chip-room --theme both --width 1120,720,1920x1080
+npm run look -- mention-ime-open mention-ime-at mention-ime-filter mention-ime-compose mention-ime-commit mention-chip-composer mention-chip-sent mention-chip-generic-sent mention-chip-delete mention-chip-arrow mention-chip-room --theme both --width 1120,720,1920x1080
 ```
 
 The `ime` step drives the browser's own input-method path (CDP `Input.imeSetComposition` and `Input.insertText`) with the
@@ -2385,7 +2390,7 @@ events), the history walk (`composer-history-*`), a link in the words (`composer
 
 ```powershell
 npm run look -- composer-rich-example composer-rich-example-sent composer-rich-example-room composer-rich-list composer-rich-list-leave composer-rich-lists composer-rich-quote-toggle composer-rich-toggle-closed composer-rich-code-math composer-rich-marks composer-rich-sent composer-rich-bubble-lists composer-rich-bubble-blocks composer-rich-bubble-marks composer-rich-room composer-rich-docs composer-rich-keys composer-rich-bar composer-rich-bar-pressed composer-rich-bar-block composer-rich-bar-heading composer-rich-link-edit composer-rich-link-set composer-rich-bar-code composer-rich-bar-table composer-rich-bar-keyboard composer-rich-sent-marks --theme both --width 1120,720,1920x1080
-npm run look -- mention-chip-composer mention-chip-sent mention-ime-compose mention-ime-commit composer-history-recall composer-long-link composer-link-edit composer-opened-calm composer-engaged chat --theme both --width 1120,720,1920x1080
+npm run look -- mention-chip-composer mention-chip-sent mention-chip-generic-sent mention-ime-compose mention-ime-commit composer-history-recall composer-long-link composer-link-edit composer-opened-calm composer-engaged chat --theme both --width 1120,720,1920x1080
 ```
 
 Formats, shortcuts and the bar (R-COMPOSER-RICH-07 to 10): select words (`{Shift+Home}`) and the bar stands above them; Ctrl+B, I, U,

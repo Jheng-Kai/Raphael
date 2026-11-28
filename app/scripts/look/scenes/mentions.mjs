@@ -50,6 +50,9 @@ export default [
   scene("mention-ime-commit", "Words committed after a chip stand once beside it", [...chipped, ime(field, [{ compose: "ㄅ" }, { commit: "吧" }]), check("mention-ime-commit")], apps),
   scene("mention-chip-composer", "An @ completed from the menu is a chip with its mark and name, apart from the words around it", [...words, check("mention-chip-composer")], apps),
   scene("mention-chip-sent", "The sent bubble shows the same chips, and the core receives the words unchanged", [...words, key("Enter"), wait(".owner-message .bubble .mention-chip"), check("mention-chip-sent")], { ...apps, stopPending: true }),
+  // The owner's @Onyx (an MCP server added by hand, no logo): the generic app mark stood half under the name's first letter.
+  scene("mention-chip-generic-sent", "A chip of an app with no logo of its own draws the generic app mark whole, clear of its name, in the field and the sent bubble",
+    [type(field, "@"), ...pick("Onyx"), type(field, "@Onyx 我之前學了什麼數學？"), check("mention-chip-generic"), key("Enter"), wait(".owner-message .bubble .mention-chip"), check("mention-chip-generic")], { ...apps, stopPending: true, mentionCustomServer: true }),
   scene("mention-chip-delete", "Backspace after a chip deletes all of it at once", [type(field, "請問 @小森"), key("Backspace"), check("mention-chip-delete")], apps),
   scene("mention-chip-arrow", "The arrow keys cross a chip in one step and Shift takes it into the selection whole",
     [type(field, "a @小森 b"), key("ArrowLeft"), key("ArrowLeft"), key("ArrowLeft"), check("mention-chip-arrow-before"), { action: "key", key: "ArrowRight", shift: true }, check("mention-chip-arrow-selected")], apps),
