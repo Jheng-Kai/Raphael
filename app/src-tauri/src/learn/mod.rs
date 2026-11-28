@@ -10,13 +10,15 @@
 //! - [`Learner`] is the controller's [`AfterPaste`] hook. After a paste (not a copy) it runs a
 //!   watch on a thread of its own.
 //! - The watch ([`watch`]) asks the [`FieldProbe`] for the field that has the keyboard focus (on
-//!   Windows: UI Automation, [`UiaProbe`]), finds the pasted text in it, and reads it every 500 ms
-//!   until the "send" moment: the field lost most of the pasted text (the message was sent and the
-//!   box cleared). Only a send teaches: a focus move, 60 seconds or a new dictation end the watch
-//!   and learn nothing, because the text was still being written. At the send, the last text that
-//!   was stable (the same on two reads in a row, never one caught half typed or in the middle of an
-//!   input method's composition) is the one compared with the text right after the paste
-//!   ([`Tracker`]).
+//!   Windows: UI Automation, [`UiaProbe`]), finds the pasted text in it, and reads it every 500 ms,
+//!   and every 100 ms while its text is changing, until the "send" moment: the field lost most of
+//!   the pasted text (the message was sent and the box cleared). Only a send teaches: a focus move,
+//!   the end of the watch (three minutes after the paste; a keyboard or terminal source keeps its
+//!   own minute) or a new dictation end the watch and learn nothing, because the text was still
+//!   being written. At the send, the last text that was stable (the same on two reads in a row,
+//!   never one caught half typed or in the middle of an input method's composition) is the one
+//!   compared with the text right after the paste ([`Tracker`]). The quick reads while the text
+//!   changes are what let a fix sent a moment after it was typed count as stable.
 //! - The dictated part of the field as pasted and as it was left ([`Revision`]) goes to the core
 //!   (`dictionary.learn`), whose model names the misheard words and which skips dismissed words
 //!   and words it knows, and answers with the words that changed the dictionary. Those get one
@@ -116,7 +118,9 @@ pub trait FieldProbe: Send + Sync + 'static {
     }
 }
 
-const WATCH_LIMIT: Duration = Duration::from_secs(60);
+/// How long after the paste a field may still be watched for its send: a two-minute dictation takes
+/// more than a minute to read over and fix. Keyboard and terminal observations keep their own minute.
+const WATCH_LIMIT: Duration = Duration::from_secs(180);
 
 /// Whether the owner turned on learning (the device setting `auto_learn`). The device settings put
 /// the saved choice in it at start and change it when the owner does.
@@ -237,17 +241,23 @@ pub trait AfterPaste: Send + Sync + 'static {
 /// How often the field is read, and for how long.
 #[derive(Clone, Copy, Debug)]
 pub struct Timing {
+    /// Between reads while the text stays as it was.
     pub poll: Duration,
+    /// Between reads while the text is changing, until two reads agree: a fix sent a moment after
+    /// it was typed is then read twice before the box is cleared.
+    pub quick: Duration,
     /// Reads while waiting for the pasted text to show up in the field.
     pub find_polls: u32,
-    /// Reads after that, at most: 120 × 500 ms is a minute.
+    /// Reads after that, at most: enough for the whole watch at the quick rate. The watch scope's
+    /// deadline ([`WATCH_LIMIT`]) ends it first.
     pub watch_polls: u32,
 }
 
 pub const TIMING: Timing = Timing {
     poll: Duration::from_millis(500),
+    quick: Duration::from_millis(100),
     find_polls: 6,
-    watch_polls: 120,
+    watch_polls: 1_800,
 };
 
 /// Why a watch ended.
@@ -257,22 +267,23 @@ enum End {
     Sent,
     /// The focus moved to another field or window, or the field cannot be read.
     Left,
-    /// The minute is over.
+    /// The watch's reads are used up.
     Timeout,
     /// A new dictation started.
     Stopped,
 }
 
 /// Watches `field` after `pasted` went into it, and returns what the user made of the dictated
-/// part, if they changed it and sent it. Only a send teaches: a focus move, the end of the minute
+/// part, if they changed it and sent it. Only a send teaches: a focus move, the end of the watch
 /// and a new dictation return nothing, and at a send the text compared is the last one that was the
-/// same on two reads in a row, never a half-typed one. `wait` waits one poll and says whether to go
-/// on (false: a new dictation started). Logs lengths and counts only, never the text.
+/// same on two reads in a row, never a half-typed one. `wait` waits the time it is given (the poll,
+/// or the quick poll while the text is changing) and says whether to go on (false: a new dictation
+/// started, or the watch's time is over). Logs lengths and counts only, never the text.
 pub fn watch(
     field: &mut dyn WatchedField,
     pasted: &str,
     timing: Timing,
-    mut wait: impl FnMut() -> bool,
+    mut wait: impl FnMut(Duration) -> bool,
 ) -> Option<Revision> {
     let mut tracker = None;
     let mut last = String::new();
@@ -290,7 +301,7 @@ pub fn watch(
                 return None;
             }
         }
-        if attempt == timing.find_polls || !wait() {
+        if attempt == timing.find_polls || !wait(timing.poll) {
             break;
         }
     }
@@ -307,7 +318,12 @@ pub fn watch(
     let mut is_settled = true;
     let mut end = End::Timeout;
     for _ in 0..timing.watch_polls {
-        if !wait() {
+        let interval = if is_settled {
+            timing.poll
+        } else {
+            timing.quick
+        };
+        if !wait(interval) {
             end = End::Stopped;
             break;
         }
@@ -465,11 +481,9 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
                         drop(found.send(None));
                         return;
                     };
-                    let wait = || {
+                    let wait = |interval: Duration| {
                         std::thread::sleep(
-                            timing
-                                .poll
-                                .min(deadline.saturating_duration_since(Instant::now())),
+                            interval.min(deadline.saturating_duration_since(Instant::now())),
                         );
                         active()
                     };
@@ -568,6 +582,7 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
         Self {
             timing: Timing {
                 poll: Duration::ZERO,
+                quick: Duration::ZERO,
                 find_polls: 2,
                 watch_polls: 20,
             },
@@ -767,9 +782,101 @@ mod tests {
 
     const QUICK: Timing = Timing {
         poll: Duration::ZERO,
+        quick: Duration::ZERO,
         find_polls: 2,
         watch_polls: 10,
     };
+
+    /// A field whose text follows a clock that only the watch's own waits move: from each moment
+    /// after the paste (in milliseconds) the field holds the text beside it, and the empty text is
+    /// the box cleared by a send. Each wait the watch asks for is kept.
+    struct Timed {
+        clock: std::rc::Rc<std::cell::Cell<Duration>>,
+        script: Vec<(Duration, String)>,
+    }
+
+    impl WatchedField for Timed {
+        fn read(&mut self) -> Snapshot {
+            let now = self.clock.get();
+            let text = self
+                .script
+                .iter()
+                .rev()
+                .find(|(from, _)| *from <= now)
+                .map(|(_, text)| text.clone())
+                .unwrap_or_default();
+            Snapshot::Text(text)
+        }
+    }
+
+    /// Watches `script` with the real [`TIMING`]; the watch may wait until `deadline` after the
+    /// paste, as the watch scope lets it. The revision, and every wait it asked for.
+    fn watch_timed(
+        script: &[(u64, &str)],
+        deadline: Duration,
+    ) -> (Option<Revision>, Vec<Duration>) {
+        let clock = std::rc::Rc::new(std::cell::Cell::new(Duration::ZERO));
+        let mut field = Timed {
+            clock: clock.clone(),
+            script: script
+                .iter()
+                .map(|(ms, text)| (Duration::from_millis(*ms), (*text).to_owned()))
+                .collect(),
+        };
+        let mut waits = Vec::new();
+        let revision = watch(&mut field, PASTED, TIMING, |interval| {
+            waits.push(interval);
+            clock.set(clock.get() + interval);
+            clock.get() < deadline
+        });
+        (revision, waits)
+    }
+
+    #[test]
+    fn a_fix_sent_a_moment_after_it_was_typed_is_learned() {
+        // The owner finished the fix 2.3 s after the paste and sent it 450 ms later: a read every
+        // 500 ms saw the fixed text once, then the cleared box, so the fix was never "settled" and
+        // the paste, unedited, was compared. Nothing was learned.
+        let fixed = fixed();
+        let (revision, _) = watch_timed(&[(0, PASTED), (2_300, &fixed), (2_750, "")], WATCH_LIMIT);
+        assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
+    }
+
+    #[test]
+    fn the_watch_looks_again_soon_while_the_text_changes_and_rests_once_it_settles() {
+        let fixed = fixed();
+        let half = fixed.replacen("手提電話", "手提", 1);
+        let (revision, waits) = watch_timed(
+            &[(0, PASTED), (1_200, &half), (1_350, &fixed), (5_000, "")],
+            WATCH_LIMIT,
+        );
+        assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
+        let ms: Vec<u128> = waits.iter().map(Duration::as_millis).collect();
+        // Settled reads 500 ms apart; the read at 1.5 s sees the fix, the next one comes 100 ms
+        // later and agrees, and the watch rests again.
+        assert_eq!(ms[..5], [500, 500, 500, 100, 500], "{ms:?}");
+        assert!(ms.iter().all(|&wait| wait == 100 || wait == 500), "{ms:?}");
+    }
+
+    #[test]
+    fn a_long_review_sent_after_the_first_minute_is_learned() {
+        // A two-minute dictation takes more than a minute to read over: the owner fixed a word 70 s
+        // after the paste and sent at 80 s, and the watch had ended at the minute.
+        let fixed = fixed();
+        let (revision, _) =
+            watch_timed(&[(0, PASTED), (70_000, &fixed), (80_000, "")], WATCH_LIMIT);
+        assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
+        // The watch still ends: an edit never sent within its time learns nothing.
+        let (revision, waits) = watch_timed(&[(0, PASTED), (70_000, &fixed)], WATCH_LIMIT);
+        assert!(revision.is_none());
+        assert!(waits.iter().sum::<Duration>() >= WATCH_LIMIT);
+    }
+
+    #[test]
+    fn the_reads_last_the_whole_watch_even_at_the_quick_rate() {
+        assert!(TIMING.quick < TIMING.poll);
+        assert!(TIMING.quick * TIMING.watch_polls >= WATCH_LIMIT);
+    }
 
     #[test]
     fn a_short_name_corrected_in_a_normal_field_is_kept_before_submission() {
@@ -784,7 +891,7 @@ mod tests {
             ],
             0,
         );
-        let revision = watch(&mut field, pasted, QUICK, || true);
+        let revision = watch(&mut field, pasted, QUICK, |_| true);
         assert_eq!(
             pasted_and_sent(&revision),
             Some((pasted, "Please use SampleToolX"))
@@ -805,7 +912,7 @@ mod tests {
             vec![t(PASTED), t(&fixed), t(&fixed), t(""), t("下一則訊息")],
             0,
         );
-        let revision = watch(&mut field, PASTED, QUICK, || true);
+        let revision = watch(&mut field, PASTED, QUICK, |_| true);
         assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
         assert_eq!(field.1, 4, "no read after the send");
     }
@@ -817,7 +924,7 @@ mod tests {
         let fixed = fixed();
         let half = fixed.replacen("手提電話", "手提", 1);
         let mut field = Script(vec![t(PASTED), t(&fixed), t(&fixed), t(&half), t("")], 0);
-        let revision = watch(&mut field, PASTED, QUICK, || true);
+        let revision = watch(&mut field, PASTED, QUICK, |_| true);
         assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
         assert_eq!(field.1, 5);
     }
@@ -827,11 +934,11 @@ mod tests {
         // Only one read of the edited text, then the field cleared: it may have been a state on
         // the way to something else, so the last settled text (the paste, unedited) decides.
         let mut field = Script(vec![t(PASTED), t(&fixed()), t("")], 0);
-        assert!(watch(&mut field, PASTED, QUICK, || true).is_none());
+        assert!(watch(&mut field, PASTED, QUICK, |_| true).is_none());
         // A state that settled for a moment is not the last one either when it was changed again.
         let (typo, right) = (PASTED.replacen("首機", "守機", 1), fixed());
         let mut field = Script(vec![t(PASTED), t(&typo), t(&typo), t(&right), t("")], 0);
-        let revision = watch(&mut field, PASTED, QUICK, || true);
+        let revision = watch(&mut field, PASTED, QUICK, |_| true);
         assert_eq!(pasted_and_sent(&revision), Some((PASTED, typo.as_str())));
     }
 
@@ -839,14 +946,14 @@ mod tests {
     fn the_watch_waits_for_the_pasted_text_to_show_up() {
         let fixed = fixed();
         let mut field = Script(vec![t(""), t(PASTED), t(&fixed), t(&fixed), t("")], 0);
-        let revision = watch(&mut field, PASTED, QUICK, || true);
+        let revision = watch(&mut field, PASTED, QUICK, |_| true);
         assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
     }
 
     #[test]
     fn a_field_that_never_shows_the_text_is_given_up() {
         let mut field = Script(vec![t(""), t(""), t(""), t(PASTED), t(&fixed())], 0);
-        assert!(watch(&mut field, PASTED, QUICK, || true).is_none());
+        assert!(watch(&mut field, PASTED, QUICK, |_| true).is_none());
         assert_eq!(field.1, 3, "find_polls + 1 reads");
     }
 
@@ -857,7 +964,7 @@ mod tests {
             vec![t(PASTED), t(&fixed), t(&fixed), Snapshot::Left, t(PASTED)],
             0,
         );
-        assert!(watch(&mut field, PASTED, QUICK, || true).is_none());
+        assert!(watch(&mut field, PASTED, QUICK, |_| true).is_none());
         assert_eq!(field.1, 4, "no read after the focus moved");
     }
 
@@ -867,7 +974,7 @@ mod tests {
         let mut reads = vec![t(PASTED), t(&fixed)];
         reads.extend(std::iter::repeat_n(t(&fixed), 20));
         let mut field = Script(reads, 0);
-        assert!(watch(&mut field, PASTED, QUICK, || true).is_none());
+        assert!(watch(&mut field, PASTED, QUICK, |_| true).is_none());
         assert_eq!(field.1, 1 + QUICK.watch_polls as usize);
     }
 
@@ -876,7 +983,7 @@ mod tests {
         let fixed = fixed();
         let mut field = Script(vec![t(PASTED), t(&fixed), t(&fixed), t(PASTED)], 0);
         let mut waits = 0;
-        let revision = watch(&mut field, PASTED, QUICK, || {
+        let revision = watch(&mut field, PASTED, QUICK, |_| {
             waits += 1;
             waits < 3
         });
@@ -926,7 +1033,7 @@ mod tests {
             keys: Keystrokes::new(ENGLISH).unwrap(),
             step: 0,
         };
-        let revision = watch(&mut field, ENGLISH, QUICK, || true);
+        let revision = watch(&mut field, ENGLISH, QUICK, |_| true);
         assert_eq!(
             pasted_and_sent(&revision),
             Some((ENGLISH, "Please ask Alice about the release plan today."))
@@ -1242,7 +1349,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_focus_move_or_the_end_of_the_minute_learns_nothing() {
+    async fn a_focus_move_or_the_end_of_the_watch_learns_nothing() {
         // The focus moves on (the script runs out) with the edit settled but never sent.
         let core = Core::default().on("dictionary.learn", json!({"learned": ["手提電話"]}));
         let moved = FakeProbe::reading(vec![text(PASTED), text(&fixed()), text(&fixed())]);

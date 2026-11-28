@@ -33,14 +33,13 @@ test.each([
   expect(root.hidden).toBe(true);
 });
 
-test("the page leaves the pill visible through a native hover pause and fades on expiry", async () => {
+test("the page keeps no time of its own: the pill stays until the shell dismisses it, then fades", async () => {
   const pill = learnedPill(root, actions);
   vi.spyOn(root, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 300, 48));
   pill.show({ revision: 1, words: ["Composio"], can_undo: true, language: "en" });
   await vi.waitFor(() => expect(actions.layout).toHaveBeenCalledExactlyOnceWith(1, 300, 48));
 
-  // The OS can see the pointer over the caption while the webview is click-through.
-  // During that pause the native channel withholds dismissal, even past ten seconds.
+  // The shell times the pill from its reveal (below); nothing on the page ends or extends it.
   vi.advanceTimersByTime(30_000);
   expect(root.hidden).toBe(false);
   expect(root.classList.contains("is-leaving")).toBe(false);
@@ -53,6 +52,15 @@ test("the page leaves the pill visible through a native hover pause and fades on
   expect(root.classList.contains("is-leaving")).toBe(true);
   vi.advanceTimersByTime(1);
   expect(root.hidden).toBe(true);
+});
+
+test("the shell shows the pill five seconds from its reveal, and the pointer never holds it", () => {
+  // R-UI-51: the owner found the pill and its Undo up far too long. The shell gave it ten seconds and two more for
+  // each further word, and paused for as long as the pointer rested over it, where it appears: just above the
+  // taskbar. Only an Undo already pressed is finished before it goes.
+  const production = readFileSync("src-tauri/src/learned.rs", "utf8").split("#[cfg(test)]")[0];
+  expect(production).toMatch(/const DISPLAY_TIME: Duration = Duration::from_secs\(5\);/);
+  expect(production).not.toMatch(/cursor_position|over_pill|hover_bounds|word_count/);
 });
 
 test("a replay or late dismissal cannot repaint or close the next learned batch", async () => {

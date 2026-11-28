@@ -1,6 +1,6 @@
 //! A content-sized, passive notification window. The ordinary overlay stays click-through.
 use crate::core_process::{CoreApi, CoreProcess};
-use crate::overlay::mouse::{ControlRect, Windows, cursor_position};
+use crate::overlay::mouse::{ControlRect, Windows};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::VecDeque;
@@ -14,31 +14,29 @@ use tauri::{
 const LABEL: &str = "learned";
 /// The page fades its pill out in this long (`learned.css`, a little over it); the window goes after that, never before.
 const FADE: Duration = Duration::from_millis(220);
-const CURSOR_POLL: Duration = Duration::from_millis(30);
+/// How long a notice is on the screen, from the moment its window is shown, however many words it
+/// names and wherever the pointer is: the pill stands just above the taskbar, where a pointer often
+/// rests, so the pointer never holds it.
+const DISPLAY_TIME: Duration = Duration::from_secs(5);
+/// How often the end of a notice is checked.
+const TICK: Duration = Duration::from_millis(30);
 
-fn display_time(word_count: usize) -> Duration {
-    Duration::from_secs(10 + 2 * word_count.saturating_sub(1) as u64)
-}
-
+/// The time of one notice, from its reveal.
 struct Countdown {
-    remaining: Duration,
-    running_since: Option<Instant>,
+    ends: Instant,
 }
 
 impl Countdown {
-    fn new(word_count: usize, now: Instant) -> Self {
+    fn new(shown: Instant) -> Self {
         Self {
-            remaining: display_time(word_count),
-            running_since: Some(now),
+            ends: shown + DISPLAY_TIME,
         }
     }
 
-    fn update(&mut self, now: Instant, paused: bool) -> bool {
-        if let Some(since) = self.running_since {
-            self.remaining = self.remaining.saturating_sub(now - since);
-        }
-        self.running_since = (!paused).then_some(now);
-        self.remaining.is_zero() && !paused
+    /// Whether the notice is over. An Undo already pressed (`undoing`) is carried out first: the
+    /// pill goes when it is done (`learned_finish`), or when its time is over should it fail.
+    fn expired(&self, now: Instant, undoing: bool) -> bool {
+        now >= self.ends && !undoing
     }
 }
 
@@ -53,7 +51,6 @@ struct Active {
     batch: Batch,
     revision: u64,
     countdown: Option<Countdown>,
-    hover_bounds: Option<ControlRect>,
     undoing: bool,
     leaving: bool,
 }
@@ -109,7 +106,6 @@ impl Queue {
             batch,
             revision: next_revision(),
             countdown: None,
-            hover_bounds: None,
             undoing: false,
             leaving: false,
         });
@@ -331,17 +327,11 @@ pub fn learned_layout(
             let Some(active) = queue.active(revision) else {
                 return;
             };
-            active.hover_bounds = Some(ControlRect {
-                x: f64::from(position.x),
-                y: f64::from(position.y),
-                width: f64::from(w),
-                height: f64::from(h),
-            });
             reveal(&handle);
             if active.countdown.is_none() {
-                active.countdown = Some(Countdown::new(active.batch.words.len(), Instant::now()));
+                active.countdown = Some(Countdown::new(Instant::now()));
                 drop(queue);
-                watch_pointer(app, handle, revision);
+                expire(app, revision);
             }
         })
         .map_err(|e| e.to_string())
@@ -365,31 +355,26 @@ fn reveal(window: &tauri::WebviewWindow) {
     }
 }
 
-/// Read the cursor independently of hit testing so the caption stays click-through.
-fn watch_pointer(app: AppHandle, window: tauri::WebviewWindow, revision: u64) {
+/// Ends the notice `revision` when its time is over ([`Countdown`]), unless Undo ended it first.
+fn expire(app: AppHandle, revision: u64) {
     tauri::async_runtime::spawn(async move {
         loop {
-            let point = cursor_position(&window);
             {
                 let mut queue = queue(&app);
                 let Some(active) = queue.active(revision) else {
                     return;
                 };
-                let over_pill = point.is_some_and(|point| {
-                    active
-                        .hover_bounds
-                        .as_ref()
-                        .is_some_and(|rect| rect.contains(point.x, point.y))
-                });
-                let expired = active.countdown.as_mut().is_some_and(|countdown| {
-                    countdown.update(Instant::now(), over_pill || active.undoing)
-                });
+                let undoing = active.undoing;
+                let expired = active
+                    .countdown
+                    .as_ref()
+                    .is_some_and(|countdown| countdown.expired(Instant::now(), undoing));
                 if expired {
                     dismiss(&app, &mut queue, revision, false);
                     return;
                 }
             }
-            tokio::time::sleep(CURSOR_POLL).await;
+            tokio::time::sleep(TICK).await;
         }
     });
 }
@@ -615,18 +600,29 @@ mod tests {
     }
 
     #[test]
-    fn more_words_get_more_time_and_hover_preserves_the_remainder() {
-        assert_eq!(display_time(1), Duration::from_secs(10));
-        assert_eq!(display_time(2), Duration::from_secs(12));
-        assert_eq!(display_time(3), Duration::from_secs(14));
-        let start = Instant::now();
-        let at = |seconds| start + Duration::from_secs(seconds);
-        let mut countdown = Countdown::new(1, start);
-        assert!(!countdown.update(at(3), true));
-        assert!(!countdown.update(at(30), true));
-        assert!(!countdown.update(at(31), false));
-        assert!(!countdown.update(at(37), false));
-        assert!(countdown.update(at(38), false));
+    fn the_pill_stays_five_seconds_from_when_it_appears() {
+        // R-UI-51: the owner found the pill and its Undo up far too long (ten seconds, two more for
+        // each further word, and paused for as long as the pointer rested over it).
+        assert_eq!(DISPLAY_TIME, Duration::from_secs(5));
+        let shown = Instant::now();
+        let at = |ms| shown + Duration::from_millis(ms);
+        let countdown = Countdown::new(shown);
+        assert!(!countdown.expired(at(4_999), false));
+        assert!(countdown.expired(at(5_000), false));
+        // Nothing but an Undo already pressed keeps it: the pointer is not even read.
+        assert!(!countdown.expired(at(5_000), true));
+        assert!(
+            countdown.expired(at(5_400), false),
+            "a failed Undo lets it go"
+        );
+        let source = include_str!("learned.rs").replace("\r\n", "\n");
+        let production = source.split("#[cfg(test)]").next().unwrap();
+        let expire = production.split("fn expire(").nth(1).unwrap();
+        let expire = expire.split("\n}\n").next().unwrap();
+        assert!(
+            !expire.contains("cursor"),
+            "the pointer never holds the pill"
+        );
     }
 
     #[test]
@@ -657,10 +653,10 @@ mod tests {
         assert!(!queue.advance(|| panic!("the first batch is still showing")));
         let now = Instant::now();
         let first = queue.active(1).unwrap();
-        first.countdown = Some(Countdown::new(1, now));
-        let countdown = first.countdown.as_mut().unwrap();
-        assert!(!countdown.update(now + Duration::from_millis(9_999), false));
-        assert!(countdown.update(now + Duration::from_secs(10), false));
+        first.countdown = Some(Countdown::new(now));
+        let countdown = first.countdown.as_ref().unwrap();
+        assert!(!countdown.expired(now + Duration::from_millis(4_999), false));
+        assert!(countdown.expired(now + Duration::from_secs(5), false));
         first.leaving = true;
         queue.send_current().unwrap();
         assert!(!queue.advance(|| panic!("the first batch is still fading")));

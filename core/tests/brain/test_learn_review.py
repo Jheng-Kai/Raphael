@@ -64,6 +64,63 @@ def test_the_prompt_names_the_languages_and_holds_no_words_of_any_one_language()
     assert re.search(r"繁體中文", prompt)
 
 
+def _rule(number: str) -> str:
+    return next(line for line in learn_review._template().splitlines() if line.startswith(number + ". "))
+
+
+def test_a_misheard_name_is_asked_for_however_well_known_it_is():
+    # R-LEARN-REVIEW-01: for days every review of the owner's edits answered an empty list, among
+    # them the app's own name written in Chinese characters and a three-letter tool name heard as
+    # three English words. The prompt turned away "a globally famous name or a common acronym",
+    # which is exactly what speech-to-text gets wrong and the dictionary is for.
+    assert _rule("2") == (
+        "2. The word is a name or a term: of a person, product, app, tool, project, company, place or "
+        "account, jargon, an acronym or a coined term. A well-known name counts as much as a rare one: "
+        "speech-to-text got it wrong for this user, and that is what the dictionary is for. Never an "
+        "everyday word of any language."
+    )
+    template = learn_review._template()
+    assert "famous" not in template and "common acronym" not in template
+
+
+def test_a_term_written_inside_a_path_or_a_link_still_counts():
+    # The tool name above was written as the first part of a folder path, and the prompt said to
+    # never add file paths, links or code.
+    template = learn_review._template()
+    assert (
+        "A term written inside a path, a link, a command or code still counts: add the term alone, "
+        "never the path around it."
+    ) in template
+    assert "- A whole number, date, time, link, email address, file path or piece of code" in template
+    assert "- Numbers, dates, times, links, email addresses, file paths or code" not in template
+
+
+def test_an_empty_list_is_not_the_answer_the_review_leans_to():
+    # "Most edits teach nothing, so an empty list is the usual answer" leaned every unsure case to
+    # nothing; only an edit that may as well be rewording is left out.
+    template = learn_review._template()
+    assert "usual answer" not in template and "When unsure, add nothing" not in template
+    assert "When an edit could be rewording as well as a mishearing, add nothing for it." in template
+
+
+_EXAMPLE = re.compile(r'^- pasted "([^"]*)", sent "([^"]*)"(?:, dictionary holds [^:]+)?: (\{.*\})(?: \(.*\))?$')
+
+
+def test_every_example_of_the_prompt_survives_the_checks_on_a_reply():
+    import json
+
+    examples = [_EXAMPLE.match(line) for line in learn_review._template().splitlines() if line.startswith("- pasted ")]
+    assert examples and all(examples), "every example has the shape the review is taught"
+    named = 0
+    for match in examples:
+        pasted, sent, reply = match.group(1), match.group(2), json.loads(match.group(3))
+        expected = [(item["word"], item["misheard"]) for item in reply["words"]]
+        assert checked_pairs(reply, pasted, sent, 3) == expected, match.group(0)
+        named += len(expected)
+    assert named >= 2
+    assert any("/" in m.group(2) and json.loads(m.group(3))["words"] for m in examples), "a term inside a path"
+
+
 def test_the_dictionary_puts_the_words_the_edit_holds_first():
     block = dictionary_block(["Alpha", "Quorvia", "Beta"], [("kwor via", "Quorvia")], SENT)
     assert block.splitlines()[0] == "- Quorvia (often misheard as: kwor via)"
@@ -134,6 +191,26 @@ async def test_a_reviewed_word_is_learned_and_its_call_is_paid_for(keyed_router,
     assert [(e["word"], e["source"]) for e in entries] == [("Quorvia", "learned")]
     [(purpose, job)] = conn.execute("SELECT purpose, job FROM spend").fetchall()
     assert (purpose, job) == ("cleanup", "dictionary_learn")
+
+
+@pytest.mark.parametrize(("pasted", "sent", "word", "misheard"), [
+    # A tool name heard as three English words and written as the start of a folder path.
+    ("那個檔案應該在 kel ver projects 裡面才對", "那個檔案應該在  kelvr/projects 裡面才對", "kelvr", "kel ver"),
+    # A product name written in another script by speech-to-text.
+    ("這個要跟奇芙蘿一起改", "這個要跟 Kivro一起改", "Kivro", "奇芙蘿"),
+])
+async def test_a_misheard_term_the_review_names_is_learned_inside_a_path_or_from_another_script(
+    keyed_router, fake_client, pasted, sent, word, misheard  # noqa: F811
+):
+    # R-LEARN-REVIEW-01: nothing after the model stood in the way of the owner's two corrections; the
+    # review's answer was the only thing missing.
+    fake_client.next_completion = completion({"words": [{"word": word, "misheard": misheard}]})
+    reply = await keyed_router.call("dictionary.learn", {"undoable": True, "revision": {"pasted": pasted, "sent": sent}})
+    assert reply["learned"] == [word] and reply["undo"]
+    [call] = fake_client.calls
+    assert misheard in call["user"] and word in call["user"]
+    entries = (await keyed_router.call("dictionary.list", {}))["entries"]
+    assert [(e["word"], e["heard"]) for e in entries] == [(word, [misheard])]
 
 
 async def test_an_unchanged_revision_asks_no_model(keyed_router, fake_client):  # noqa: F811
