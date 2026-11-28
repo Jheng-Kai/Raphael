@@ -28,6 +28,24 @@ test("authored Windows paths display as native paths in bare, code and Markdown 
   expect(messageHTML("Report /Users/me/report.md", "", true)).toContain(">/Users/me/report.md</code>");
 });
 
+test("a link to a file by its file:// address shows the path it names, which a table can wrap, never the raw link", () => {
+  // A reply linked Docker.raw as file:///Users/…: the whole link stood as words, too long to break, and its table ran past
+  // the card, hiding the columns on the right (R-UI-167).
+  const el = document.createElement("div");
+  const table = "| 量測項目 | 清理前 | 清理後 |\n| --- | --- | --- |\n" +
+    "| Docker 虛擬磁碟（[Docker.raw](file:///Users/me/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw)） | 19.33 GB | 14.45 GB |";
+  el.innerHTML = replyContentHTML(table, "");
+  expect(el.textContent).not.toContain("](file:");
+  expect(el.textContent).not.toContain("file://");
+  const path = el.querySelector<HTMLElement>(".message-table td code[data-message-path]");
+  expect(path?.textContent).toBe("/Users/me/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw");
+  expect(path?.closest("td")?.classList.contains("short")).toBe(false);
+  expect(messageHTML("[報告](file:///Users/me/My%20Files/report.md)", "", true)).toContain(">/Users/me/My Files/report.md</code>");
+  expect(messageHTML("[D](file:///D:/Team/a.txt)", "", true)).toContain(">D:\\Team\\a.txt</code>");
+  // Another host's address is no path of this computer, and stays as it was written.
+  expect(messageHTML("[x](file://server/share/a.txt)", "", true)).not.toContain("data-message-path");
+});
+
 test("only a checked path becomes a plain-looking keyboard link with a quiet failure notice", async () => {
   const root = document.createElement("div");
   const path = "/Users/me/allowed/report.md";

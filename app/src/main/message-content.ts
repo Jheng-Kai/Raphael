@@ -23,6 +23,20 @@ const LOCAL_PATH = /^(?:\/(?!\/)|[A-Za-z]:[\\/])/;
 const drivePath = (path: string): string => !IS_MAC && /^\/?[A-Za-z]:[\\/]/.test(path)
   ? path.replace(/^\/(?=[A-Za-z]:)/, "").replace(/\//g, "\\") : path;
 
+/**
+ * A `file://` address of this computer as the path it names (`file:///Users/a%20b` → `/Users/a b`, `file:///C:/x` →
+ * `C:/x`), or null for another host or one that does not decode. A reply that linked a file this way showed the whole
+ * link as words, too long to break, and its table ran past the card.
+ */
+export function fileUrlPath(target: string): string | null {
+  const match = /^file:\/\/(?:localhost)?(\/[^?#]*)$/i.exec(target);
+  if (!match) return null;
+  try {
+    const path = decodeURIComponent(match[1]);
+    return /[\u0000-\u001f]/.test(path) ? null : /^\/[A-Za-z]:[\\/]/.test(path) ? path.slice(1) : path;
+  } catch { return null; }
+}
+
 function pathHTML(path: string, query: string, teamChip = true): string {
   if (teamChip && TEAM_FILE.test(path)) {
     return fileChipHTML(highlightHTML(path.slice(path.lastIndexOf("/") + 1), query), ` data-act="team-file-open" data-path="${esc(path)}"`);
@@ -229,7 +243,8 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
         let end = middle + 2, level = 1;
         for (; end < text.length && level; end++) { if (text[end] === "(") level++; if (text[end] === ")") level--; }
         if (!level) {
-          const target = linkDestination(text.slice(middle + 2, end - 1));
+          const destination = linkDestination(text.slice(middle + 2, end - 1));
+          const target = fileUrlPath(destination) ?? destination;
           const label = text.slice(at + 1, middle);
           const html = link(target, label);
           if (html) { flush(); out += html; at = end; continue; }
