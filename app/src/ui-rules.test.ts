@@ -152,6 +152,8 @@ test("red actions are limited to the approved high-impact actions (R-UI-184)", (
   expect(redFillSelectors.sort()).toEqual([
     "members.css: .mb-confirm.mb-delete:not(.is-quiet) .mb-dlg-act .btn.pri",
     "members.css: .mb-confirm.mb-delete:not(.is-quiet) .mb-dlg-act .btn.pri:hover:not(:disabled), .mb-confirm.mb-delete:not(.is-quiet) .mb-dlg-act .btn.pri:active:not(:disabled)",
+    // The same caption close over a page that paints its own colour (page-view.css).
+    "page-view.css: :root[data-page-tone] .window-chrome .window-close:is(:hover, :active)",
     "styles.css: .btn.pri.danger",
     "styles.css: .btn.pri.danger:hover:not(:disabled), .btn.pri.danger:active:not(:disabled)",
     // The Windows caption close keeps the platform's red under the pointer (R-UI-16).

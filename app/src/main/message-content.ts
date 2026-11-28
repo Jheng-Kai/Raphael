@@ -252,7 +252,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
           if (isAttachmentLink(target)) { flush(); out += attachmentLinkHTML(target, label, files, query); at = end; continue; }
           // A local destination shows its path beside any distinct label. A label that is the file's own name (in code
           // marks or not) is the path shown by that name, the whole path a hover away and the press still on the path
-          // (R-UI-184): a file manager's reply listed four files of one folder as four whole paths, and every file
+          // (R-UI-185): a file manager's reply listed four files of one folder as four whole paths, and every file
           // linked as [.lab](…/.lab) said its name twice.
           if (LOCAL_PATH.test(target) || target.startsWith("/")) {
             flush();

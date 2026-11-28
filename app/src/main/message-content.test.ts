@@ -48,7 +48,7 @@ test("a link to a file by its file:// address shows the path it names, which a t
 
 test("a file linked under its own name shows that name, with its whole path as the title and the press", () => {
   // A file manager's reply listed four files of one folder as four whole paths, and [`.lab`](…/.lab) said its name twice
-  // (R-UI-184). The owner's three link forms: a plain name, a name in code marks, and an encoded space.
+  // (R-UI-185). The owner's three link forms: a plain name, a name in code marks, and an encoded space.
   const el = document.createElement("div");
   el.innerHTML = messageHTML("實驗紀錄（[`.lab`](file:///Users/me/HeHe/.lab)）\n\n- [firebase-defines.json](file:///Users/me/HeHe/.lab/firebase-defines.json)、" +
     "[ios.xcconfig](file:///Users/me/HeHe/.lab/ios.xcconfig)\n- [Antigravity](file:///Users/me/Library/Application%20Support/Antigravity/)\n" +
