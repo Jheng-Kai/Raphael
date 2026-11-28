@@ -1089,6 +1089,13 @@ export function installMock(fixture, config = {}, target = window) {
     claude.windows = [{ period: "weekly", remaining_percent: 3, resets_at: Math.round(data.now / 1000) + 3 * 86400, updated_at_ms: data.now - 20 * 60000 }, ...claude.windows.filter(window => window.period !== "weekly")];
   }
   if (variant.allowanceTwo) data.allowances.brains = data.allowances.brains.filter(brain => brain.id === "claude" || brain.id === "codex");
+  // The owner's Codex on 11/28 (R-QUOTA-02): its five-hour window spent, the weekly one at 84% left, and 20,636 credits it ran on.
+  if (variant.allowanceCredits) {
+    const codex = data.allowances.brains.find(brain => brain.id === "codex"), now = Math.round(data.now / 1000);
+    codex.source = "live";
+    codex.windows = [{ period: "fiveHour", remaining_percent: 0, resets_at: now + 3600, status: "rejected" }, { period: "weekly", remaining_percent: 84, resets_at: now + 6 * 86400, status: "allowed" }];
+    codex.credits = { has_credits: true, unlimited: false, balance: 20636.3 };
+  }
   // A mix of every source (R-SIDE-02): Codex read live at 65% used with five days to go; Claude's last report named a window whose reset has since passed
   // (allowed, no percentage); the ChatGPT sign-in, whose plan has no number to read; and an OpenRouter key with its own monthly usage and a limit.
   if (variant.usageOwner) {

@@ -17,7 +17,10 @@ def cached_allowances(brains, quotas):
         windows = quotas.allowances(name)
         signed_in = brains.logged_in(name) if command and not disconnected else False
         if cli_available(command, signed_in, disconnected) or command and not disconnected and signed_in is None and windows:
-            rows.append({"id": name, "name": label, "windows": windows, "source": "reported" if windows else "unavailable"})
+            # The credits last read with the windows: a spent window with credits to draw is not a spent subscription.
+            credits = quotas.credits.get(name) if isinstance(getattr(quotas, "credits", None), dict) else None
+            rows.append({"id": name, "name": label, "windows": windows, "source": "reported" if windows else "unavailable",
+                         **({"credits": credits} if isinstance(credits, dict) else {})})
     return {"brains": rows, "quotas": quotas.list()}
 
 

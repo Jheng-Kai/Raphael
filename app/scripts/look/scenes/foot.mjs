@@ -36,6 +36,8 @@ export default [
     [...menuWithNumber, check("foot-account-menu")], tight),
   scene("foot-usage-submenu", "用量 opens a submenu at its right edge: a block for each of the three subscriptions and OpenRouter (its window, its number, when it resets), a hairline and 管理用量",
     [...menuWithNumber, click('#app-popover [data-account="usage"]'), wait("#app-submenu"), check("foot-account-menu"), check("foot-usage-submenu")], tight),
+  scene("foot-usage-credits", "Codex's spent five-hour window with credits left says 改用點數 and the balance, never 額度已用完",
+    [...menuWithNumber, click('#app-popover [data-account="usage"]'), wait("#app-submenu"), check("foot-usage-submenu"), check("usage-credits-menu")], { allowanceCredits: true }),
   scene("foot-usage-two", "With Claude and Codex connected, as the owner has them, the submenu lists both",
     [...menuWithNumber, click('#app-popover [data-account="usage"]'), wait("#app-submenu"), check("foot-account-menu"), check("foot-usage-submenu")], { allowanceTwo: true }),
   scene("foot-usage-owner", "The owner's own mix (2026-11-14): Codex live at 65% used, Claude whose reported window has reset (已重置, no stale number), the ChatGPT sign-in (無法讀取) and OpenRouter's own spend: one block each, in a stable order",

@@ -105,3 +105,30 @@ test("a window is judged once, for the menu and the cards alike", () => {
   expect(windowState("reported", { period: "weekly", remaining_percent: 120, resets_at: null }, NOW)).toEqual({ kind: "percent", used: 0 });
   expect(windowState(undefined, { period: "weekly", remaining_percent: null, resets_at: null }, NOW)).toEqual({ kind: "unknown" });
 });
+
+test("a spent window with credits to draw says the subscription runs on credits, with what is left, never 額度已用完", async () => {
+  // The owner's Codex five-hour window was spent while 20,636 credits were left: Codex ran on them, yet the menu and the
+  // card said the allowance was exhausted (R-QUOTA-02).
+  const spentWithCredits = (credits: CliAllowances["brains"][number]["credits"]): Parameters<typeof usageBlocks>[0] => ({
+    allowances: { brains: [{ id: "codex", name: "Codex", source: "live", credits, windows: [
+      { period: "fiveHour", remaining_percent: 0, resets_at: at(NOW + 3_600_000), status: "rejected" },
+      { period: "weekly", remaining_percent: 84, resets_at: at(NOW + 6 * DAY), status: "allowed" }] }], quotas: [] },
+    chatgpt: null, status: null,
+  });
+  const [codex] = usageBlocks(spentWithCredits({ has_credits: true, unlimited: false, balance: 20636.3 }), NOW);
+  expect(codex).toMatchObject({ state: "credits", name: "Codex 5 小時", value: "改用點數", detail: "點數餘額 20,636" });
+  expect(usageBlocks(spentWithCredits({ has_credits: false, unlimited: true, balance: null }), NOW)[0]).toMatchObject({ state: "credits", detail: "點數不限" });
+  // No credits to draw: the spent window speaks as before.
+  expect(usageBlocks(spentWithCredits({ has_credits: false, unlimited: false, balance: 0 }), NOW)[0]).toMatchObject({ state: "percent", used: 100 });
+  expect(usageBlocks(spentWithCredits(undefined), NOW)[0]).toMatchObject({ state: "percent", used: 100 });
+  setLocale("en");
+  expect(usageBlocks(spentWithCredits({ has_credits: true, unlimited: false, balance: 20636.3 }), NOW)[0]).toMatchObject({ value: "Using credits", detail: "20,636 credits left" });
+  // Settings' card says the same of the spent window, with the balance under the windows.
+  const { allowanceCardsHTML } = await import("./usage-analytics");
+  setLocale("zh-TW");
+  const card = document.createElement("div");
+  card.innerHTML = allowanceCardsHTML(spentWithCredits({ has_credits: true, unlimited: false, balance: 20636.3 }).allowances!, NOW);
+  expect(card.textContent).toContain("改用點數");
+  expect(card.textContent).not.toContain("額度已用完");
+  expect(card.querySelector(".run-credits")?.textContent).toBe("點數餘額 20,636");
+});

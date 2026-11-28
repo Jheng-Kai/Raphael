@@ -11,6 +11,8 @@
 .run-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-2); }
 .run-allowance-unavailable, .run-quota small { font-size: var(--fs-2xs); color: var(--text-3); }
 .run-allowance-unavailable { margin: 0; }
+/* What is left of the credits a spent window draws (R-QUOTA-02): a quiet line under the windows. */
+.run-credits { margin: 0; font-size: var(--fs-2xs); color: var(--text-2); }
 .run-unreadable { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
 .run-quota { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin: 0; font-size: var(--fs-2xs); }
 .run-window { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; }
