@@ -5,11 +5,11 @@ import { RAPHAEL_ID, faceHTML } from "../members";
 import { bindNavLayer } from "../nav-layers";
 import { btn, esc, headerCloseButton, keys, reducedMotion, replay } from "../ui";
 import { dimClip } from "./dim";
-import { EDGE_TOP, groundBox, placeAroundLayer, placeGroup, touches, type Box, type PlaceInput, type Placement, type Side } from "./place";
+import { EDGE_TOP, placeAroundLayer, placeGroup, type Box, type PlaceInput, type Placement, type Side } from "./place";
 import { boxOf, type Spot } from "./steps";
 import "./tour.css";
 
-export type ButtonId = "start" | "skip" | "done";
+export type ButtonId = "start" | "skip" | "done" | "gotIt";
 export type Pressed = ButtonId | "close" | "dismiss";
 export const CAPTION_CONTROLS = ".window-chrome .window-controls";
 
@@ -30,6 +30,12 @@ export interface ViewModel {
   label: string;
   /** What is pointed at, measured again whenever the window or the layout moves; `dim: false` only stands beside it. */
   locate: () => (Spot & { dim: boolean }) | null;
+  /** What the dim leaves lit, when it is more than the framed target (the whole menu a step works inside, or what a step opened). */
+  lit?: () => Spot | null;
+  /** The opened thing is being looked at: it is lit and framed, and nothing under the dim takes a press. */
+  seeing?: boolean;
+  /** While looking, the lit thing still scrolls under the wheel (a long model list). */
+  lookArea?: () => HTMLElement | null;
   extraSpot?: () => Spot | null;
   layer?: () => HTMLElement | null;
   /** An independent anchor when Raphael stands beside a different surface from the cut-out. */
@@ -62,9 +68,12 @@ const GROUND_INSET = 16;
 // The 64 px portrait has padding around its drawing. Anchor the pose and light at the drawn foot.
 const FOOT = 52;
 const BODY_HEIGHT = 40;
-const ANTICIPATION_MS = 70;
-const AIR_MS = 190;
-const CONTACT_MS = 45;
+const ANTICIPATION_MS = 80;
+// A chain of small hops along the way: one for about every 110 px, each with its own touch-down, so the travel reads as walking.
+const AIR_MS = 250;
+const CONTACT_MS = 70;
+const HOP_SPAN = 110;
+const MAX_HOPS = 5;
 const LAND_MS = 180;
 const HAPPY_MS = 150;
 const RISE = "cubic-bezier(0.33, 0.67, 0.67, 1)";
@@ -132,6 +141,7 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
       return;
     }
     if (model?.mode === "step") {
+      if (event.type === "wheel" && model.seeing && model.lookArea?.()?.contains(target)) return;
       const sideButton = event instanceof MouseEvent && (event.button === 3 || event.button === 4);
       const inBubble = bubble.contains(target);
       if (!sideButton && !inBubble && target !== dim) {
@@ -243,10 +253,8 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
         const currentBody = matrixOf(bodyStyle.transform), currentGlow = matrixOf(glowStyle.transform);
         const from = { ...placed, left: placed.left + currentGround.m41, top: placed.top + currentGround.m42 };
         const time = Number(playing?.body.currentTime);
-        const path = groundBox({ left: Math.min(from.left, to.left), top: Math.min(from.top, to.top) - 44,
-          width: SLIME + Math.abs(from.left - to.left), height: SLIME + 44 + Math.abs(from.top - to.top) }, GROUND_INSET);
-        const blocked = next.mode === "step" && (path.top < 0 || [spot?.box, ...clear, ...controls].some(box => box && touches(path, box)));
-        plan = blocked ? hopPlan(0, 0, stillPose()) : hopPlan(from.left - to.left, from.top - to.top, {
+        // Raphael always travels the whole way in hops, never jumping in place and reappearing elsewhere.
+        plan = hopPlan(from.left - to.left, from.top - to.top, {
           y: currentBody.m42, width: Math.hypot(currentBody.m11, currentBody.m12), height: Math.hypot(currentBody.m21, currentBody.m22),
           tilt: Math.atan2(currentBody.m12, currentBody.m11) * 180 / Math.PI, opacity: bodyStyle.opacity || 1,
           glowWidth: currentGlow.m11, glowOpacity: glowStyle.opacity || GLOW_OPACITY,
@@ -259,14 +267,17 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
     }
     if (canMove && celebrate) plan = happyPlan(plan);
     if (!canMove || moved || plan) cancelMotion();
-    const cut = next.mode === "step" && spot?.dim ? next.locate() : null;
+    const ring = next.mode === "step" && spot?.dim ? spot : null;
+    // The dim's opening is what is lit; the pulsing frame stays on what is to be pressed (or, while looking, round the lit thing).
+    const cut = next.mode === "step" ? next.lit?.() ?? ring : null;
     root.dataset.dim = next.mode !== "step" ? "none" : cut ? "spot" : "all";
+    if (next.mode === "step") root.dataset.state = next.seeing ? "see" : "do"; else delete root.dataset.state;
     dim.style.clipPath = cut ? dimClip(cut, extra ?? undefined) : "";
-    spotEl.hidden = !cut;
-    if (cut) {
-      spotEl.style.left = `${cut.box.left}px`; spotEl.style.top = `${cut.box.top}px`;
-      spotEl.style.width = `${cut.box.width}px`; spotEl.style.height = `${cut.box.height}px`;
-      spotEl.style.borderRadius = `${cut.radius}px`;
+    spotEl.hidden = !ring;
+    if (ring) {
+      spotEl.style.left = `${ring.box.left}px`; spotEl.style.top = `${ring.box.top}px`;
+      spotEl.style.width = `${ring.box.width}px`; spotEl.style.height = `${ring.box.height}px`;
+      spotEl.style.borderRadius = `${ring.radius}px`;
     }
     bubble.style.left = `${Math.round(placement.bubble.left)}px`;
     bubble.style.top = `${Math.round(placement.bubble.top)}px`;
@@ -378,14 +389,11 @@ interface CurrentPose {
   glowWidth: number; glowOpacity: number | string; falling: boolean;
 }
 
-const stillPose = (): CurrentPose => ({ y: 0, width: 1, height: 1, tilt: 0, opacity: 1,
-  glowWidth: 1, glowOpacity: GLOW_OPACITY, falling: false });
-
 /** Each hop travels one segment of the ground line while only the portrait rises. */
 function hopPlan(dx: number, dy: number, start: CurrentPose): MotionPlan {
   const distance = Math.hypot(dx, dy);
-  const hops = distance < 120 ? 1 : distance < 360 ? 2 : 3;
-  const rise = Math.min(36, Math.max(14, distance / hops * 0.3));
+  const hops = distance < 60 ? 1 : Math.min(MAX_HOPS, Math.max(2, Math.round(distance / HOP_SPAN)));
+  const rise = Math.min(40, Math.max(16, distance / hops * 0.35));
   const tilt = -Math.sign(dx) * 3;
   const inFlight = start.y !== 0;
   const falling = inFlight && start.falling;

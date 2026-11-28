@@ -31,8 +31,9 @@ it("reports each shifted scroll container and the app root's position", () => {
   }
 });
 
-it.each(["keys", "app-search"])("hit-tests the dim at the window edges of the %s step", step => {
-  const highlightsSearch = step === "app-search";
+it.each(["keys", "apps"])("hit-tests the dim at the window edges of the %s step", step => {
+  // The keys step dims everything; the Connect apps step, once opened, lights the whole dialog while the person reads.
+  const highlightsSearch = step === "apps";
   const browser = new Window();
   const doc = browser.document;
   Object.defineProperties(doc.documentElement, {
@@ -49,9 +50,9 @@ it.each(["keys", "app-search"])("hit-tests the dim at the window edges of the %s
       <div class="window-drag"></div>
       <div class="window-controls"><button class="window-button"><svg></svg></button></div>
     </div>
-    <div class="tour" data-mode="step" data-step="${step}" data-dim="${highlightsSearch ? "spot" : "all"}">
+    <div class="tour" data-mode="step" data-step="${step}" data-state="${highlightsSearch ? "see" : "do"}" data-dim="${highlightsSearch ? "spot" : "all"}">
       <div class="tour-catch" style="--scrim: rgba(0, 0, 0, 0.5); background-color: rgba(0, 0, 0, 0.5); opacity: 1; pointer-events: auto"></div>
-      <div class="tour-spot" style="pointer-events: none; border-radius: 12px; outline-width: 2px; outline-style: solid; outline-color: rgb(61, 181, 255); outline-offset: 0px; box-shadow: 0 0 8px blue" ${highlightsSearch ? "" : "hidden"}></div>
+      <div class="tour-spot" style="pointer-events: none; animation-name: none; border-radius: 12px; outline-width: 2px; outline-style: solid; outline-color: rgb(61, 181, 255); outline-offset: 0px; box-shadow: 0 0 8px blue" ${highlightsSearch ? "" : "hidden"}></div>
       <div class="tour-ground">
         <div class="tour-slime"><div class="slime-surface" style="--slime-color: #3db5ff"><div class="slime-body"></div></div></div>
         <div class="tour-glow" style="background-image: radial-gradient(black, transparent); opacity: 0.5"></div>
@@ -61,9 +62,10 @@ it.each(["keys", "app-search"])("hit-tests the dim at the window edges of the %s
           <h2 class="tour-title">${highlightsSearch ? "Connect apps" : "Call me anytime"}</h2>
           <button class="btn icon close-button" data-tour="close" aria-label="End tour"><svg></svg></button>
         </div>
-        <p class="tour-text">Raphael's guided tour.</p>
-        <span class="tour-count" role="img" aria-label="Step ${highlightsSearch ? 7 : 13} of 13">${Array.from({ length: 13 }, (_, index) =>
-          `<span class="tour-dot"${index === (highlightsSearch ? 6 : 12) ? " data-current" : ""}></span>`).join("")}</span>
+        <p class="tour-text">Raphael's guided tour</p>
+        <span class="tour-count" role="img" aria-label="Step ${highlightsSearch ? 5 : 8} of 8">${Array.from({ length: 8 }, (_, index) =>
+          `<span class="tour-dot"${index === (highlightsSearch ? 4 : 7) ? " data-current" : ""}></span>`).join("")}</span>
+        ${highlightsSearch ? '<div class="tour-foot"><div class="tour-buttons"><button class="btn sm pri" data-tour="gotIt">Got it</button></div></div>' : ""}
         <div class="tour-keys"><kbd>Alt</kbd><kbd>R</kbd></div>
       </div>
     </div>`;
@@ -74,7 +76,8 @@ it.each(["keys", "app-search"])("hit-tests the dim at the window edges of the %s
   };
   measure(".window-chrome", 0, 0, 720, 38);
   measure(".sidebar-account", 8, 550, 30, 30);
-  measure("#conn-search, .tour-spot", 0, 8, 88, 200);
+  measure("#conn-search", 0, 8, 88, 200);
+  measure(".tour-spot", 0, 8, 710, 470);
   measure(".modal", 0, 8, 710, 470);
   measure(".modal button", 570, 100, 120, 45);
   measure(".tour-catch", 0, 0, 720, 600);
@@ -88,8 +91,8 @@ it.each(["keys", "app-search"])("hit-tests the dim at the window edges of the %s
   const dim = doc.querySelector(".tour-catch");
   const captionGlyph = doc.querySelector(".window-button svg");
   const dragStrip = doc.querySelector(".window-drag");
-  const check = () => checkRendered(highlightsSearch ? "tour-step-7" : "tour-step-13");
-  const hits = new Map(highlightsSearch ? [["0.25,38.5", doc.body], ["44,108", doc.querySelector("#conn-search")]] : []);
+  const check = () => checkRendered(highlightsSearch ? "tour-step-5-seen" : "tour-step-8");
+  const hits = new Map(highlightsSearch ? [["0.25,38.5", doc.body], ["355,48", doc.querySelector(".modal")], ["355,243", doc.querySelector(".modal")]] : []);
   doc.elementFromPoint = (x, y) => {
     if (Math.round(x) >= doc.documentElement.clientWidth || Math.round(y) >= doc.documentElement.clientHeight) return null;
     return hits.get(`${x},${y}`) ?? dim;
@@ -107,7 +110,7 @@ it.each(["keys", "app-search"])("hit-tests the dim at the window edges of the %s
     expect(check().dimPoints).toEqual([
       [0.25, 0.25], [719.25, 0.25],
       ...(highlightsSearch ? [] : [[0.25, 38.5]]), [719.25, 38.5],
-      [0.25, 599.25], [719.25, 599.25], [360, 300],
+      [0.25, 599.25], [719.25, 599.25], ...(highlightsSearch ? [] : [[360, 300]]),
     ]);
     for (const [x, y, uncovered] of [
       [0.25, 0.25, dragStrip],

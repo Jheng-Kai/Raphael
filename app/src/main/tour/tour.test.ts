@@ -196,7 +196,7 @@ test("Skip asks before saving the answer, then closes the offer immediately", as
   await offer(tour);
   await press("skip");
   expect(confirmation().querySelector("h2")?.textContent).toBe("確定要跳過導覽嗎？");
-  expect(confirmation().querySelector("p")?.textContent).toBe("跳過後就不會再出現導覽。");
+  expect(confirmation().querySelector("p")?.textContent).toBe("跳過之後就不會再出現導覽");
   expect(confirmButton().textContent).toBe("跳過");
   expect(cancelButton().textContent).toBe("取消");
   expect(confirmation().classList.contains("is-quiet")).toBe(true);
@@ -275,11 +275,13 @@ const thread = () => find(".page-agent");
 const ownerMessage = (id: number, words: string) => {
   thread().insertAdjacentHTML("beforeend", `<div class="tn" data-id="${id}"><div data-message="question"><div class="message-text">${words}</div></div></div>`);
 };
+const state = () => find(".tour")?.dataset.state;
 const reachPermission = async (tour: Tour) => {
   await begin(tour);
   submit();
   ownerMessage(1, "Hello");
   await settle();
+  await press("gotIt");
 };
 
 function wireSteps() {
@@ -296,8 +298,8 @@ function wireSteps() {
   };
   const model = () => open(".cb-menu", '<div class="cb-menu"><div class="cb-now"><button data-cb-act="models" class="cb-pick">Models</button></div><div class="cb-body" hidden></div></div>');
   find(".cmp-mode").addEventListener("click", () => {
-    const menu = open(".cb-menu", '<div class="cb-menu"><div class="cb-modes"><button class="cb-row" data-mode="ask">Manual</button></div></div>');
-    menu.querySelector("button")!.addEventListener("click", () => { find(".cmp-mode").dataset.mode = "ask"; menu.remove(); });
+    const menu = openPopover(find(".cmp-mode"), '<div class="cb-modes"><button class="cb-row" data-mode="ask">Manual</button></div>', { className: "menu cb-menu", role: "dialog" });
+    place(menu, 420, 560, 320, 200);
   });
   find(".mp-trigger").addEventListener("click", () => {
     // The shared close path owns the popover, just as it does in the app.
@@ -332,47 +334,32 @@ function wireSteps() {
     maker.el.querySelector('[data-dlg="cancel"]')!.addEventListener("click", cancel);
   });
   find(".sidebar-account").addEventListener("click", () => {
-    const menu = open(".account-menu", '<div class="account-menu"><button data-account="settings">Settings</button></div>');
-    menu.querySelector("button")!.addEventListener("click", () => {
-      menu.remove();
-      const panel = open(".modal", '<div class="modal-scrim" data-page="settings"><div class="modal"><button data-pane="usage">Usage</button></div></div>');
-      place(panel, 180, 185, 780, 600);
-      find('[data-pane="usage"]').addEventListener("click", () => {
-        panel.insertAdjacentHTML("beforeend", '<button data-usage-tab="overview" aria-selected="true">Overview</button>');
-        place(find("[data-usage-tab]"), 630, 430, 100, 30);
-      });
-    });
+    const menu = openPopover(find(".sidebar-account"), '<button data-account="settings">Settings</button>', { className: "menu account-menu", role: "menu" });
+    place(menu, 12, 600, 240, 240);
   });
   return { create, cancel };
 }
 
-test("all thirteen steps wait for their own action and show no Next or Back", async () => {
+test("every step is one action, and what it opens is lit and explained until 懂了, with no Next or Back", async () => {
   const { tour, closeSettings, emit } = harness();
   const { create, cancel } = wireSteps();
   const actions = [
     () => { submit(); ownerMessage(1, "Hello"); },
     () => find(".cmp-mode").click(),
-    () => find('.cb-row[data-mode="ask"]').click(),
     () => find(".mp-trigger").click(),
     () => find('[data-cb-act="models"]').click(),
     () => find(".sidebar-apps").click(),
-    () => {
-      const field = find("#conn-search") as HTMLInputElement;
-      field.value = "Gmail";
-      field.dispatchEvent(new Event("input", { bubbles: true }));
-    },
     () => find('[data-col="add"]').click(),
-    () => find(".cr-picker [data-slime-character]").click(),
     () => find(".sidebar-account").click(),
-    () => find('[data-account="settings"]').click(),
-    () => find('[data-pane="usage"]').click(),
   ];
 
   ownerMessage(0, "Hello");
   await begin(tour);
   for (const [index, step] of STEPS.entries()) {
     expect(stepId()).toBe(step.id);
-    expect(count()).toBe(`${index + 1}/13`);
+    expect(state()).toBe("do");
+    expect(count()).toBe(`${index + 1}/8`);
+    expect(words()).toBe(t(step.text));
     expect([...bubble().querySelectorAll("button")].map(el => el.dataset.tour)).toEqual(["close"]);
     emit({ type: "Dictation", phase: "processing", agent: true });
     document.body.append(document.createElement("hr"));
@@ -384,9 +371,20 @@ test("all thirteen steps wait for their own action and show no Next or Back", as
     await settle(490);
     expect(stepId()).toBe(step.id);
     await settle(60);
+    if (!step.seen) continue;
+    // The person reads at their own pace: nothing moves on until 懂了.
+    expect(stepId()).toBe(step.id);
+    expect(state()).toBe("see");
+    expect(words()).toBe(t(step.seen));
+    expect([...bubble().querySelectorAll("button")].map(el => el.dataset.tour)).toEqual(["close", "gotIt"]);
+    expect(spot().hidden).toBe(false);
+    await settle(30000);
+    expect(stepId()).toBe(step.id);
+    await press("gotIt");
   }
-  expect(closeSettings).toHaveBeenCalledTimes(2);
+  expect(closeSettings).toHaveBeenCalledTimes(1);
   expect(find(".cb-menu")).toBeNull();
+  expect(find(".account-menu")).toBeNull();
   expect(find(".cr-dialog")).toBeNull();
   expect(cancel).toHaveBeenCalledOnce();
   expect(create).not.toHaveBeenCalled();
@@ -423,6 +421,10 @@ test("the composer advances only when its submitted owner message appears", asyn
   expect(stepId()).toBe("composer");
   ownerMessage(3, "Hello");
   await settle();
+  expect(stepId()).toBe("composer");
+  expect(state()).toBe("see");
+  expect(words()).toBe(t("tour.composerSeen"));
+  await press("gotIt");
   expect(stepId()).toBe("permission");
 });
 
@@ -442,7 +444,7 @@ test("a missing target skips immediately and keeps the original progress count",
   find(".cmp-mode").remove();
   await begin(tour);
   expect(stepId()).toBe("model");
-  expect(count()).toBe("4/13");
+  expect(count()).toBe("3/8");
 });
 
 test("an unavailable quick ask still offers Finish after eight seconds", async () => {
@@ -479,7 +481,8 @@ test.each(["Cancel", "Escape", "outside press"])("%s from End tour resumes the s
   expect(confirmation()).not.toBeNull();
   dismissConfirmation(method);
   await settle();
-  expect(stepId()).toBe("manual");
+  expect(stepId()).toBe("permission");
+  expect(state()).toBe("see");
   expect(find(".cb-menu")).not.toBeNull();
   expect(document.activeElement).toBe(button("close"));
 });

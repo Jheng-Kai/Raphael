@@ -4568,25 +4568,27 @@ export function checkRendered(name, context = {}) {
       require(panel?.closest('[data-standalone="connections"]') && controls.length > 2, "the open Connect apps dialog has visible controls");
       return { check: name, side: bubble.dataset.side, pressable: controls.length };
     }
-    // A step of the walk.
-    const number = Number(name.slice('tour-step-'.length));
-    const order = ["composer", "permission", "manual", "model", "model-list", "apps", "app-search", "team", "slime-look", "account", "settings", "usage", "keys"];
+    // A step of the walk: its action (tour-step-N), or what that action opened, lit and explained (tour-step-N-seen).
+    const seen = name.endsWith('-seen');
+    const number = Number(name.slice('tour-step-'.length).replace('-seen', ''));
+    const order = ["composer", "permission", "model", "model-list", "apps", "team", "account", "keys"];
     const id = order[number - 1];
-    require(id && root.dataset.mode === 'step' && root.dataset.step === id, `step ${number} of 13 is active (${root.dataset.step})`);
+    require(id && root.dataset.mode === 'step' && root.dataset.step === id && root.dataset.state === (seen ? 'see' : 'do'),
+      `step ${number} of 8 is active ${seen ? 'and explaining what it opened' : 'and waiting for its action'} (${root.dataset.step}, ${root.dataset.state})`);
     const composerTarget = '.page-agent:not([hidden]) .composer';
-    const targets = [composerTarget + ' .cmp-input', composerTarget + ' .cmp-mode', '.cb-modes .cb-row[data-mode="ask"]',
-      composerTarget + ' .cmp-model .mp-trigger', '.cb-menu [data-cb-act="models"]', '#nav .sidebar-apps', '.modal-scrim[data-standalone="connections"] #conn-search',
-      '#nav [data-col="add"]', '.cr-dialog .cr-picker', '#nav .sidebar-account', '.account-menu [data-account="settings"]',
-      '.modal-scrim:not([data-standalone]) [data-pane="usage"]'];
+    const targets = [composerTarget + ' .cmp-input', composerTarget + ' .cmp-mode', composerTarget + ' .cmp-model .mp-trigger',
+      '.cb-menu [data-cb-act="models"]', '#nav .sidebar-apps', '#nav [data-col="add"]', '#nav .sidebar-account'];
     const progress = bubble.querySelector('.tour-count');
     const dots = [...progress.querySelectorAll('.tour-dot')];
-    require(dots.length === 13 && dots.findIndex(dot => dot.hasAttribute('data-current')) === number - 1 &&
+    require(dots.length === 8 && dots.findIndex(dot => dot.hasAttribute('data-current')) === number - 1 &&
       progress.querySelectorAll('[data-current]').length === 1 && progress.getAttribute('aria-label'),
-    "thirteen steps appear as dots with just the current one filled and a readable progress label");
+    "eight steps appear as dots with just the current one filled and a readable progress label");
     require(bubble.querySelector('.tour-title')?.textContent.trim(), "the step has a short title above the spoken line");
+    require(!/[。.]$/.test(text), `the spoken line ends without a full stop: ${text}`);
     const close = bubble.querySelector('.tour-head > button.close-button[data-tour="close"]');
     require(visible(close) && close.getAttribute('aria-label') && close.tabIndex === 0, "the heading has the shared round End tour button in the Tab order");
-    require(ids.length === 0, "the instruction bubble has only the close control before any action");
+    if (seen) require(ids.join() === 'gotIt' && buttons[0].classList.contains('pri'), "what a step opened waits for one primary 懂了 and nothing moves on by itself");
+    else require(ids.length === 0, "the instruction bubble has only the close control before any action");
     const dim = getComputedStyle(catcher);
     require(dim.pointerEvents === 'auto' && getComputedStyle(spot).pointerEvents === 'none', "the dim takes presses and the ring leaves the cut-out clear");
     // Chromium rounds hit-test coordinates at the viewport boundary. Sample a quarter pixel
@@ -4595,10 +4597,12 @@ export function checkRendered(name, context = {}) {
     const belowCaption = document.getElementById('window-chrome').getBoundingClientRect().bottom + 0.5;
     const opening = spot.hidden ? null : spot.getBoundingClientRect();
     const radius = opening ? parseFloat(getComputedStyle(spot).borderTopLeftRadius) : 0;
-    const outsideOpening = ([x, y]) => !opening || Math.hypot(
+    // Inside a menu the whole menu is lit as well as its framed row: a sample point there is not dimmed by design.
+    const litMenu = !seen && id === 'model-list' && panel ? panel.getBoundingClientRect() : null;
+    const outsideOpening = ([x, y]) => (!litMenu || x < litMenu.left - 6 || x > litMenu.right + 6 || y < litMenu.top - 6 || y > litMenu.bottom + 6) && (!opening || Math.hypot(
       Math.max(opening.left + radius - x, 0, x - (opening.right - radius)),
       Math.max(opening.top + radius - y, 0, y - (opening.bottom - radius)),
-    ) > radius;
+    ) > radius);
     const points = [
       [left, top], [right, top],
       ...[[left, belowCaption], [right, belowCaption]].filter(outsideOpening),
@@ -4623,7 +4627,19 @@ export function checkRendered(name, context = {}) {
       root.style.cssText = rootStyle;
       catcher.style.cssText = dimStyle;
     }
-    if (id === 'keys') {
+    if (seen) {
+      // What the action opened stands lit inside a resting frame, and the group covers none of it.
+      const look = id === 'composer'
+        ? [...document.querySelectorAll('.page-agent:not([hidden]) .tn')].filter(row => row.querySelector('[data-message="question"]')).pop()
+        : panel;
+      require(visible(look), `what the step opened is on screen (${id})`);
+      require(root.dataset.dim === 'spot' && !spot.hidden, "the dim leaves what was opened lit");
+      const l = look.getBoundingClientRect(), p = spot.getBoundingClientRect();
+      require(p.left <= l.left + 1 && p.top <= l.top + 1 && p.right >= l.right - 1 && p.bottom >= l.bottom - 1, `the lit frame holds all of what was opened: ${[p.left, p.top, p.width, p.height].map(Math.round)} vs ${[l.left, l.top, l.width, l.height].map(Math.round)}`);
+      require(getComputedStyle(spot).animationName === 'none', "the frame rests while the person reads");
+      require(document.elementFromPoint(l.left + l.width / 2, l.top + Math.min(l.height / 2, 40)) !== catcher, "what was opened is not dimmed");
+      if (id === 'composer') for (const rect of [floor, b]) require(!touches(rect, l), "Raphael, its light and the bubble leave the sent message clear");
+    } else if (id === 'keys') {
       require(root.dataset.dim === 'all' && spot.hidden, "nothing is pointed at: the whole window is dimmed, no cut-out");
       const caps = [...bubble.querySelectorAll('.tour-keys kbd')];
       require(caps.length === window.__look.data.device.agent_keys[0].split('+').length && caps.every(visible), `the keys that ask Raphael are drawn as caps (${caps.map(cap => cap.textContent)})`);

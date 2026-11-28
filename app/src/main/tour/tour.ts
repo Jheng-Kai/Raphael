@@ -38,6 +38,8 @@ export function createTour(host: TourHost): Tour {
   let phase: Phase = "idle";
   let view: TourView | null = null;
   let at = 0;
+  /** The step's action is done and what it opened is lit and explained, until the person presses 懂了. */
+  let seeing = false;
   let answered = false;
   let finishReady = false;
   let canFinish = false;
@@ -49,7 +51,7 @@ export function createTour(host: TourHost): Tour {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let settle: ReturnType<typeof setTimeout> | undefined;
   let actionWait: ReturnType<typeof setTimeout> | undefined;
-  let wait: { kind: "action" | "advance" | "keys"; deadline: number } | null = null;
+  let wait: { kind: "action" | "advance" | "see" | "keys"; deadline: number } | null = null;
   let confirmation: { scrim: HTMLElement; releaseMenu: () => void } | null = null;
   let unlisten: (() => void) | undefined;
   let frame = 0;
@@ -72,10 +74,20 @@ export function createTour(host: TourHost): Tour {
     const selector = stepNow().target;
     return selector ? firstShown(selector, { includeInert }) : null;
   };
-  const send = () => stepNow().id === "composer" ? firstShown(SEND) : null;
-  const controls = () => cancelling ? [cancelling] : wait?.kind === "advance" && stepNow().id !== "app-search" ? [] :
+  const send = () => stepNow().id === "composer" && !seeing ? firstShown(SEND) : null;
+  const controls = () => cancelling ? [cancelling] : seeing || wait?.kind === "advance" ? [] :
     [target(), send()].flatMap(el => el ? [el] : []);
   const openLayer = () => layer(stepNow().opens) ?? layer(stepNow().layer);
+  /** What the person looks at once the step's action is done: the message they sent, or what the step opened. */
+  const lookAt = (): HTMLElement | null => {
+    const step = stepNow();
+    if (step.id === "composer") {
+      const fresh = ownerMessages().filter(el => !previousMessages.has(messageKey(el)));
+      const sent = fresh[fresh.length - 1];
+      return sent?.closest<HTMLElement>(".tn") ?? (step.look ? firstShown(step.look) : null);
+    }
+    return step.look ? firstShown(step.look, { includeInert: true }) : openLayer();
+  };
   const ownerMessages = () => [...document.querySelectorAll<HTMLElement>('.page-agent:not([hidden]) .tn [data-message="question"] .message-text')];
   const messageKey = (el: HTMLElement) => {
     const row = el.closest<HTMLElement>(".tn")!;
@@ -93,17 +105,35 @@ export function createTour(host: TourHost): Tour {
     }
     if (phase === "bye") return { mode: "bye", text: t("tour.bye"), label, buttons: [], celebrate: true, locate: anchorSpot, prefer: ["above"], align: "start", origin, keepControlsClear };
     const step = stepNow()!;
+    const progress = { current: at + 1, total: STEPS.length, label: t("tour.progress", { current: at + 1, total: STEPS.length }) };
+    if (seeing && step.seen) {
+      const looked = () => { const el = lookAt(); return el ? spotOf(el, 6) : null; };
+      return {
+        mode: "step", step: step.id, label, title: t(step.title), closeLabel: t("tour.close"),
+        text: t(step.seen), progress, seeing: true,
+        buttons: [{ id: "gotIt", label: t("tour.gotIt"), primary: true }],
+        controls,
+        locate: () => { const spot = looked(); return spot ? { ...spot, dim: true } : null; },
+        lit: looked,
+        lookArea: lookAt,
+        layer: step.id === "composer" ? () => null : openLayer,
+        prefer: step.prefer, align: "center", origin,
+        keepControlsClear: () => { const el = lookAt(); return el ? [boxOf(el)] : keepControlsClear(); },
+      };
+    }
     return {
       mode: "step", step: step.id, label, title: t(step.title), closeLabel: t("tour.close"),
       text: t(step.text),
       ...(step.keys ? { keys: askKeys(host.device()) } : {}),
-      progress: { current: at + 1, total: STEPS.length, label: t("tour.progress", { current: at + 1, total: STEPS.length }) },
+      progress,
       buttons: step.keys && finishReady ? [{ id: "done", label: t("tour.done"), primary: true }] : [],
       controls,
       locate: () => {
         const el = target(true);
         return el ? { ...spotOf(el, step.pad ?? 0), dim: true } : null;
       },
+      // Inside a menu the whole menu stays lit, so the person sees where the framed row is.
+      ...(step.layer ? { lit: () => { const el = layer(step.layer); return el ? spotOf(el, 4) : null; } } : {}),
       extraSpot: () => { const el = send(); return el ? spotOf(el, 2) : null; },
       layer: openLayer,
       ...(step.id === "account" ? { anchor: () => anchorSpot()?.box ?? null } : {}),
@@ -161,8 +191,9 @@ export function createTour(host: TourHost): Tour {
         const reacted = step.id === "composer"
           ? ownerMessages().some(el => !previousMessages.has(messageKey(el)) && el.textContent?.trim() === message)
           : (opened !== null && opened !== priorLayer) || step.reacted?.();
-        if (reacted) setWait("advance", REACTION_MS);
-      } else if (!wait && step.target && !target()) {
+        if (reacted && step.seen) setWait("see", REACTION_MS);
+        else if (reacted) setWait("advance", REACTION_MS);
+      } else if (!wait && !seeing && step.target && !target()) {
         advance();
         return;
       }
@@ -204,10 +235,12 @@ export function createTour(host: TourHost): Tour {
     actionWait = setTimeout(() => {
       if (kind === "action") {
         check();
-        if (wait?.kind === "advance") return;
+        if (wait?.kind === "advance" || wait?.kind === "see") return;
       }
       clearWait();
       if (kind === "keys") showFinish();
+      // A step whose reaction was seen shows what it opened; one that never reacted still explains, so nobody is stuck.
+      else if (stepNow().seen && (kind === "see" || lookAt())) see();
       else advance();
     }, delay);
   }
@@ -216,23 +249,22 @@ export function createTour(host: TourHost): Tour {
     if (phase === "step" && !confirmation && !wait) setWait("action", ACTION_WAIT_MS);
   }
 
-  function targetPressed(el: Element): void {
-    if (cancelling) return;
-    const id = stepNow().id;
-    if (id === "composer" || id === "app-search") return;
-    if (id === "slime-look" && !el.closest("[data-slime-character], [data-slime-color]")) return;
+  function targetPressed(): void {
+    if (cancelling || seeing || stepNow().id === "composer") return;
     watchAction();
   }
 
   function captureAction(event: Event): void {
-    if (phase !== "step" || confirmation || wait || !(event.target instanceof HTMLElement)) return;
-    if (stepNow().id === "composer" && event.type === "submit" && event.target.matches(COMPOSER)) {
-      watchMessage();
-    } else if (stepNow().id === "app-search" && event.type === "input" && event.target === target() &&
-      event.target instanceof HTMLInputElement && event.target.value.trim()) {
-      watchAction();
-      schedule();
-    }
+    if (phase !== "step" || confirmation || wait || seeing || !(event.target instanceof HTMLElement)) return;
+    if (stepNow().id === "composer" && event.type === "submit" && event.target.matches(COMPOSER)) watchMessage();
+  }
+
+  /** The step's action is done: light what it opened and explain it, until 懂了. */
+  function see(): void {
+    clearWait();
+    seeing = true;
+    draw(true);
+    view?.keepFocus(controls());
   }
 
   function watchMessage(): void {
@@ -260,6 +292,7 @@ export function createTour(host: TourHost): Tour {
 
   function arrive(): void {
     clearWait();
+    seeing = false;
     while (stepNow().target && !target()) {
       at++;
       closeOpened(stepNow().layer);
@@ -333,6 +366,7 @@ export function createTour(host: TourHost): Tour {
     }
     if (phase === "offer" && button === "skip" || phase === "step" && button === "close") void askToLeave(button);
     else if (button === "dismiss") close();
+    else if (phase === "step" && button === "gotIt" && seeing) advance();
     else if (phase === "step" && button === "done" && finishReady) finish();
   }
 

@@ -4,20 +4,27 @@ import { bindingLabels } from "../keys";
 import type { DeviceSettings } from "../types";
 import type { Box, Side } from "./place";
 
-type StepId = "composer" | "permission" | "manual" | "model" | "model-list" | "apps" | "app-search" |
-  "team" | "slime-look" | "account" | "settings" | "usage" | "keys";
-type Line = "composer" | "permission" | "manual" | "model" | "modelList" | "apps" | "appSearch" |
-  "team" | "slimeLook" | "account" | "settings" | "usage" | "keys";
+type StepId = "composer" | "permission" | "model" | "model-list" | "apps" | "team" | "account" | "keys";
+type Line = "composer" | "permission" | "model" | "modelList" | "apps" | "team" | "account" | "keys";
+type Seen = "composerSeen" | "permissionSeen" | "modelListSeen" | "appsSeen" | "teamSeen" | "accountSeen";
 type Title = "composer" | "permission" | "model" | "apps" | "team" | "account" | "keys";
 export type Layer = keyof typeof LAYERS;
 
 /** The target's box with the room round it and the corner radius of the cut-out. */
 export interface Spot { box: Box; radius: number }
 
+/**
+ * A step is one thing the person does (`text`, the framed `target`), and, when it opens something worth a look, a second
+ * moment (`seen`) where that thing is lit and explained until the person says they have understood. A step without
+ * `seen` moves on by itself once the app reacts, into a step that works inside what just opened.
+ */
 export interface TourStep {
   id: StepId;
   title: `tour.${Title}Title`;
   text: `tour.${Line}`;
+  seen?: `tour.${Seen}`;
+  /** What is lit while `seen` is read; the layer the step opened when it names none. */
+  look?: string;
   target?: string;
   layer?: Layer;
   opens?: Layer;
@@ -67,7 +74,7 @@ export const LAYERS = {
   settings: '.modal-scrim[data-page="settings"]:not([data-standalone]) > .modal',
 } as const;
 
-const APP_SEARCH = LAYERS.apps + " #conn-search";
+export const THREAD = ".page-agent:not([hidden]) .ra-scroll";
 
 export const PRESSABLE = 'button, a[href], input:not([type="hidden"]), select, textarea, summary, [contenteditable], [role="button"], [role="menuitem"], [role="tab"], [role="radio"], [role="switch"], [data-conn][data-row]';
 
@@ -89,26 +96,21 @@ export function pressableBoxes(layer: HTMLElement): Box[] {
 }
 
 export const STEPS: readonly TourStep[] = [
-  { id: "composer", title: "tour.composerTitle", text: "tour.composer", target: COMPOSER_FIELD, prefer: ["above"], pad: 6 },
-  { id: "permission", title: "tour.permissionTitle", text: "tour.permission", target: ACTION_MODE, opens: "permission", prefer: ["above"], pad: 4 },
-  { id: "manual", title: "tour.permissionTitle", text: "tour.manual", target: LAYERS.permission + ' .cb-row[data-mode="ask"]',
-    layer: "permission", reacted: () => !firstShown(LAYERS.permission) && firstShown(ACTION_MODE)?.dataset.mode === "ask", prefer: ["right", "left"] },
+  { id: "composer", title: "tour.composerTitle", text: "tour.composer", seen: "tour.composerSeen", look: THREAD,
+    target: COMPOSER_FIELD, prefer: ["above"], pad: 6 },
+  { id: "permission", title: "tour.permissionTitle", text: "tour.permission", seen: "tour.permissionSeen",
+    target: ACTION_MODE, opens: "permission", prefer: ["above"], pad: 4 },
   { id: "model", title: "tour.modelTitle", text: "tour.model", target: COMPOSER + " .cmp-model .mp-trigger:not(:disabled)",
     opens: "model", prefer: ["above"], pad: 4 },
-  { id: "model-list", title: "tour.modelTitle", text: "tour.modelList", target: LAYERS.model + ' .cb-pick[data-cb-act="models"]',
-    layer: "model", reacted: () => !!firstShown('.cb-menu .cb-body[data-view="models"]'), prefer: ["left", "right"] },
-  { id: "apps", title: "tour.appsTitle", text: "tour.apps", target: "#nav .sidebar-apps", opens: "apps", prefer: ["right", "above"], pad: 4 },
-  { id: "app-search", title: "tour.appsTitle", text: "tour.appSearch", target: APP_SEARCH, layer: "apps",
-    reacted: () => !!document.querySelector<HTMLInputElement>(APP_SEARCH)?.value.trim() &&
-      !!firstShown(LAYERS.apps + " [data-cs-body] > :is(.cs-grid, .cs-none)"), prefer: ["right", "left"] },
-  { id: "team", title: "tour.teamTitle", text: "tour.team", target: '#nav [data-col="add"]', opens: "team", prefer: ["right", "below"], pad: 4 },
-  { id: "slime-look", title: "tour.teamTitle", text: "tour.slimeLook", target: ".cr-dialog .cr-picker", layer: "team",
-    reacted: () => !!firstShown('.cr-dialog .cr-face svg[data-state="arriving"]'), prefer: ["right", "left"] },
-  { id: "account", title: "tour.accountTitle", text: "tour.account", target: "#nav .sidebar-account", opens: "account", prefer: ["above"], pad: 4 },
-  { id: "settings", title: "tour.accountTitle", text: "tour.settings", target: '.account-menu [data-account="settings"]',
-    layer: "account", opens: "settings", prefer: ["right", "above"] },
-  { id: "usage", title: "tour.accountTitle", text: "tour.usage", target: LAYERS.settings + ' [data-pane="usage"]', layer: "settings",
-    reacted: () => !!firstShown(LAYERS.settings + ' [data-usage-tab][aria-selected="true"]'), prefer: ["right", "left"] },
+  { id: "model-list", title: "tour.modelTitle", text: "tour.modelList", seen: "tour.modelListSeen",
+    target: LAYERS.model + ' .cb-pick[data-cb-act="models"]', layer: "model",
+    reacted: () => !!firstShown('.cb-menu .cb-body[data-view="models"]'), prefer: ["left", "right"] },
+  { id: "apps", title: "tour.appsTitle", text: "tour.apps", seen: "tour.appsSeen",
+    target: "#nav .sidebar-apps", opens: "apps", prefer: ["right", "above"], pad: 4 },
+  { id: "team", title: "tour.teamTitle", text: "tour.team", seen: "tour.teamSeen",
+    target: '#nav [data-col="add"]', opens: "team", prefer: ["right", "below"], pad: 4 },
+  { id: "account", title: "tour.accountTitle", text: "tour.account", seen: "tour.accountSeen",
+    target: "#nav .sidebar-account", opens: "account", prefer: ["above"], pad: 4 },
   { id: "keys", title: "tour.keysTitle", text: "tour.keys", prefer: ["inside"], keys: true },
 ];
 

@@ -16,6 +16,8 @@
   outline: 2px solid var(--raphael-color); box-shadow: 0 0 8px 2px color-mix(in srgb, var(--raphael-color) 55%, transparent);
   animation: tour-pulse 1.6s ease-in-out infinite;
 }
+/* While the person looks at what a step opened, the frame round it rests: nothing there is to be pressed. */
+.tour[data-state="see"] .tour-spot { animation: none; box-shadow: 0 0 10px 2px color-mix(in srgb, var(--raphael-color) 45%, transparent); }
 @keyframes tour-pulse {
   0%, 100% { box-shadow: 0 0 6px 2px color-mix(in srgb, var(--raphael-color) 45%, transparent); }
   50% { box-shadow: 0 0 14px 2px color-mix(in srgb, var(--raphael-color) 75%, transparent); }

@@ -47,32 +47,34 @@ test("the glow travels on the ground while the body rises and falls", () => {
   expect(glow.parentElement).toBe(ground);
   expect(find("slime").parentElement).toBe(ground);
 
-  view.render(modelAt(400, 350), { hop: true });
+  view.render(modelAt(430, 250), { hop: true });
+  // Three hops of 110 px each: the ground moves a third of the way during each flight and waits on every touch-down.
   expect(motion("ground").frames.map(frame => frame.transform)).toEqual([
-    "translate(-300px, -100px)", "translate(-300px, -100px)", "translate(-150px, -50px)",
-    "translate(-150px, -50px)", "translate(0px, 0px)", "translate(0px, 0px)",
+    "translate(-330px, 0px)", "translate(-330px, 0px)", "translate(-220px, 0px)", "translate(-220px, 0px)",
+    "translate(-110px, 0px)", "translate(-110px, 0px)", "translate(0px, 0px)", "translate(0px, 0px)",
   ]);
-  expect(times("ground")).toEqual([0, 70, 260, 305, 495, 675]);
+  expect(times("ground")).toEqual([0, 80, 330, 400, 650, 720, 970, 1150]);
   const glowFrames = motion("glow").frames;
   expect(glowFrames.every(frame => !String(frame.transform).includes("translate"))).toBe(true);
   expect(glowFrames.filter(frame => frame.transform === "scaleX(0.65)").map(frame => frame.offset))
-    .toEqual([165 / 675, 400 / 675]);
-  expect(glowFrames.find(frame => frame.offset === 165 / 675)?.opacity).toBe("calc(var(--tour-glow-opacity) * 0.5)");
-  expect(glowFrames.find(frame => frame.offset === 260 / 675)).toMatchObject({ transform: "scaleX(1)", opacity: "var(--tour-glow-opacity)" });
+    .toEqual([205 / 1150, 525 / 1150, 845 / 1150]);
+  expect(glowFrames.find(frame => frame.offset === 205 / 1150)?.opacity).toBe("calc(var(--tour-glow-opacity) * 0.5)");
+  expect(glowFrames.find(frame => frame.offset === 330 / 1150)).toMatchObject({ transform: "scaleX(1)", opacity: "var(--tour-glow-opacity)" });
 });
 
 test("the hop chain anticipates, stretches, lands and settles before turning to idle", () => {
   view.render(modelAt(100, 250), { hop: false });
-  view.render(modelAt(400, 350), { hop: true });
+  view.render(modelAt(430, 250), { hop: true });
   const body = motion("slime");
-  expect(body.duration).toBe(675);
-  expect(times("slime")).toEqual([0, 70, 165, 260, 280, 305, 400, 495, 530, 595, 675]);
+  expect(body.duration).toBe(1150);
+  expect(times("slime")).toEqual([0, 80, 205, 330, 350, 400, 525, 650, 670, 720, 845, 970, 1005, 1070, 1150]);
   expect(body.frames.map(frame => String(frame.transform).split("scale")[1])).toEqual([
     "(1, 1)", "(1.12, 0.88)", "(0.94, 1.08)", "(1, 1)", "(1.1, 0.9)", "(1, 1)",
+    "(0.94, 1.08)", "(1, 1)", "(1.1, 0.9)", "(1, 1)",
     "(0.94, 1.08)", "(1, 1)", "(1.16, 0.84)", "(0.97, 1.04)", "(1, 1)",
   ]);
-  expect(body.frames[2]?.transform).toBe("translateY(-36px) rotate(3deg) scale(0.94, 1.08)");
-  expect(bubbleDelay()).toBe("675ms");
+  expect(body.frames[2]?.transform).toBe("translateY(-38.5px) rotate(3deg) scale(0.94, 1.08)");
+  expect(bubbleDelay()).toBe("1150ms");
   expect(document.querySelector(".tour")?.classList.contains("is-idle")).toBe(false);
   view.reflow();
   expect(body.animation.cancel).not.toHaveBeenCalled();
@@ -82,14 +84,15 @@ test("the hop chain anticipates, stretches, lands and settles before turning to 
 });
 
 test.each([
-  [40, 1, 440, 14], [119, 1, 440, 35.7], [120, 2, 675, 18], [359, 2, 675, 36], [360, 3, 910, 36],
+  [30, 1, 510, 16], [100, 2, 830, 17.5], [330, 3, 1150, 38.5], [440, 4, 1470, 38.5], [800, 5, 1790, 40],
 ])("a %i px move uses %i hops, lasts %i ms and waits for the landing to show the bubble", (distance, hops, duration, height) => {
   view.render(modelAt(100, 250), { hop: false });
   view.render(modelAt(100 + distance, 250), { hop: true });
   const body = motion("slime");
   expect(body.duration).toBe(duration);
-  expect(body.duration).toBeGreaterThanOrEqual(400);
-  expect(body.duration).toBeLessThanOrEqual(920);
+  // Every move is a visible walk of hops, never a jump in place, and a long one still ends in under two seconds.
+  expect(body.duration).toBeGreaterThanOrEqual(500);
+  expect(body.duration).toBeLessThanOrEqual(1800);
   const apexes = body.frames.filter(frame => String(frame.transform).endsWith("scale(0.94, 1.08)"));
   expect(apexes).toHaveLength(hops);
   for (const frame of apexes) expect(parseFloat(String(frame.transform).slice("translateY(".length))).toBeCloseTo(-height);
@@ -140,11 +143,11 @@ test("reduced motion puts the face and its static glow at the destination withou
 test("the goodbye adds two 12 px hops in place as its words appear", () => {
   view.render(modelAt(100, 250), { hop: false });
   view.render({ ...modelAt(140, 250), mode: "bye", celebrate: true }, { hop: true });
-  expect(bubbleDelay()).toBe("440ms");
-  expect(motion("slime").duration).toBe(740);
-  expect(times("slime").slice(-5)).toEqual([440, 515, 590, 665, 740]);
+  expect(bubbleDelay()).toBe("510ms");
+  expect(motion("slime").duration).toBe(810);
+  expect(times("slime").slice(-5)).toEqual([510, 585, 660, 735, 810]);
   expect(motion("slime").frames.slice(-4).map(frame => parseFloat(String(frame.transform).slice("translateY(".length)))).toEqual([-12, 0, -12, 0]);
-  expect(motion("ground").frames.filter(frame => frame.offset! >= 440 / 740).map(frame => frame.transform))
+  expect(motion("ground").frames.filter(frame => frame.offset! >= 510 / 810).map(frame => frame.transform))
     .toEqual(["translate(0px, 0px)", "translate(0px, 0px)"]);
   expect(document.querySelector(".tour")?.getAttribute("data-dim")).toBe("none");
 });

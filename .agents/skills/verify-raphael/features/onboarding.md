@@ -137,30 +137,26 @@ lines, progress labels and confirmation copy come from fifteen `tour.*` catalogu
   `tour-offer-skip-ask` shows the Skip confirmation over the unanswered offer.
   Cancel, Escape or a press beside it returns focus to Skip. Confirming saves the answer
   and dismisses the offer in `tour-offer-skip`.
-- **The walk**: each scene captures one instruction, then performs the framed action and checks
-  what the app shows before the next instruction arrives. The scenes follow the owner through
-  all thirteen steps.
+- **The walk**: every step is one framed action. When the app reacts, a step that opened something
+  worth a look lights it inside a resting frame with one plain line and waits for 懂了, for as long
+  as the owner reads. `tour-step-N` captures the instruction; `tour-step-N-seen` captures what
+  the action opened, lit and explained.
 
-  | Look scene | Action | App reaction |
+  | Look scenes | Action | What is lit and explained |
   | --- | --- | --- |
-  | `tour-step-1` | Type a greeting and press Enter | The new owner message appears in the thread |
-  | `tour-step-2` | Press the permissions chip | Its menu opens |
-  | `tour-step-3` | Choose Manual | The chip shows Manual and the menu closes |
-  | `tour-step-4` | Press the model chip | Its menu opens |
-  | `tour-step-5` | Press the model name | The model list appears, then the menu closes |
-  | `tour-step-6` | Press Connect apps | The dialog opens |
-  | `tour-step-7` | Search for Gmail | The list filters, then the dialog closes |
-  | `tour-step-8` | Press the sidebar plus | The member maker opens |
-  | `tour-step-9` | Pick a slime look | The preview changes, then Cancel closes the maker without creating a member |
-  | `tour-step-10` | Press the account avatar | The account menu opens |
-  | `tour-step-11` | Press Settings | Settings opens |
-  | `tour-step-12` | Press Usage | The usage pane appears, then Settings closes |
-  | `tour-step-13` | Try the quick-ask shortcut | Listening makes Finish appear |
+  | `tour-step-1`, `tour-step-1-seen` | Type a greeting and press Enter | The sent message, where the replies appear |
+  | `tour-step-2`, `tour-step-2-seen` | Press the permissions chip | Its menu, and what Manual and Auto mean |
+  | `tour-step-3` | Press the model chip | (its menu opens and the tour moves on into it) |
+  | `tour-step-4`, `tour-step-4-seen` | Press the model name inside the lit menu | The model list |
+  | `tour-step-5`, `tour-step-5-seen` | Press Connect apps | The dialog |
+  | `tour-step-6`, `tour-step-6-seen` | Press the sidebar plus | The member maker, cancelled on 懂了 without creating a member |
+  | `tour-step-7`, `tour-step-7-seen` | Press the account avatar | The account menu |
+  | `tour-step-8` | Try the quick-ask shortcut | Listening makes Finish appear |
 
-  The instruction advances 500 ms after its reaction. A missing action is skipped at entry and
-  a press with no reaction advances after four seconds. The same layer stays open for its next
-  action, and otherwise closes through the window's own path. The last step draws the configured
-  shortcut as key caps and offers Finish after eight seconds if listening has not started.
+  A missing action is skipped at entry, and a press with no reaction after four seconds still
+  explains (or moves on when nothing opened). 懂了 closes what the step opened through the
+  window's own path. No line of the tour ends with a full stop. The last step draws the
+  configured shortcut as key caps and offers Finish after eight seconds if listening has not started.
 - **Ending early** (`tour-end-ask`, `tour-close`): every step has the shared round End tour
   button at the top right and in the Tab order. End tour and Skip use the compact shared
   confirmation with the ordinary primary button and shared Cancel. The confirmation
@@ -169,17 +165,17 @@ lines, progress labels and confirmation copy come from fifteen `tour.*` catalogu
   the action fallback timer. Confirm closes the step's layer and removes the tour
   immediately. The saved answer stands. The farewell and its hops belong to Finish.
 - **The motion** (`tour-hop`): the scene enables motion and waits for the chain to settle.
-  The travel uses 70 ms of anticipation, one to three 190 ms airborne hops, 45 ms between
-  hops and a 180 ms final landing. Distances below 120 px use one hop, distances below
-  360 px use two, and the remaining moves use three. Each hop rises by 30% of its own
-  distance, clamped to 14–36 px. Its blue light follows the ground and narrows and dims
+  Raphael walks the whole way in small hops and never reappears elsewhere: 80 ms of
+  anticipation, one 250 ms airborne hop for about every 110 px (one below 60 px, at most
+  five), 70 ms on the ground between hops and a 180 ms final landing. Each hop rises by 35%
+  of its own distance, clamped to 16–40 px. Its blue light follows the ground and narrows and dims
   at the top. At rest the shared portrait sits on whole pixels, and only the light breathes
   over 2.6 s. The bubble appears after landing. Reduced motion places both immediately.
 - **The goodbye** (`tour-end`, `tour-end-closed`): Finish clears the dim, Raphael returns to
   the sidebar foot and hops twice as the farewell appears. Each hop is 12 px high and
   takes 150 ms. The farewell fades 4.5 s after it appears. Reduced motion skips both hops.
 - **The checks**: `page-unshifted` checks the app root and the zero scroll offsets in
-  `after-onboarding`, the offer scenes, `tour-step-1`, `tour-step-6`, `tour-step-7` and
+  `after-onboarding`, the offer scenes, `tour-step-1`, `tour-step-5`, every `-seen` scene and
   `tour-end`. The dim covers the window edges and opens on the action. The full group stays
   inside the viewport and clears the ring and every visible pressable element in the open
   layer, including connection buttons. The group tries the space beside the layer, the open
@@ -187,7 +183,7 @@ lines, progress labels and confirmation copy come from fifteen `tour.*` catalogu
   strip. In a short window, the member maker can move sideways to keep its look picker usable. Check both apps scenes at the owner's 1080 × 640 size as well as the usual sizes.
 
 ```powershell
-npm run look -- tour-offer tour-offer-returning tour-offer-settings-open tour-offer-skip-ask tour-offer-skip tour-offer-escape tour-step-1 tour-step-2 tour-step-3 tour-step-4 tour-step-5 tour-step-6 tour-step-7 tour-step-8 tour-step-9 tour-step-10 tour-step-11 tour-step-12 tour-step-13 tour-hop tour-end tour-end-closed tour-end-ask tour-close --theme both --width 1120,720,1920x1080,1080x640
+npm run look -- tour-offer tour-offer-returning tour-offer-settings-open tour-offer-skip-ask tour-offer-skip tour-offer-escape tour-step-1 tour-step-1-seen tour-step-2 tour-step-2-seen tour-step-3 tour-step-4 tour-step-4-seen tour-step-5 tour-step-5-seen tour-step-6 tour-step-6-seen tour-step-7 tour-step-7-seen tour-step-8 tour-hop tour-end tour-end-closed tour-end-ask tour-close --theme both --width 1120,720,1920x1080,1080x640
 ```
 
 Native verification still needs the real window. Look exercises the app with fixture data.
