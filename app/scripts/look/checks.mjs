@@ -9593,6 +9593,62 @@ export function checkRendered(name, context = {}) {
     directoryCloseStays(dialog);
     return { check: name, kinds: sections.length };
   }
+  if (name === "provider-editor") {
+    const dialog = document.querySelector("#pv-dialog");
+    require(visible(dialog) && dialog.classList.contains("pv-editor") && !dialog.classList.contains("pv-catalog"), "the narrow provider dialog is visible");
+    const box = dialog.getBoundingClientRect(), view = dialog.dataset.pvView;
+    require(box.width <= 480.5, `a narrow dialog: ${box.width}`);
+    require(box.left >= 0 && box.right <= innerWidth + 0.5 && box.top >= 0 && box.bottom <= innerHeight + 0.5, "the dialog fits the window");
+    require(!/請先按|儲存後可測試|尚未找到模型|找到的模型|測試連線|移除/.test(dialog.textContent), "only the current view's words are visible");
+    require(!dialog.querySelector('[data-pv="test"]'), "testing has no manual button");
+    const head = dialog.querySelector(".cs-dlg-head"), close = head.querySelector('[data-pv="close"]');
+    require(visible(close) && close === head.lastElementChild, "close is the last control in the header");
+    const status = dialog.querySelector(".pv-feedback .pv-test-status");
+    const foot = dialog.querySelector(".pv-footer");
+    const docs = dialog.querySelector('[data-pv="docs"]');
+    if (view === "models") {
+      const search = dialog.querySelector("#pv-model-search"), list = dialog.querySelector(".pv-model-scroll");
+      const gear = head.querySelector('[data-pv="settings"]');
+      require(visible(gear) && gear === close.previousElementSibling, "settings sits beside close");
+      require(!foot && !docs && !dialog.querySelector(".pv-field"), "models show no footer or setup fields");
+      require(visible(status) && visible(search) && document.activeElement === search && visible(list), "the status, focused search and scrolling results are visible");
+      require(list.getBoundingClientRect().bottom <= box.bottom + 1, "the models scroll inside the dialog");
+      require(!dialog.querySelector(".pv-models h2, .pv-models h3"), "model results need no heading");
+      if (status.classList.contains("is-error")) {
+        const repair = status.querySelector(':scope > button.btn.sm[data-pv="settings"][data-k="pv-repair"]');
+        require(visible(repair) && repair.previousSibling?.textContent.trim() && parseFloat(getComputedStyle(repair).borderTopWidth) > 0, "the error text is followed by a small framed repair button");
+      }
+    } else {
+      const column = dialog.querySelector(".pv-setup").getBoundingClientRect();
+      require(column.width >= box.width - 40, `the column fills the dialog: ${column.width} of ${box.width}`);
+      const fields = [...dialog.querySelectorAll(".pv-field")];
+      require(fields.length >= 1 && fields.every(field => Math.abs(field.getBoundingClientRect().left - column.left) < 1 && Math.abs(field.getBoundingClientRect().width - column.width) < 1), "every field is as wide as the column");
+      for (const input of dialog.querySelectorAll(".pv-field input")) {
+        const label = dialog.querySelector(`label[for="${input.id}"]`)?.textContent.trim();
+        require(!input.placeholder || input.placeholder !== label, `a field's placeholder repeats its label: ${label}`);
+      }
+      require(!dialog.querySelector("#pv-model-search, .pv-model-list"), "fields have no model search or results");
+      if (view === "setup") {
+        const buttons = [...foot.querySelectorAll("button")];
+        require(buttons.length === 1 && buttons[0].dataset.pv === "connect" && buttons[0].classList.contains("pri"), "Connect is the one primary footer action");
+        require(Math.abs(box.right - buttons[0].getBoundingClientRect().right) <= 24, "Connect sits at the right");
+        if (status) require(status.getBoundingClientRect().top >= fields.at(-1).getBoundingClientRect().bottom - 1 && !status.querySelector("svg, button"), "a plain error appears below the last field");
+        if (docs) {
+          const style = getComputedStyle(docs), row = docs.closest(".pv-label-row").getBoundingClientRect();
+          const keyField = docs.closest(".pv-field").querySelector(".svc-line").getBoundingClientRect();
+          require(style.backgroundColor === "rgba(0, 0, 0, 0)" && parseFloat(style.borderTopWidth) === 0, "the key page is a plain link");
+          require(docs.getBoundingClientRect().right <= keyField.right + 1 && docs.getBoundingClientRect().bottom <= keyField.top + 1 && row.height < 32, "the link sits on the key label row");
+        }
+      } else {
+        require(view === "settings" && visible(head.querySelector('[data-pv="back"]')), "settings has a Back button");
+        const trash = head.querySelector('[data-pv="remove"]'), replace = dialog.querySelector('[data-pv="replace"]');
+        require(visible(trash) && trash === close.previousElementSibling && !trash.textContent.trim(), "the trash icon sits beside close");
+        require(visible(replace) && replace.matches(".svc-line > .val + button.btn.sm") && parseFloat(getComputedStyle(replace).borderTopWidth) > 0 && !docs, "a configured key has a small framed Replace button to the right of its status");
+        require(!foot?.children.length, "unchanged settings have no footer controls");
+      }
+    }
+    return { check: name, view, width: Math.round(box.width) };
+  }
   if (name === "provider-directory-stt") {
     // Connected from speech to text: only the kinds that turn speech into text, no subscription, and the reason said.
     const dialog = document.querySelector("#pv-dialog");

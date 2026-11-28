@@ -17,7 +17,7 @@ const api = vi.hoisted(() => ({
   desktopStatus: vi.fn(),
   historyList: vi.fn(), historyClear: vi.fn(), agentHistoryClear: vi.fn(), core: vi.fn(),
   keyboardHasAltgr: vi.fn(), microphonePermission: vi.fn(), microphoneAsk: vi.fn(), accessibilityAccess: vi.fn(), languagesList: vi.fn(), modelsCatalog: vi.fn(), modelsLocal: vi.fn(), hotkeysPause: vi.fn(), audioMonitor: vi.fn(),
-  providersKinds: vi.fn(), providersList: vi.fn(), providersModels: vi.fn(), providersAdd: vi.fn(), servicesStatus: vi.fn(),
+  providersKinds: vi.fn(), providersList: vi.fn(), providersModels: vi.fn(), providersAdd: vi.fn(), providersTest: vi.fn(), servicesStatus: vi.fn(),
   brainsCli: vi.fn(), brainsCliLogin: vi.fn(), brainsCliDisconnect: vi.fn(), openExternalUrl: vi.fn(),
   chatgptStatus: vi.fn(async () => ({ signed_in: false })), chatgptSignIn: vi.fn(), chatgptCancel: vi.fn(), chatgptSignOut: vi.fn(), chatgptModels: vi.fn(async () => ({ models: [] })),
   usageAllowances: vi.fn(), usageAnalytics: vi.fn(), membersList: vi.fn(),
@@ -898,8 +898,9 @@ test("provider dropdowns and local JSON fields work through settings event deleg
   area.value = '{"client_email":"test@example.com","private_key":"secret"}'; area.dispatchEvent(new Event("input", { bubbles: true }));
   const project = page.el.querySelector<HTMLInputElement>('[id$="-project"]')!;
   project.value = "project"; project.dispatchEvent(new Event("input", { bubbles: true }));
-  api.providersAdd.mockRejectedValue(new Error("failed")); click('[data-pv="save"]'); await flush();
-  expect(api.providersAdd).toHaveBeenCalledWith({ kind: "vertex", name: "Vertex", location: "asia-east1", project: "project", service_account: '{"client_email":"test@example.com","private_key":"secret"}' });
+  api.providersTest.mockResolvedValue({ ok: true, models: 0, found: [] });
+  api.providersAdd.mockRejectedValue(new Error("failed")); click('[data-pv="connect"]'); await flush();
+  expect(api.providersAdd).toHaveBeenCalledWith({ kind: "vertex", location: "asia-east1", project: "project", service_account: '{"client_email":"test@example.com","private_key":"secret"}' });
 });
 
 test("pickers opened outside Models include enabled connections with zero models for their role", async () => {

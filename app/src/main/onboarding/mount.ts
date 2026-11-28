@@ -728,9 +728,13 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     }
     openMenuOnArrow(e);
   }, { signal });
+  root.addEventListener("change", (e) => {
+    if (!destroyed && flow.step === "tools" && e.target instanceof Element) void providers.change(e.target);
+  }, { signal });
   root.addEventListener("input", (e) => {
-    if (destroyed || !(e.target instanceof HTMLInputElement)) return;
+    if (destroyed || !(e.target instanceof Element)) return;
     if (flow.step === "tools") providers.input(e.target);
+    if (!(e.target instanceof HTMLInputElement)) return;
     if (flow.step === "slime" && e.target.id === "ob-first-name") {
       const ready = !!cleanName(firstName);
       firstName = e.target.value;
