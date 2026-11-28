@@ -556,6 +556,7 @@
     "er": "以下是研究資料的結構。\n\n```mermaid\nerDiagram\nRESEARCH ||--o{ SOURCE : contains\nRESEARCH {\n  int id\n  string title\n}\nSOURCE {\n  int id\n  string address\n}\n```\n\n每份研究可以保留多個來源。",
     "architecture": "以下是摘要系統的結構。\n\n```mermaid\narchitecture-beta\ngroup api(cloud)[Research]\nservice db(database)[Sources] in api\nservice server(server)[Summary] in api\ndb:R -- L:server\n```\n\n資料與摘要在同一個系統內整理。",
     "wide": "以下表格欄位較多，可以在卡片內左右捲動。\n\n| 一 | 二 | 三 | 四 | 五 | 六 | 七 | 八 | 九 | 十 |\n| - | - | - | - | - | - | - | - | - | - |\n| 第一項 | 第二項 | 第三項 | 第四項 | 第五項 | 第六項 | 第七項 | 第八項 | 第九項 | 第十項 |\n\n頁面仍保持原本的閱讀寬度。",
+    "fileLinkTable": "磁碟清理前後的量測結果：\n\n| 量測項目 | 清理前 | 清理後 | 變化 |\n| --- | --- | --- | --- |\n| 主磁碟剩餘空間（Macintosh HD，總計 494.4 GB） | 130.8 GB（121.8 GiB） | 140.7 GB（131.1 GiB） | +9.9 GB |\n| 剩餘空間佔比 | 26.5% | 28.5% | +2.0 個百分點 |\n| Docker 虛擬磁碟（[Docker.raw](file:///Users/owner/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw)） | 19.33 GB（18.00 GiB） | 14.45 GB（13.46 GiB） | −4.88 GB |\n\n清理只移除了快取與停用的映像檔。",
     "shortColumns": "各個燈號的意思如下。\n\n| 燈號 | 狀態 | 意思 | 對應部件 | 出問題時看哪裡 |\n| --- | --- | --- | --- | --- |\n| 綠燈恆亮 | 正常供電 | 控制器有電 | 主電源模組 | 12V 有沒有接好，保險絲是否熔斷，接頭是否鬆脫 |\n| 黃燈閃爍 | 通訊中斷 | 收不到 CAN 訊號 | CAN 收發器 | CAN H/L、波特率、終端電阻 120Ω 是否都有接上 |\n| 紅燈恆亮 | 過溫保護 | 溫度超過上限 | 散熱風扇 | 風扇是否轉動、散熱片是否積灰、環境溫度 |\n\n照順序檢查就好。"
   },
   "imageResponses": { "https://logos.composio.dev/api/slack": "assets/slack.svg", "https://logos.composio.dev/api/outlook": "assets/catalog-square.svg", "https://images.example.test/rich-preview.svg?synthetic=consent": "assets/slack.svg" },

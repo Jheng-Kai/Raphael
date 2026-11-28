@@ -2082,10 +2082,13 @@ question key down and up and no cancellation. `composer-voice-attachment-quick` 
 
 See the feature map. A reply's words grow up to the reading column; a table, a diagram or code takes the
 conversation's whole column, as wide as the composer, and a table's columns take the room their contents need (R-UI-167,
-`reply-measure` and `rich-table-example` measure it). Selected acceptance:
+`reply-measure` and `rich-table-example` measure it). A file linked by its `file://` address shows the path it names, which
+wraps in its cell, so the table fits its card (`rich-file-link-table`, the owner's disk-cleanup table, whose raw link once
+pushed the last columns out of the card); a table still wider than its card keeps a thin bar along its bottom to drag
+(`rich-wide-table` reads its style: the headless browser draws no bar). Selected acceptance:
 
 ```powershell
-npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-table-short-columns rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
+npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-table-short-columns rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table rich-file-link-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
 A diagram opens larger from its whole chart, not only the header's expand icon (R-UI-173): the drawn chart under the header is
@@ -2352,7 +2355,11 @@ core/tests/agent/test_routine_event.py and core/tests/members/test_harness.py.
 
 ## Local paths in member replies
 
-A checked local path is inline code in the conversation, with the same text, background and
+A link to a file on this computer never shows its raw words (R-UI-184): a `file://` address is the path it names, and a
+file linked under its own name (`[report.md](file:///…/report.md)`, in code marks or not) shows that name, with the whole
+path as its title and the press. A label of other words keeps them beside the whole path. The owner's file manager wrote
+230 such links in 44 replies (plain names, names in code marks, encoded spaces); each now renders with no `](`, `file://`
+or `%20` left in its words. A checked local path is inline code in the conversation, with the same text, background and
 spacing as other code. Hover or keyboard focus adds a thin underline and a pointer. Keyboard
 focus also shows the shared focus ring. A path outside the member's workspace, the team files,
 the member and team shared folders and the remembered projects stays plain code. The core resolves

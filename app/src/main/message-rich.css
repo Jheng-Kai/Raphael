@@ -11,7 +11,8 @@
 .rich-head > span { min-width: 0; overflow-wrap: anywhere; }
 .rich-head > div { display: flex; flex-shrink: 0; gap: var(--sp-1); }
 .rich-head .i { width: 16px; height: 16px; }
-.rich-scroll { overflow-x: auto; max-width: 100%; }
+/* A table still wider than its card scrolls inside it, with a thin bar along its bottom to drag: the app hides scrollbars elsewhere (R-UI-62), and with a mouse no hidden bar can be dragged (R-UI-167). */
+.rich-scroll { overflow-x: auto; max-width: 100%; scrollbar-width: thin; }
 /* Columns take the room their contents need: a number column stays narrow and the long text gets the rest. */
 .message-table table { width: 100%; border-collapse: collapse; table-layout: auto; }
 /* Lines break between words (any two Chinese characters, or at spaces), never inside a word of letters and digits such as
