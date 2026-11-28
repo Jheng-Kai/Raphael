@@ -639,6 +639,8 @@ export const hotkeysPause = (paused: boolean): Promise<void> =>
  * question (a lesson that shows the key being pressed). Always switch it off again.
  */
 export const hotkeysPractice = (on: boolean): Promise<void> => invoke("hotkeys_practice", { on });
+/** The practice's answer: Raphael's emblem appears in its corner with 《`prefix`。`text`》 and vanishes, as a real answer does. */
+export const overlayRehearse = (prefix: string, text: string): Promise<void> => invoke("overlay_rehearse", { prefix, text });
 /** Esc for a dictation or question that is under way (the app ignores it when none is). */
 export const cancelSession = (): Promise<void> => invoke("window_hotkey", { kind: "cancel" });
 /** Whether the privacy settings of Windows let desktop apps use the microphone. */

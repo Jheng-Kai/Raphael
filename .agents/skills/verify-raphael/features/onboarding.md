@@ -156,7 +156,7 @@ lines, progress labels and confirmation copy come from fifteen `tour.*` catalogu
   | `tour-step-9`, `tour-step-9-seen` | Press 聽寫 in the lit account menu | The dictation page, beside the dimmed sidebar |
   | `tour-step-10`, `tour-step-10-seen` | Press 行事曆 in the account menu the tour opened again | The calendar page |
   | `tour-step-11`, `tour-step-11-seen` | Press Raphael's row | Raphael's own conversation, which stays open to the end |
-  | `tour-step-12` | Hold the quick-ask keys together (practised: they start nothing) | Each large 3D key sinks and lights while held; all down calls a stand-in Raphael in the lower right, which goes by itself, then Finish |
+  | `tour-step-12` | Hold the quick-ask keys together (practised: they start nothing) | Each large 3D key sinks and lights while held; all down makes the real quick-ask corner answer one line and vanish (nothing recorded), and Finish shows |
 
   A missing action is skipped at entry. Nothing moves on by the clock: a press the app does not react to leaves the step
   as it was. 好的 closes what the step opened through the window's own path; after the dictation and calendar pages it

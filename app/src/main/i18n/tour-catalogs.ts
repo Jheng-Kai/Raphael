@@ -45,6 +45,7 @@ export const tourZh = {
   "tour.keysTitle": "隨時叫我",
   "tour.keys": "不管你在電腦的哪裡，只要同時按下這組鍵就能叫出我，現在試試看吧",
   "tour.summon": "叫我嗎？這次只是演習，下次按這組鍵我就會真的出來幫你",
+  "tour.summonPrefix": "答",
   "tour.bye": "完成了！之後有任何問題，隨時叫我就好",
 } as const;
 
@@ -96,6 +97,7 @@ export const tourEn: Tour = {
   "tour.keysTitle": "Call me anytime",
   "tour.keys": "Wherever you are on your computer, press these keys together to call me, give it a try",
   "tour.summon": "Did you call? This is just a drill, next time these keys bring the real me",
+  "tour.summonPrefix": "Answer",
   "tour.bye": "All done! Call me anytime you have a question",
 };
 
@@ -145,6 +147,7 @@ export const tourJa: Tour = {
   "tour.keysTitle": "いつでも呼んで",
   "tour.keys": "パソコンのどこでもこのキーを同時に押すと呼び出せます、今試してみましょう",
   "tour.summon": "呼びました？今回は練習です、次からはこのキーで本物のわたしが出てきます",
+  "tour.summonPrefix": "解",
   "tour.bye": "完了！基本はばっちりです、いつでも呼んでください",
 };
 
@@ -194,6 +197,7 @@ export const tourZhCN: Tour = {
   "tour.keysTitle": "随时叫我",
   "tour.keys": "不管你在电脑的哪里，只要同时按下这组键就能叫出我，现在试试看吧",
   "tour.summon": "叫我吗？这次只是演习，下次按这组键我就会真的出来帮你",
+  "tour.summonPrefix": "解",
   "tour.bye": "完成了！之后有任何问题，随时叫我就好",
 };
 
@@ -243,6 +247,7 @@ export const tourKo: Tour = {
   "tour.keysTitle": "언제든 불러요",
   "tour.keys": "컴퓨터 어디서든 이 키를 함께 누르면 저를 부를 수 있어요, 지금 해 보세요",
   "tour.summon": "부르셨어요? 이번엔 연습이에요, 다음부터 이 키를 누르면 진짜 제가 나와요",
+  "tour.summonPrefix": "답변",
   "tour.bye": "완료! 기본 사용법을 다 배웠어요, 언제든 불러 주세요",
 };
 
@@ -292,6 +297,7 @@ export const tourEs: Tour = {
   "tour.keysTitle": "Llámame cuando quieras",
   "tour.keys": "Pulsa estas teclas a la vez en cualquier parte del ordenador para llamarme, pruébalo ahora",
   "tour.summon": "¿Me llamaste? Esto es solo un simulacro, la próxima vez estas teclas traerán al yo de verdad",
+  "tour.summonPrefix": "Respuesta",
   "tour.bye": "¡Listo! Ya sabes lo básico, llámame cuando quieras",
 };
 
@@ -341,6 +347,7 @@ export const tourFr: Tour = {
   "tour.keysTitle": "Appelle-moi quand tu veux",
   "tour.keys": "Appuyez sur ces touches ensemble n’importe où pour m’appeler, essayez maintenant",
   "tour.summon": "Vous m’avez appelé ? Ce n’est qu’un exercice, la prochaine fois ces touches feront venir le vrai moi",
+  "tour.summonPrefix": "Réponse",
   "tour.bye": "C’est fini ! Vous connaissez l’essentiel, appelez-moi quand vous voulez",
 };
 
@@ -390,6 +397,7 @@ export const tourDe: Tour = {
   "tour.keysTitle": "Ruf mich jederzeit",
   "tour.keys": "Drücken Sie diese Tasten zusammen, egal wo am Computer, um mich zu rufen, probieren Sie es jetzt",
   "tour.summon": "Haben Sie gerufen? Das ist nur eine Übung, beim nächsten Mal holen diese Tasten mich wirklich",
+  "tour.summonPrefix": "Antwort",
   "tour.bye": "Fertig! Sie kennen die Grundlagen, rufen Sie mich jederzeit",
 };
 
@@ -439,6 +447,7 @@ export const tourPtBR: Tour = {
   "tour.keysTitle": "Me chame quando quiser",
   "tour.keys": "Aperte estas teclas juntas em qualquer lugar do computador para me chamar, tente agora",
   "tour.summon": "Me chamou? Isso é só um treino, da próxima vez essas teclas trazem o eu de verdade",
+  "tour.summonPrefix": "Resposta",
   "tour.bye": "Pronto! Você já sabe o básico, me chame quando quiser",
 };
 
@@ -488,6 +497,7 @@ export const tourIt: Tour = {
   "tour.keysTitle": "Chiamami quando vuoi",
   "tour.keys": "Premi insieme questi tasti ovunque sul computer per chiamarmi, provalo ora",
   "tour.summon": "Mi hai chiamato? È solo una prova, la prossima volta questi tasti chiameranno me davvero",
+  "tour.summonPrefix": "Risposta",
   "tour.bye": "Fatto! Ora conosci le basi, chiamami quando vuoi",
 };
 
@@ -537,6 +547,7 @@ export const tourRu: Tour = {
   "tour.keysTitle": "Зови меня в любое время",
   "tour.keys": "Нажмите эти клавиши вместе в любом месте компьютера, чтобы позвать меня, попробуйте сейчас",
   "tour.summon": "Звали? Это только тренировка, в следующий раз эти клавиши позовут меня по-настоящему",
+  "tour.summonPrefix": "Ответ",
   "tour.bye": "Готово! Основы вы знаете, зовите меня в любое время",
 };
 
@@ -586,6 +597,7 @@ export const tourVi: Tour = {
   "tour.keysTitle": "Gọi mình bất cứ lúc nào",
   "tour.keys": "Nhấn cùng lúc tổ hợp phím này ở bất cứ đâu trên máy để gọi mình, thử ngay nhé",
   "tour.summon": "Gọi mình à? Lần này chỉ là tập dượt, lần sau nhấn tổ hợp này là mình xuất hiện thật",
+  "tour.summonPrefix": "Trả lời",
   "tour.bye": "Xong rồi! Bạn đã biết những điều cơ bản, cần gì cứ gọi mình",
 };
 
@@ -635,6 +647,7 @@ export const tourTh: Tour = {
   "tour.keysTitle": "เรียกฉันได้ทุกเมื่อ",
   "tour.keys": "กดปุ่มชุดนี้พร้อมกันที่ไหนก็ได้ในคอมเพื่อเรียกฉัน ลองเลย",
   "tour.summon": "เรียกฉันเหรอ ครั้งนี้แค่ซ้อมนะ ครั้งหน้ากดปุ่มชุดนี้ ฉันตัวจริงจะมาเลย",
+  "tour.summonPrefix": "คำตอบ",
   "tour.bye": "เรียบร้อย! รู้วิธีใช้พื้นฐานแล้ว เรียกฉันได้ทุกเมื่อ",
 };
 
@@ -684,6 +697,7 @@ export const tourId: Tour = {
   "tour.keysTitle": "Panggil aku kapan saja",
   "tour.keys": "Tekan tombol ini bersamaan di mana saja di komputer untuk memanggilku, coba sekarang",
   "tour.summon": "Memanggilku? Ini cuma latihan, lain kali tombol ini akan memanggil aku yang asli",
+  "tour.summonPrefix": "Jawaban",
   "tour.bye": "Selesai! Kamu sudah tahu dasarnya, panggil aku kapan saja",
 };
 
@@ -733,5 +747,6 @@ export const tourTr: Tour = {
   "tour.keysTitle": "Beni istediğin zaman çağır",
   "tour.keys": "Bilgisayarın her yerinde bu tuşlara birlikte basarak beni çağırabilirsin, şimdi dene",
   "tour.summon": "Beni mi çağırdın? Bu sadece bir prova, bir dahaki sefere bu tuşlar gerçek beni getirir",
+  "tour.summonPrefix": "Yanıt",
   "tour.bye": "Bitti! Temelleri öğrendin, beni istediğin zaman çağır",
 };

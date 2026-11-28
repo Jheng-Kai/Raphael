@@ -72,12 +72,12 @@ function harness(patch: Partial<DeviceSettings> = {}) {
   const go = vi.fn(() => { find("#main").querySelectorAll(".page-dictation, .au-page, .ms-pane").forEach(page => page.remove()); conversation = true; });
   const listeners = new Set<(event: MainEvent) => void>();
   const emit = (event: MainEvent) => listeners.forEach(listener => listener(event));
-  const practiseKeys = vi.fn();
-  const tour = createTour({ device: () => device, setDevice, closeSettings, go, practiseKeys, isConversation: () => conversation,
+  const practiseKeys = vi.fn(), rehearse = vi.fn();
+  const tour = createTour({ device: () => device, setDevice, closeSettings, go, practiseKeys, rehearse, isConversation: () => conversation,
     onEvent: listener => { listeners.add(listener); return () => void listeners.delete(listener); } });
   const showConversation = (shown: boolean) => { conversation = shown; tour.conversationChanged(); };
   tours.push(tour);
-  return { tour, device, setDevice, closeSettings, showConversation, emit, go, practiseKeys };
+  return { tour, device, setDevice, closeSettings, showConversation, emit, go, practiseKeys, rehearse };
 }
 
 async function offer(tour: Tour): Promise<void> {
@@ -481,8 +481,8 @@ test("a missing target skips immediately and keeps the original progress count",
   expect(count()).toBe("2/12");
 });
 
-test("the shortcut's keys are large caps that light while held, and all of them down calls a stand-in Raphael before Finish", async () => {
-  const { tour } = harness();
+test("the shortcut's keys are large caps that light while held, and all of them down makes the real corner answer before Finish", async () => {
+  const { tour, rehearse } = harness();
   await offer(tour);
   for (const selector of ['[data-col="add"]', ".conversation-trigger", ".mp-trigger", ".sidebar-apps", ".sidebar-account"]) find(selector).remove();
   button("start").click();
@@ -501,10 +501,8 @@ test("the shortcut's keys are large caps that light while held, and all of them 
   expect(button("done")).toBeNull();
   keyAt("keydown", "AltRight", "Alt");
   expect(caps().map(cap => cap.hasAttribute("data-down"))).toEqual([true, true]);
-  // A stand-in Raphael answers in the corner for a moment, listening to nothing; Finish comes once it has gone.
-  expect(find(".tour-summon")?.textContent).toContain("演習");
-  expect(button("done")).toBeNull();
-  await settle(3000);
+  // The real quick ask's corner answers with one playful line and goes by itself, listening to nothing; Finish shows.
+  expect(rehearse).toHaveBeenCalledExactlyOnceWith("答", t("tour.summon"));
   expect(find(".tour-summon")).toBeNull();
   expect(button("done")?.classList.contains("pri")).toBe(true);
 });

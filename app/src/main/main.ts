@@ -252,7 +252,8 @@ watchChipRows(document.body);
   let current: MainPageId | null = null;
   let settingsOpen = false;
   tour = createTour({ ...ctx, isConversation: () => current === "agent" && guide.hidden && !settingsOpen && agent.conversationShown(),
-    practiseKeys: on => void api.hotkeysPractice(on).catch(error => console.warn("tour: the keys could not be practised", error)) });
+    practiseKeys: on => void api.hotkeysPractice(on).catch(error => console.warn("tour: the keys could not be practised", error)),
+    rehearse: (prefix, text) => void api.overlayRehearse(prefix, text).catch(error => console.warn("tour: the corner could not answer", error)) });
   /** What had the focus before the settings opened: it gets it back when they close. */
   let opener: HTMLElement | null = null;
   let shownAt = 0;

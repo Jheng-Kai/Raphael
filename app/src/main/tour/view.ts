@@ -1,7 +1,6 @@
 // What the tour draws: a dim over the window with one cut-out, Raphael's slime, and its bubble. The controller (tour.ts)
 // says what to show; this measures, places and moves. Nothing here knows what a step means.
 
-import { avatarHTML } from "../avatar";
 import { RAPHAEL_ID, faceHTML } from "../members";
 import { bindNavLayer } from "../nav-layers";
 import { btn, esc, headerCloseButton, reducedMotion, replay } from "../ui";
@@ -57,8 +56,6 @@ export interface TourView {
   hush(): void;
   /** Lights each key cap that is held down. */
   pressKeys(down: boolean[]): void;
-  /** The practice's stand-in for Raphael's quick ask: it says `words` in the lower right, goes again by itself, then `done`. */
-  summon(words: string, done: () => void): void;
   /** Measures the target and places the group again, without a hop. */
   reflow(): void;
   contains(node: Node | null): boolean;
@@ -77,9 +74,6 @@ const GROUND_INSET = 16;
 const MIN_BUBBLE = 200;
 /** How long the words being left fade out in place (tour.css `tour-words-out`, with a little room). */
 const GHOST_MS = 220;
-/** How long the practice's stand-in for Raphael stays to be read, and how long it takes to go (tour.css `tour-summon-out`). */
-const SUMMON_MS = 2600;
-const SUMMON_OUT_MS = 220;
 // The 64 px portrait has padding around its drawing. Anchor the pose and light at the drawn foot.
 const FOOT = 52;
 const BODY_HEIGHT = 40;
@@ -108,7 +102,6 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
   let leaving: ReturnType<typeof setTimeout> | undefined;
   const rig: Rig = { ground, body: slime, glow };
   let playing: PlayingHops | null = null;
-  let summoned: HTMLElement | null = null;
 
   function cancelMotion(): void {
     delete root.dataset.facing;
@@ -337,20 +330,6 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
       bubble.classList.add("is-hushed");
       // The frame goes with the words: what was pressed is done with, and the next frame comes with the next words.
       spotEl.hidden = true;
-    },
-    summon(words, done) {
-      if (summoned) return;
-      // A stand-in for the real quick ask in the window's lower right: it listens to nothing and goes again on its own.
-      const stand = document.createElement("div");
-      stand.className = "tour-summon";
-      stand.setAttribute("role", "status");
-      stand.innerHTML = `<span class="tour-summon-face">${avatarHTML({ size: 56, loop: true })}</span><p class="tour-summon-words">${esc(words)}</p>`;
-      root.append(stand);
-      summoned = stand;
-      setTimeout(() => {
-        stand.classList.add("is-going");
-        setTimeout(() => { stand.remove(); if (summoned === stand) summoned = null; done(); }, reducedMotion() ? 0 : SUMMON_OUT_MS);
-      }, SUMMON_MS);
     },
     pressKeys(down) {
       bubble.querySelectorAll<HTMLElement>(".tour-key").forEach((cap, index) => cap.toggleAttribute("data-down", !!down[index]));

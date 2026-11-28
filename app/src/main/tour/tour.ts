@@ -16,6 +16,8 @@ export type TourHost = Pick<AppContext, "closeSettings" | "onEvent" | "go"> & {
   isConversation(): boolean;
   /** Raphael's keys only report that they went down or up (`Hotkey` events) and start nothing: the last step's practice. */
   practiseKeys(on: boolean): void;
+  /** The real quick ask's corner answers 《`prefix`。`text`》 and vanishes by itself, recording nothing. */
+  rehearse(prefix: string, text: string): void;
 };
 
 export interface Tour {
@@ -276,10 +278,11 @@ export function createTour(host: TourHost): Tour {
     view?.pressKeys(codes.map((_, at) => held.has(at)));
     if (codes.length && held.size === codes.length) summon();
   }
-  /** The keys worked: a stand-in Raphael answers in the corner for a moment (nothing listens), and then Finish shows. */
+  /** The keys worked: the real quick ask's corner answers with one playful line and goes by itself (nothing listens), and Finish shows. */
   function summon(): void {
-    if (finishReady || !view) return;
-    view.summon(t("tour.summon"), () => { if (phase === "step" && stepNow().keys) showFinish(); });
+    if (finishReady) return;
+    host.rehearse(t("tour.summonPrefix"), t("tour.summon"));
+    showFinish();
   }
   /** A key the window itself sees (the hook takes Raphael's keys first, and reports them as `Hotkey` events instead). */
   function trackKeys(event: KeyboardEvent): void {
