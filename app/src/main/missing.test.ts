@@ -105,24 +105,31 @@ test("a dictionary notice that could not be delivered names the dictionary and o
   expect(root.querySelector("[data-missing-repair]")).toBeNull();
 });
 
-test("the Accessibility note only opens its pane, says how to add the app there with +, and never clears the app's entry", async () => {
+test("the Accessibility note opens its pane with the card that drags the app into its list, says how to add the app there with +, and never clears the app's entry", async () => {
   // Cleared while macOS's own question was up, the app was missing from the list that question opened, with no switch to
-  // turn on: the note's button opens the pane, and its words say to add the app with + when it is not listed.
+  // turn on: the note's button opens the pane with the card under it (R-PRIV-AX-02), the pane alone if that fails, and the
+  // note's words say to add the app with + when it is not listed.
   const api = await import("./api");
   expect("repairAccessibility" in api).toBe(false);
   const open = vi.spyOn(api, "openLink").mockResolvedValue(undefined);
+  const guide = vi.spyOn(api, "permissionGuideOpen").mockResolvedValue(true);
   document.body.innerHTML = missingHTML({ resource: "hotkeys", requirement: "accessibility", state: "missing", repair: null });
   expect(document.body.textContent).toContain(t("missing.accessibility"));
   const go = vi.fn();
   const stop = bindMissing(document, go);
+  setLocale("en");
   document.querySelector<HTMLButtonElement>("[data-missing-pane]")!.click();
   await Promise.resolve();
-  expect(open).toHaveBeenCalledExactlyOnceWith("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
+  expect(guide).toHaveBeenCalledExactlyOnceWith("accessibility", "en");
+  expect(open).not.toHaveBeenCalled();
+  guide.mockRejectedValueOnce(new Error("no card"));
+  document.querySelector<HTMLButtonElement>("[data-missing-pane]")!.click();
+  await vi.waitFor(() => expect(open).toHaveBeenCalledExactlyOnceWith("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"));
   expect(go).not.toHaveBeenCalled();
   for (const locale of ["zh-TW", "en"] as const) {
     setLocale(locale);
     expect(t("missing.accessibility")).toMatch(/[+＋]/);
   }
   setLocale("zh-TW");
-  stop(); open.mockRestore();
+  stop(); open.mockRestore(); guide.mockRestore();
 });

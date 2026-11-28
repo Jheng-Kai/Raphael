@@ -982,6 +982,7 @@ export const zhTW = {
   "settings.052": "核心目前沒有回應，請稍後重新開啟設定，若仍無法使用請重新啟動拉斐爾。",
   "settings.054": "你的鍵盤配置把右 Alt 當 AltGr 用，建議換一個快捷鍵。",
   "settings.micUndecided": "拉斐爾還沒有取得麥克風權限。按「測試麥克風」，macOS 會詢問一次。",
+  "permissionGuide.drag": "把下方的 {p0} 拖進上方清單，再打開它的開關。",
   "settings.micAsk": "測試麥克風",
   "settings.055": "聽寫方式",
   "settings.059": "介面語言",

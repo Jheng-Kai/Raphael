@@ -31,7 +31,10 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
   (`permissions::accessibility(true)`; macOS 26 asks again for an entry of another signature) and the window adds no
   note beside it (R-PRIV-AX-01). The app never clears its own entry: cleared while that question was up, Raphael was
   missing from the list the question opened. Raphael missing from the list, or on without effect, is added from
-  Applications with + (the listed one removed with − first), which the note says. Another version or signature
+  Applications with + (the listed one removed with − first), which the note says. The note's button opens the pane with
+  a card under System Settings (R-PRIV-AX-02, `permission_guide.rs`): Raphael's own icon on it is dragged into the list
+  (AppKit's drag of the running bundle, `macos/guide.rs`), and the card says to turn its switch on; it follows System
+  Settings' window, shows only while System Settings is in front, and goes once the permission is on. Another version or signature
   of the app (a build folder, an older disk image) may not match the entry allowed, and opening the app again can bring
   forward a copy still running: quit every copy before allowing the one in Applications. A local build signed with
   one Apple Development identity keeps its permissions across rebuilds.
@@ -159,7 +162,7 @@ An unavailable tidy model or connection points to Models, and a timeout invites 
 An unsuccessful tidy keeps the original selection and clipboard. Its RPC reply carries no replacement text.
 
 ```powershell
-npm run look -- settings-tidy-key settings-mic-undecided settings-mic-denied settings-accessibility-off dictation-overview dictation --theme both --width 1120,720,1920x1080
+npm run look -- settings-tidy-key settings-mic-undecided settings-mic-denied settings-accessibility-off permission-guide-card dictation-overview dictation --theme both --width 1120,720,1920x1080
 ```
 
 The other layers, each from its own folder (the core's tests, the shell's):
@@ -176,6 +179,11 @@ question key's, has a whole name and does not make the page scroll sideways, and
 `settings-accessibility-off` is a Mac without Accessibility (the look mock's `accessibility_access` answers false): 聽寫
 shows the `missing.accessibility` note above the shortcuts, saying to add Raphael with +, no wider than them, with the one
 button that opens the Accessibility pane (R-PRIV-AX-01);
+`permission-guide-card` draws the card that button puts under System Settings (`permission-guide.html`, R-PRIV-AX-02): the
+sentence to drag Raphael into the list above and turn its switch on, the tile with the app's icon and the name System
+Settings lists it by, the × with its name, and the size and tile place the page reports for the native window and its drag.
+Not proved here: the real drag into System Settings' list, the card following that window, and its going once the
+permission is on, which only a real run of an app bundle shows;
 `settings-mic-undecided` and `settings-mic-denied` are a Mac whose microphone macOS has not asked
 about, or refused (the look mock's `microphone_permission`): 聽寫 shows the note above the shortcuts, no wider than them,
 the meter never sends `audio.monitor` on, 測試麥克風 calls `microphone_ask` once, and a refused one has the button that

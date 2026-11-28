@@ -2730,6 +2730,11 @@ export function installMock(fixture, config = {}, target = window) {
         return;
       }
       if (command === "learned_layout" || command === "learned_finish") return;
+      if (command === "permission_guide_subscribe") {
+        for (const shown of variant.permissionGuide ?? []) args.channel.onmessage({ ...copy(shown), theme: config.theme ?? "light" });
+        return;
+      }
+      if (command === "permission_guide_layout" || command === "permission_guide_close") return;
       if (command === "floating_controls") return;
       if (command === "overlay_log") return;
       // The page answering the native frame probe (recovery.rs); the check overlay-frame-ack reads it from the calls.

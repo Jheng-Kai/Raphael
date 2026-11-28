@@ -421,7 +421,7 @@ pub(crate) fn ensure_caller(label: &str, window: &str) -> Result<(), String> {
     }
 }
 
-fn require_main(webview: &Webview) -> Result<(), String> {
+pub(crate) fn require_main(webview: &Webview) -> Result<(), String> {
     ensure_caller(webview.label(), crate::MAIN_WINDOW)
 }
 
@@ -2437,7 +2437,7 @@ pub fn open_external_url(webview: Webview, url: String) -> Result<(), String> {
     launch_link(&url)
 }
 
-fn launch_link(url: &str) -> Result<(), String> {
+pub(crate) fn launch_link(url: &str) -> Result<(), String> {
     #[cfg(windows)]
     {
         std::process::Command::new("rundll32")

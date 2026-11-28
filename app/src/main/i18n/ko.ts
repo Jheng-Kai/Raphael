@@ -1275,6 +1275,7 @@ export const ko = {
   "settings.052": "core가 응답하지 않습니다. 잠시 후 설정을 다시 열고 계속 사용할 수 없으면 Raphael을 재시작하세요.",
   "settings.054": "키보드가 오른쪽 Alt를 AltGr로 사용합니다. 다른 단축키를 선택하세요.",
   "settings.micUndecided": "Raphael에 아직 마이크 권한이 없습니다. 마이크 테스트를 누르면 macOS가 한 번 묻습니다.",
+  "permissionGuide.drag": "아래의 {p0}을(를) 위 목록으로 드래그한 다음 스위치를 켜세요.",
   "settings.micAsk": "마이크 테스트",
   "settings.055": "받아쓰기 모드",
   "settings.059": "인터페이스 언어",

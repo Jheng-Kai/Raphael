@@ -1275,6 +1275,7 @@ export const vi = {
   "settings.052": "Lõi không phản hồi. Mở lại Cài đặt sau ít phút; nếu vẫn không có, khởi động lại Raphael.",
   "settings.054": "Bàn phím dùng Alt phải làm AltGr. Chọn phím tắt khác.",
   "settings.micUndecided": "Raphael chưa có quyền dùng micrô. Nhấn Kiểm tra micrô và macOS sẽ hỏi một lần.",
+  "permissionGuide.drag": "Kéo {p0} bên dưới vào danh sách phía trên, rồi bật công tắc của nó.",
   "settings.micAsk": "Kiểm tra micrô",
   "settings.055": "Chế độ đọc chính tả",
   "settings.059": "Ngôn ngữ giao diện",

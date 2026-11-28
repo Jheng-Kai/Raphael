@@ -1275,6 +1275,7 @@ export const de = {
   "settings.052": "Core antwortet nicht. Einstellungen gleich erneut öffnen; bleiben sie nicht verfügbar, Raphael neu starten.",
   "settings.054": "Ihre Tastatur verwendet die rechte Alt-Taste als AltGr. Anderes Kürzel wählen.",
   "settings.micUndecided": "Raphael hat noch keine Mikrofonfreigabe. Drücke „Mikrofon testen“, dann fragt macOS einmal.",
+  "permissionGuide.drag": "Ziehe {p0} von unten in die Liste darüber und schalte es dann ein.",
   "settings.micAsk": "Mikrofon testen",
   "settings.055": "Diktiermodus",
   "settings.059": "Oberflächensprache",

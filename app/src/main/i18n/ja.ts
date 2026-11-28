@@ -983,6 +983,7 @@ export const ja = {
   "settings.052": "コアが応答しません。設定を開き直し、利用できなければ再起動してください。",
   "settings.054": "このキーボードでは右AltがAltGrとして使われます。別のショートカットをおすすめします。",
   "settings.micUndecided": "ラファエルにはまだマイクの許可がありません。「マイクをテスト」を押すと、macOS が一度だけ確認します。",
+  "permissionGuide.drag": "下の {p0} を上のリストにドラッグして、スイッチをオンにしてください。",
   "settings.micAsk": "マイクをテスト",
   "settings.055": "音声入力の操作",
   "settings.059": "表示言語",

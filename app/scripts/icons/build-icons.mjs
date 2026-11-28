@@ -9,7 +9,7 @@ const MAP = {
   clock: "clock", book: "book", down: "chevron-down", up: "chevron-up", plus: "plus", copy: "copy",
   trash: "trash-2", search: "search", x: "x", gear: "settings", mic: "mic", wallet: "wallet", sparkle: "sparkle",
   info: "info", lock: "lock", left: "chevron-left", right: "chevron-right", refresh: "refresh-cw", link: "link",
-  chat: "message-square", globe: "globe", monitor: "monitor", arrowLeft: "arrow-left", arrowRight: "arrow-right", rotateClockwise: "rotate-cw", expand: "maximize", open: "maximize-2", shrink: "minimize-2",
+  chat: "message-square", globe: "globe", monitor: "monitor", arrowLeft: "arrow-left", arrowRight: "arrow-right", arrowUp: "arrow-up", rotateClockwise: "rotate-cw", expand: "maximize", open: "maximize-2", shrink: "minimize-2",
   eye: "eye", shield: "shield", star: "star", grid: "layout-grid", check: "check", sliders: "sliders-horizontal",
   keyboard: "keyboard", cloud: "cloud", send: "arrow-up", stop: "square", bot: "bot", pencil: "pencil", share: "share", steps: "list",
   plug: "plug", bell: "bell", calendar: "calendar", news: "newspaper", folder: "folder", memory: "brain", attach: "paperclip",
