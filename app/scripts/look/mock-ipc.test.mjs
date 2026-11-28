@@ -499,3 +499,14 @@ describe("the apps and the private skills at the IPC boundary", () => {
     expect(state.errors).toEqual([]);
   });
 });
+
+describe("the window's commands", () => {
+  // A command added to the shell and api.ts without its answer here fails every scene that reaches it ("Unmocked IPC").
+  it("every command api.ts invokes is answered by the look's mock", () => {
+    const api = readFileSync(new URL("../../src/main/api.ts", import.meta.url), "utf8");
+    const mock = readFileSync(new URL("./mock-ipc.js", import.meta.url), "utf8");
+    const commands = [...new Set([...api.matchAll(/invoke(?:<[^>]*>)?\(\s*["']([a-z_:|]+)["']/g)].map(match => match[1]))];
+    expect(commands.length).toBeGreaterThan(30);
+    expect(commands.filter(command => !mock.includes(`"${command}"`) && !mock.includes(`'${command}'`))).toEqual([]);
+  });
+});
