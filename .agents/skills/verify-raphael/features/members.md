@@ -55,7 +55,7 @@ messaging) is not here. The kinds are the same for every member and for Raphael,
 (memory is not among them, see [No memory on screen](#no-memory-on-screen)): 工具 (each
 connected app with its own mark and a switch over the member's `tools` list, then the drafts switch under them),
 技能與指令 (skills as names with switches, a press opens the skill's own view, a plus adds one from a link, delete
-waits in a ⋯ and asks in the red dialog; commands), 個性與指示 (personality and instructions, R-PANEL-07: two quiet rows of
+waits in a ⋯ and asks in the quiet dialog; commands), 個性與指示 (personality and instructions, R-PANEL-07: two quiet rows of
 their words, whole, each with a pencil; a press opens a field in the row's place that is as tall as its words, Enter on
 one line, Ctrl+Enter or leaving it saves without a word (a spinner for the pencil meanwhile), Escape restores; nothing written is one quiet line of
 what could stand there; Raphael's too), 通知 (one switch, R-NOTIFY-01). The model is chosen at the composer
@@ -575,15 +575,15 @@ npm run look -- context-menu-member context-menu-conversation context-menu-routi
 Clear, clear all, delete and remove never stand open on a page. They wait in the ⋯ of the row or section title they
 act on, and its right click: the clears of Settings › 資料 in their rows (所有聽寫紀錄,
 所有對話紀錄), a person's removal in their Telegram row and a downloaded local model's deletion in its row of the chooser.
-Every item that destroys or disconnects (`ask` of `openActions`, `openConfirmMenu`, both in app/src/main/member-column.ts) closes its menu on a press and opens the red
-confirmation dialog of a member's deletion (`confirmDelete`, app/src/main/member-dialogs.ts): a title that asks about that one thing and names it, a sentence of what
-happens, 取消 and a red button with the item's own word. Nothing is done until the red button; 取消, Escape and the scrim do nothing, and the focus goes back to the ⋯.
+Every item that destroys or disconnects (`ask` of `openActions`, `openConfirmMenu`, both in app/src/main/member-column.ts) closes its menu on a press and opens the shared
+confirmation dialog (`confirmDelete`, app/src/main/member-dialogs.ts): a title that asks about that one thing and names it, a sentence of what
+happens, 取消 and a primary button with the item's own word (R-UI-184). The action waits for confirmation; 取消, Escape and the scrim do nothing, and the focus goes back to the ⋯.
 No item, button or row turns into a question in its own place: a downloaded local model, an app's 中斷連線, Telegram's 中斷連線, a provider's 移除, a calendar event,
 a project folder and a skill or command all ask in that dialog. A clear of 資料 still gives its ten seconds of 復原.
 
 The audit of every look scene (`R-UI-56`) fails a button named for clearing, deleting or removing, in any of the three languages, unless it stands in a menu, in a
 dialog about that one thing (`.mb-dialog`, `.cs-dialog`), or in what is being composed (`.composer`, `.draft-panel`); a question that replaces a row in its own place is rejected. The Settings window is a page: it is
-not excepted. Telegram's 中斷連線 (a row of its card that opens the red dialog), a pending person's reject and a mail draft's 捨棄 use other words and stay where they are.
+not excepted. Telegram's 中斷連線 (a row of its card that opens the quiet dialog), a pending person's reject and a mail draft's 捨棄 use other words and stay where they are.
 
 ```powershell
 npm run look -- dictation messaging-paired-aligned messaging-user-menu messaging-user-removed model-choices-local-menu context-menu-local-model --theme both --width 1120,720,1920x1080

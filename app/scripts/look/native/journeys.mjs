@@ -1708,7 +1708,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     const detail = await page.$eval(".au-pop-detail", node => node.textContent);
     if (!detail.includes("NativeSecretary") || !detail.includes("From the member")) throw new Error(`The detail does not say who added it: ${detail}`);
     await inspectPage("member-event-detail", ["calendar-detail-own"]);
-    // The ⋯ asks in the red dialog, then the event is gone from the store and the page.
+    // The ⋯ asks in the quiet dialog, then the event is gone from the store and the page.
     await click(page, '.au-pop-detail [data-pop="more"]');
     await click(page, "#app-popover [data-pick]");
     await click(page, '.mb-delete [data-dlg="delete"]');

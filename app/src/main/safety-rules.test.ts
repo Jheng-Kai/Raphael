@@ -3,7 +3,7 @@ import { setLocale } from "./i18n";
 
 const api = vi.hoisted(() => ({ core: vi.fn() }));
 vi.mock("./api", () => api);
-// The red dialog of R-UI-56: answered by each test.
+// The quiet dialog of R-UI-56: answered by each test.
 const dialogs = vi.hoisted(() => ({ confirmDelete: vi.fn(async () => true) }));
 vi.mock("./member-dialogs", () => dialogs);
 
@@ -49,7 +49,7 @@ describe("the safety rules section", () => {
     expect(icons).toHaveLength(10);
     for (const tag of icons) expect(tag).toMatch(/aria-label="[^"]+" title="[^"]+"/);
     expect(html).toContain('aria-label="編輯「刪除檔案」" title="編輯「刪除檔案」" data-rule="edit" data-id="2"');
-    expect(html).toContain('class="btn icon danger" aria-label="刪除「刪除檔案」" title="刪除「刪除檔案」" data-rule="delete" data-id="2"');
+    expect(html).toContain('class="btn icon" aria-label="刪除「刪除檔案」" title="刪除「刪除檔案」" data-rule="delete" data-id="2"');
     expect(html).not.toMatch(/data-rule="more"|data-overflow/);
   });
 
@@ -200,13 +200,13 @@ describe("the controller", () => {
     expect(api.core).not.toHaveBeenCalledWith("safety.rules.update", expect.anything());
   });
 
-  test("the trash asks in the red dialog naming the rule; 取消 keeps it, the red button deletes it at once, with no 復原", async () => {
+  test("the trash asks in the quiet dialog naming the rule; 取消 keeps it, confirmation deletes it at once, with no 復原", async () => {
     const c = make();
     await c.load();
     dialogs.confirmDelete.mockResolvedValueOnce(false);
     click(c, "delete", "4");
     await vi.waitFor(() => expect(dialogs.confirmDelete).toHaveBeenCalledTimes(1));
-    expect(dialogs.confirmDelete).toHaveBeenLastCalledWith("在 Notion 新增頁面", { words: { title: "刪除「在 Notion 新增頁面」？", hint: "刪除後，這條規則就不再生效，也無法復原。", action: "刪除" } });
+    expect(dialogs.confirmDelete).toHaveBeenLastCalledWith("在 Notion 新增頁面", { quiet: true, words: { title: "刪除「在 Notion 新增頁面」？", hint: "刪除後，這條規則就不再生效，也無法復原。", action: "刪除" } });
     await Promise.resolve();
     expect(api.core).not.toHaveBeenCalledWith("safety.rules.delete", expect.anything());
     expect(c.view().hidden).toEqual([]);

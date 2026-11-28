@@ -39,9 +39,9 @@ for (const [theme, palette] of Object.entries({ light, dark })) {
   if (minimum < 4.5) process.exitCode = 1;
   contrast.captionClose = +ratio(palette["on-close"], palette.close).toFixed(2);
   if (contrast.captionClose < 4.5) process.exitCode = 1;
-  // The delete dialog's Delete button (members.css `.mb-delete`): white words on the app's solid red, and the red against the dialog's surface.
-  contrast.deleteButton = { words: contrast.captionClose, onPanel: +ratio(palette.close, palette.panel).toFixed(2), onFloat: +ratio(palette.close, palette.float).toFixed(2), onDialog: +ratio(palette.close, palette.dialog).toFixed(2) };
-  if (contrast.deleteButton.onPanel < 3 || contrast.deleteButton.onFloat < 3 || contrast.deleteButton.onDialog < 3) process.exitCode = 1;
+  // High-impact confirmations use white words on the shared solid red.
+  contrast.deleteButton = { words: +ratio(palette["on-close"], palette.close).toFixed(2), onPanel: +ratio(palette.close, palette.panel).toFixed(2), onFloat: +ratio(palette.close, palette.float).toFixed(2), onDialog: +ratio(palette.close, palette.dialog).toFixed(2) };
+  if (contrast.deleteButton.words < 4.5 || contrast.deleteButton.onPanel < 3 || contrast.deleteButton.onFloat < 3 || contrast.deleteButton.onDialog < 3) process.exitCode = 1;
   contrast.destructive = Object.fromEntries(["panel", "btn", "menu", "float", "dialog", "float-ctl", "danger-hover", "danger-pressed"].map(surface => [surface, +ratio(palette.err, palette[surface]).toFixed(2)]));
   if (Object.values(contrast.destructive).some(value => value < 4.5)) process.exitCode = 1;
   for (const token of ["hover", "pressed", "hover-edge", "scroll-hover", "float", "dialog", "float-edge", "float-ctl", "float-ctl-hover", "float-hover", "float-pressed"]) {

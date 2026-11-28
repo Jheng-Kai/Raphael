@@ -88,7 +88,7 @@ export function accessText(access: Access, members: LibraryMember[]): string {
 }
 
 /** A package's controls, on its row and on its page: who may use it and its switch; on its page also an update button when
- *  it has a source, and its trash, which asks in the red dialog (Settings has no right click and no ⋯: R-UI-44, R-UI-56). */
+ *  it has a source, and its trash, which asks in the quiet dialog (Settings has no right click and no ⋯: R-UI-44, R-UI-56). */
 function controlsHTML(p: LibraryPackage, v: SkillLibraryView, page = false): string {
   const busy = v.refreshing.has(p.key) ? " disabled" : "";
   return `<div class="ctl">` +
@@ -135,7 +135,7 @@ const skillToggleHTML = (p: LibraryPackage, skill: LibrarySkill, v: SkillLibrary
 const skillRenameHTML = (p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryView): string =>
   p.key.startsWith("set:") ? "" : iconBtn("pencil", t("skillLib.rename"), ` data-skl="skill-rename" data-key="${esc(p.key)}" data-id="${skill.id}"${v.refreshing.has(p.key) ? " disabled" : ""}`);
 
-/** A plugin's skill's trash, on its own page: it asks in the red dialog. */
+/** A plugin's skill's trash, on its own page: it asks in the quiet dialog. */
 const skillRemoveHTML = (p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryView): string =>
   iconBtn("trash", t("skillLib.remove"), ` data-skl="skill-remove" data-key="${esc(p.key)}" data-id="${skill.id}"${v.refreshing.has(p.key) ? " disabled" : ""}`);
 
@@ -608,10 +608,10 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
       if (access === "all") { closeMenu(); anchor.focus({ preventScroll: true }); }
     });
   };
-  /** A package's trash, on its page: the red dialog asks, and only its red button deletes the package. */
+  /** A package's trash, on its page: the package is removed after confirmation. */
   const removePackage = async (key: string): Promise<void> => {
     const p = byKey(key);
-    if (!p || !(await confirmDelete(p.name, { words: { title: t("confirm.removeTitle", { p0: p.name }), hint: t("skillLib.removeHint"), action: t("skillLib.remove") } }))) return;
+    if (!p || !(await confirmDelete(p.name, { quiet: true, words: { title: t("confirm.removeTitle", { p0: p.name }), hint: t("skillLib.removeHint"), action: t("skillLib.remove") } }))) return;
     await core("skills.library.delete", { key })
       .then(() => {
         state.packages = state.packages.filter(other => other.key !== key);
@@ -635,11 +635,11 @@ export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scr
     await change({ key, rename: { id, name: name.trim() } });
     root.querySelector<HTMLElement>('[data-skl="skill-rename"]')?.focus({ preventScroll: true });
   };
-  /** A plugin's skill's trash, on the skill's page: the red dialog asks, as a whole package's does. The package stays, unless it
+  /** The trash on a plugin skill page opens the same confirmation as package removal. The package stays, unless it
    *  was its last skill. */
   const removeSkill = async (key: string, id: number): Promise<void> => {
     const known = byKey(key)?.skills.find(skill => skill.id === id);
-    if (!known || !(await confirmDelete(known.name, { words: { title: t("confirm.removeTitle", { p0: known.name }), hint: t("skillLib.removeHint"), action: t("skillLib.remove") } }))) return;
+    if (!known || !(await confirmDelete(known.name, { quiet: true, words: { title: t("confirm.removeTitle", { p0: known.name }), hint: t("skillLib.removeHint"), action: t("skillLib.remove") } }))) return;
     await core<{ package?: LibraryPackage }>("skills.library.delete", { key, skill: id })
       .then(answer => {
         if (answer?.package) replace(answer.package);

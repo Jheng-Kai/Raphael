@@ -136,9 +136,9 @@ count and its unknown/loading state; connection and permission behavior is uncha
 A sign-in cancelled half way can be removed, so no useless accounts pile up, and most people can connect.
 
 - An app's accounts card (a Composio app): each row is a person, a name, a status and a quiet ⋯ (no 帳號名稱 button). The ⋯ opens 重新命名
-  and then 移除 in red. A row that is not connected (等待登入, 已過期, 已撤銷, 失敗, 未啟用) is removed at once; a connected one asks the app's
-  delete question first (「移除「name」？」, one sentence, 取消 and a red 移除); the last connected account is the app, so its 移除 is the app's own
-  disconnect (the red dialog asks 「中斷連線 Gmail？」 with 取消 and a red 中斷連線; no menu changes its words). 加入另一個帳號 is unchanged.
+  and then 移除. A row that is not connected (等待登入, 已過期, 已撤銷, 失敗, 未啟用) is removed at once; a connected one asks the app's
+  delete question first (「移除「name」？」, one sentence, 取消 and an ordinary primary 移除); the last connected account is the app, so its 移除 is the app's own
+  disconnect (the quiet dialog asks 「中斷連線 Gmail？」 with 取消 and an ordinary primary 中斷連線; no menu changes its words). 加入另一個帳號 is unchanged.
 - For R-ACCT-05, sign in to two Gmail accounts, open the Gmail page from Connect apps and check that each account row
   shows Gmail and its provider address. Use the first row's menu to remove it and check that the second remains connected.
   In a member turn, `connections_list` and the Composio execution tool identify both active accounts by their IDs and
@@ -307,7 +307,7 @@ panel, never here; the dialog has no skills section, no import button and no ski
 rows. Every row has a bare service mark (or a generic plug),
 name, one-line description, switch and detail chevron. Managed bridge
 servers are not duplicate rows. Tool switches are grouped by write/read in the
-detail. Disconnect (a custom server: delete) lives in the detail overflow and asks in the red dialog (`connections-delete`, `connector-uninstalled`).
+detail. Disconnect (a custom server: delete) lives in the detail overflow and asks in the quiet dialog (`connections-delete`, `connector-uninstalled`).
 Custom MCP add/edit/test, command/HTTP, JSON paste and local discovery stay reachable.
 
 The rows sit under two headings: 應用程式 (their tools can be called now) and 尚未連結
@@ -543,7 +543,7 @@ connector disconnection asks to disconnect. Security and secret-storage notices 
 ## Right click on a connection (R-UI-44)
 
 A custom server's ⋯ sits in the header of its dialog; a right click anywhere on the header opens that menu at the pointer (測試, 編輯伺服器, 刪除), the
-one the ⋯ opens. A subscription account's card in Settings › 模型 has no ⋯: its one action is the unplugged plug, which asks in the red dialog before it
+one the ⋯ opens. A subscription account's card in Settings › 模型 has no ⋯: its one action is the unplugged plug, which asks in the quiet dialog before it
 disconnects, and Settings has no right click. See [Members](members.md) for the rule and its table.
 
 ```powershell

@@ -160,7 +160,7 @@ npm run look -- desktop-host-local desktop-host-error settings-owner --theme bot
 
 ## Project folders in General
 
-The project list uses one row per folder, with its full path and Git branch. Its × (no ⋯: Settings has no right click) asks in the red dialog (「移除「name」？」; the folder and its files are not deleted).
+The project list uses one row per folder, with its full path and Git branch. Its × (no ⋯: Settings has no right click) asks in the quiet dialog (「移除「name」？」; the folder and its files are not deleted).
 Add folder opens the native picker at the foot of the list. The settings accept up to 50 distinct projects. See [Daily work](daily-work.md#native-project-folder-choice)
 for the native checks and [Member computer](member-computer.md#the-owners-files-read-everywhere-write-in-the-owners-folders-r-pc-04-r-pc-05)
 for the composer and Docker paths.
@@ -199,11 +199,10 @@ npm run look -- quick-model-menu quick-effort-menu quick-model-selection --theme
 
 Owner profile/preferences, themes, models/providers, dictation, assistant,
 messaging, data management and About. Usage and MCP have separate maps.
-A connected subscription account's card has one action, the unplugged plug (no ⋯, never a trash): it asks in the red
-dialog (「中斷連線 Codex？」, that signing in again is needed, 取消 and a red 中斷連線), and its red button disconnects a CLI only
+A connected subscription account's card has one action, the unplugged plug (no ⋯, never a trash): it asks in the quiet
+dialog (「中斷連線 Codex？」, that signing in again is needed, 取消 and an ordinary primary 中斷連線), and confirmation disconnects a CLI only
 inside Raphael, removes its models, and leaves a framed Connect action. Reconnect reuses
-an existing CLI login. Caption icon controls keep transparent hover/pressed surfaces (R-UI-16). Close uses
-the error foreground; glyph contrast and keyboard focus are checked.
+an existing CLI login. Caption controls fill their cells with the ordinary hover and pressed colours (R-UI-16). Look checks glyph contrast and keyboard focus.
 
 Cleanup and answer JSON calls accept models with reasoning off, no reasoning setting or
 mandatory reasoning. Calls read the cached catalog: off, omitted or minimal/low/first listed
@@ -381,7 +380,7 @@ scene names. General owns the owner profile and weather city.
 Dictation & shortcuts groups dictation, paste, cancel and Ask Raphael shortcuts.
 Tools owns shared search, page reading, images, PDFs and their keys (no voice service);
 Safety owns shared safety rules, local command policy and always-allowed apps. Each rule's row has a pencil that edits it
-and a trash that asks in the red dialog (「刪除「rule」？」) and deletes it at once, with no 復原 toast; no ⋯.
+and a trash that asks in the quiet dialog (「刪除「rule」？」) and deletes it at once, with no 復原 toast; no ⋯.
 
 ```powershell
 npm run look -- safety-rules-icons safety-rule-delete-dialog --theme both --width 1120,720,1920x1080

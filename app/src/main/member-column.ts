@@ -146,9 +146,8 @@ export interface MemberColumn {
   menu(id: number, anchor: HTMLElement): void;
 }
 
-/** `ask`: the item destroys something; picking it closes the menu and opens the red confirmation dialog with these words,
- *  and only the dialog's red button picks the item (R-UI-56). */
-export interface ActionItem { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean; ask?: ConfirmWords }
+/** `ask`: picking the item closes the menu and opens a confirmation with these words (R-UI-56). */
+export interface ActionItem { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean; ask?: ConfirmWords; danger?: boolean }
 /** A hairline between groups of row-menu items. */
 export const SEP = "-";
 
@@ -161,7 +160,7 @@ export function openActions(anchor: HTMLElement, items: readonly (ActionItem | t
     (lead?.html ?? "") + items
       .map(
         (item) => item === SEP ? `<div class="menu-sep" role="separator"></div>` :
-          `<button type="button" role="menuitem"${item.icon === "trash" ? ' class="danger"' : ""} tabindex="-1" data-pick="${esc(item.id)}"${item.ask ? " data-confirm" : ""}${item.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
+          `<button type="button" role="menuitem"${item.danger ? ' class="danger"' : ""} tabindex="-1" data-pick="${esc(item.id)}"${item.ask ? " data-confirm" : ""}${item.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
           `<span class="ck">${item.icon ? ico(item.icon) : ""}</span><span class="mt">${esc(item.label)}</span>${item.submenu ? ico("right") : ""}</button>`,
       )
       .join(""),
@@ -174,12 +173,12 @@ export function openActions(anchor: HTMLElement, items: readonly (ActionItem | t
     const pick = (e.target as Element).closest<HTMLElement>("[data-pick]");
     if (!pick) return;
     const id = pick.dataset.pick ?? "";
-    // A destroying item closes the menu and asks in the red dialog; nothing is done unless its red button is pressed.
+    // Close the menu before asking, then run the item only after confirmation.
     const words = items.find((item): item is ActionItem => item !== SEP && item.id === id)?.ask;
     if (pick.hasAttribute("data-confirm") && words) {
       closeMenu();
       anchor.focus({ preventScroll: true });
-      void confirmDelete("", { words }).then(yes => { if (yes) onPick(id, pick); });
+      void confirmDelete("", { words, quiet: true }).then(yes => { if (yes) onPick(id, pick); });
       return;
     }
     if (!pick.hasAttribute("aria-haspopup")) {
@@ -192,8 +191,8 @@ export function openActions(anchor: HTMLElement, items: readonly (ActionItem | t
 }
 
 /**
- * The menu of a ⋯ whose one item destroys something (R-UI-56): picking it closes the menu and opens the red confirmation
- * dialog with `ask`'s words; only the dialog's red button does `run`.
+ * The menu of a ⋯ whose one item asks for confirmation (R-UI-56).
+ * The dialog uses `ask`'s words and calls `run` only after confirmation.
  */
 export function openConfirmMenu(anchor: HTMLElement, o: { label: string; ask: ConfirmWords; run(): void }): void {
   openActions(anchor, [{ id: "confirm", label: o.label, icon: "trash", ask: o.ask }], () => o.run());
@@ -221,7 +220,7 @@ export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHos
     SEP, { id: "export-template", label: t("template.export"), icon: "download" },
     SEP, member?.hidden ? { id: "hide", label: t("members.sideUnhide"), icon: "eye" } : { id: "hide", label: t("members.sideHide"), icon: "eyeOff" },
   ];
-  const remove: ActionItem = { id: "delete", label: t("members.sideDelete"), icon: "trash" };
+  const remove: ActionItem = { id: "delete", label: t("members.sideDelete"), icon: "trash", danger: true };
   const tile = !!member?.pinned && !member.hidden;
   // Nobody to put in its place: the item would open an empty window, so it is not offered.
   const swap: ActionItem = { id: "replace-pinned", label: t("members.sideReplacePrimary"), icon: "swap" };

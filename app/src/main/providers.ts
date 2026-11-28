@@ -123,7 +123,7 @@ function dialogHTML(v: ProvidersView, lead = ""): string {
     `<div class="pv-model-list">${modelsHTML(v)}</div></section></div></div>` +
     `<div class="pv-feedback">${feedbackHTML(v)}</div>` +
     `<div class="pv-footer">` +
-    (v.open.id ? btn(esc(t("providers.remove")), "danger", ` data-pv="remove" data-k="pv-remove"${disabled}`) : "") +
+    (v.open.id ? btn(esc(t("providers.remove")), "", ` data-pv="remove" data-k="pv-remove"${disabled}`) : "") +
     `<div class="pv-footer-actions">${btn(esc(t("providers.test")), "", ` data-pv="test" data-k="pv-test"${v.busy || !v.open.id || v.dirty ? " disabled" : ""}`)}` +
     btn(esc(t("providers.save")), "pri", ` data-pv="save" data-k="pv-save"${v.busy || !v.canSave ? " disabled" : ""}`) + `</div></div></div></div>`;
 }
@@ -296,8 +296,8 @@ export function createProviders(host: ProvidersHost) {
     const id = open?.id;
     if (!id || state.busy) return;
     const name = providerOf(state)?.name ?? kindOf(state)?.name ?? "";
-    // The red dialog asks (R-UI-56); the provider is removed only by its red button.
-    if (!(await confirmDelete(name, { words: { title: t("confirm.removeTitle", { p0: name }), hint: t("providers.removeHint"), action: t("providers.remove") } }))) return;
+    // Ask for confirmation before removing the provider (R-UI-56).
+    if (!(await confirmDelete(name, { quiet: true, words: { title: t("confirm.removeTitle", { p0: name }), hint: t("providers.removeHint"), action: t("providers.remove") } }))) return;
     if (state.open !== open || state.busy) return;
     state.busy = true; state.error = null; redraw();
     try {

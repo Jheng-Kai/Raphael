@@ -133,11 +133,11 @@ test("setup keeps Back and actions outside the scrolling fields and saves only a
   expect(root.querySelector<HTMLButtonElement>('[data-pv="save"]')?.disabled).toBe(true);
 });
 
-test("saved footer places danger on the left, test and save on the right, and detects reverted edits", async () => {
+test("saved footer places the framed remove button on the left, test and save on the right, and detects reverted edits", async () => {
   const panel = mount(); await panel.load(); click('[data-pv="open"]'); await flush();
   const footer = root.querySelector(".pv-footer")!;
   expect(footer?.firstElementChild?.getAttribute("data-pv")).toBe("remove");
-  expect(footer?.firstElementChild?.classList.contains("danger")).toBe(true);
+  expect(footer?.firstElementChild?.className).toBe("btn");
   expect([...footer.querySelectorAll(".pv-footer-actions button")].map((b) => b.getAttribute("data-pv"))).toEqual(["test", "save"]);
   expect(root.querySelector<HTMLButtonElement>('[data-pv="save"]')?.disabled).toBe(true);
   fill('input[aria-label="Name"]', "My OpenAI");
@@ -394,13 +394,13 @@ test.each([
   expect(api.providersTest).toHaveBeenCalledWith("p3");
 });
 
-test("removing a provider asks in the red dialog before removing the connection", async () => {
+test("removing a provider asks in the quiet dialog before removing the connection", async () => {
   const panel = mount(); await panel.load();
   click('[data-pv="open"]'); await flush();
   click('[data-pv="remove"]');
   expect(api.providersRemove).not.toHaveBeenCalled();
   expect(root.querySelector('[data-pv="remove"]')?.textContent).toBe("Remove");
-  expect(document.querySelector(".mb-delete h2")?.textContent).toBe("Remove OpenAI?");
+  expect(document.querySelector(".mb-delete.is-quiet h2")?.textContent).toBe("Remove OpenAI?");
   expect(document.querySelector(".mb-delete .mb-dlg-body")?.textContent).toBe(t("providers.removeHint"));
   document.querySelector<HTMLElement>('.mb-delete [data-dlg="cancel"]')!.click(); await flush();
   expect(api.providersRemove).not.toHaveBeenCalled();

@@ -226,10 +226,10 @@ test("the back arrow and Esc return to the list where it was left, with the focu
 test("a package deleted from its own page leaves for the list, and a reset starts on the list", async () => {
   const { root, library } = await setup(() => ({ deleted: true }));
   press(root, '[data-skl="open"][data-key="set:1"]');
-  // The page's trash asks in the red dialog naming the package, with no menu first: Cancel deletes nothing, its red button does.
+  // The page's trash asks in the quiet dialog naming the package, with no menu first: Cancel deletes nothing, its confirmation button does.
   press(root, '.skl-page-actions [data-skl="remove"][data-key="set:1"]');
   expect(document.getElementById("app-popover")).toBeNull();
-  expect(document.querySelector(".mb-delete h2")?.textContent).toBe("移除「pstack」？");
+  expect(document.querySelector(".mb-delete.is-quiet h2")?.textContent).toBe("移除「pstack」？");
   expect(document.querySelector(".mb-delete .mb-dlg-body")?.textContent).toBe("移除後就不能再用它，也無法復原。");
   expect(document.querySelector('.mb-delete [data-dlg="delete"]')?.textContent).toBe("刪除");
   document.querySelector<HTMLElement>('.mb-delete [data-dlg="cancel"]')!.click();
@@ -617,11 +617,11 @@ test("a cause the core names leads its message and is said in words", async () =
   expect(document.querySelector(".skl-import")).not.toBeNull();
 });
 
-/** Opens a plugin's skill's page and presses its trash: the red dialog asks, and only its red button deletes. */
+/** Opens a plugin's skill's page and presses its trash: the quiet dialog asks, and only its confirmation button deletes. */
 const removeSkill = async (root: ParentNode, id: number, name: string): Promise<void> => {
   if (!root.querySelector(`.skl-doc-page[data-skl-doc="${id}"]`)) press(root, `[data-skl="open-skill"][data-id="${id}"]`);
   press(root, `.skl-doc-page [data-skl="skill-remove"][data-id="${id}"]`);
-  expect(document.querySelector(".mb-delete h2")?.textContent).toBe(`移除「${name}」？`);
+  expect(document.querySelector(".mb-delete.is-quiet h2")?.textContent).toBe(`移除「${name}」？`);
   document.querySelector<HTMLElement>('.mb-delete [data-dlg="delete"]')!.click();
   await settle();
 };

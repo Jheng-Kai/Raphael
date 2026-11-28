@@ -234,7 +234,7 @@ function roomActions(anchor: HTMLElement, room: Room, saved: () => void = () => 
     { id: "rename", label: t("members.rename"), icon: "pencil" },
     ...(!room.is_team ? [{ id: "members", label: t("rooms.members"), icon: "grid" as const }] : []),
     { id: "roles", label: t("rooms.roles"), icon: "grid" },
-    { id: "delete", label: t("members.delete"), icon: "trash" },
+    { id: "delete", label: t("members.delete"), icon: "trash", danger: true },
   ], action => {
     if (action === "pin" || action === "hide") { void api.roomsUpdate(room.id, action === "pin" ? { pinned: !room.pinned } : { hidden: !room.hidden }).then(() => { changed(); saved(); }).catch(error => toaster.info(describeError(error))); }
     else if (action === "roles") void editRoomRoles(room, saved);
