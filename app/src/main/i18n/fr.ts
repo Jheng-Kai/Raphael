@@ -1298,6 +1298,7 @@ export const fr = {
   "status.groupNeeds": "Vous attendent",
   "status.groupBusy": "Au travail",
   "cardFloat.back": "Revenir à la carte",
+  "cardFloat.collapse": "Réduire",
   "agent.searchClose": "Fermer la recherche",
   "agent.attach": "Joindre un fichier",
   "agent.dropFiles": "Déposez pour ajouter des fichiers",

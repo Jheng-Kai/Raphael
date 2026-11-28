@@ -770,8 +770,10 @@ export function installMock(fixture, config = {}, target = window) {
   }
   // A key a member asked for, for a program in its computer (`request_secret` with `key`): the secure card names the variable and its purpose.
   if (variant.keyCard) {
+    const member = variant.keyCardMember ?? 1;
+    const conversation = data.conversations.find(item => item.member_id === member && item.is_default);
     const turn = structuredClone(data.secretTurns.notion);
-    Object.assign(turn, {id: 133, session_id: "look-computer-key", member_id: 1, conversation_id: 11, question: "幫我用 OpenRouter 跑價格腳本。", text: "請在安全卡片貼上金鑰，儲存後我會接著執行。", steps: [], messages: []});
+    Object.assign(turn, {id: 133, session_id: "look-computer-key", member_id: member, conversation_id: conversation.id, question: "幫我用 OpenRouter 跑價格腳本。", text: "請在安全卡片貼上金鑰，儲存後我會接著執行。", steps: [], messages: []});
     turn.secrets = [{...turn.secrets[0], id: "card-key", name: "OPENROUTER_API_KEY", secret: "OPENROUTER_API_KEY", key: true, purpose: "價格腳本要呼叫模型"}];
     data.turns.push(turn);
   }

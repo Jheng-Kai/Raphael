@@ -1009,6 +1009,7 @@ export const en = {
   "status.groupNeeds": "Waiting for you",
   "status.groupBusy": "Working",
   "cardFloat.back": "Back to the card",
+  "cardFloat.collapse": "Collapse",
   "agent.searchClose": "Close search",
   "agent.attach": "Attach a file",
   "agent.dropFiles": "Drop to add files",

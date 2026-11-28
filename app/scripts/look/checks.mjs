@@ -11723,18 +11723,31 @@ export function checkRendered(name, context = {}) {
     return { check: name, level: light.dataset.level };
   }
   // A waiting card read out of sight (card-float.ts).
-  if (name === "card-float-pill" || name === "card-float-open" || name === "card-float-back") {
+  if (["card-float-pill", "card-float-open", "card-float-back", "card-float-collapse", "card-float-raphael-pill", "card-float-raphael-open"].includes(name)) {
     const scroller = document.querySelector(".mb-chat .ra-scroll").getBoundingClientRect(), head = document.querySelector(".mb-chat .mb-head").getBoundingClientRect();
     const pill = document.querySelector(".mb-chat .card-float"), card = document.querySelector('[data-secret-card="card-key"]');
     const inSight = box => box.bottom > scroller.top + head.height && box.top < scroller.bottom;
-    if (name === "card-float-pill") {
+    const close = card.querySelector(".card-head .card-close");
+    if (name !== "card-float-back") {
+      const style = getComputedStyle(pill);
+      const fill = name.startsWith("card-float-raphael-") ? style.getPropertyValue("--raphael-color").trim() : "#905afb";
+      const rgb = [1, 3, 5].map(offset => Number.parseInt(fill.slice(offset, offset + 2), 16));
+      require(style.backgroundColor === `rgb(${rgb.join(", ")})` && style.borderTopWidth === "0px", "the pill wears the slime's colour without an edge");
+      const [title, chevron, back] = [".card-float-title", ".card-float-chev .i", ".card-float-back .i"].map(selector => getComputedStyle(pill.querySelector(selector)).color);
+      require(title === chevron && title === back && !pill.querySelector(".card-float-dot"), "the title and arrows share one ink and there is no dot");
+      const light = channels => channels.map(value => value / 255).map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+        .reduce((sum, value, i) => sum + value * [0.2126, 0.7152, 0.0722][i], 0);
+      const a = light(rgb), b = light(title.match(/\d+/g).map(Number));
+      require((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 4.5, "the pill ink has at least 4.5:1 contrast");
+    }
+    if (name.endsWith("-pill")) {
       require(visible(pill) && pill.querySelector(".card-float-title").textContent.trim() === card.querySelector(".card-title").textContent.trim(), "the pill names the waiting card by its own title");
       const box = pill.getBoundingClientRect();
       require(box.top >= head.bottom - 2 && Math.abs((box.left + box.right) / 2 - (scroller.left + scroller.right) / 2) <= 2, "the pill stands under the top row, in the middle of the conversation");
       require(!inSight(card.getBoundingClientRect()), "the card itself is out of sight");
       require(pill.querySelector(".card-float-back").getAttribute("aria-label") === "回到原位", "its arrow is named 回到原位");
     }
-    if (name === "card-float-open") {
+    if (name.endsWith("-open")) {
       const box = card.getBoundingClientRect(), place = card.previousElementSibling, column = card.closest(".ra-col").getBoundingClientRect();
       require(card.classList.contains("is-floating") && place?.classList.contains("card-float-place") && Math.abs(place.getBoundingClientRect().height - box.height) <= 2, "the card floats, and a spacer of its height keeps its place");
       require(box.top >= pill.getBoundingClientRect().bottom && box.bottom <= innerHeight, `it stands under the pill, inside the window (${Math.round(box.top)}-${Math.round(box.bottom)})`);
@@ -11742,6 +11755,12 @@ export function checkRendered(name, context = {}) {
       require(Math.abs((box.left + box.right) / 2 - centre) <= 2 && box.width <= column.width + 1, `centred under the pill, no wider than the thread's column (${Math.round((box.left + box.right) / 2)} against ${Math.round(centre)})`);
       require(document.elementFromPoint(box.left + box.width / 2, box.top + 12)?.closest('[data-secret-card="card-key"]') === card, "nothing covers it");
       require(card.querySelector("[data-secret-input]") && document.querySelector(".mb-chat .thread").contains(card), "it is the card itself, still in the thread, with its field");
+      require(close.getAttribute("aria-label") === "收起", "the floating close is named Collapse");
+    }
+    if (name === "card-float-collapse") {
+      require(visible(pill) && !card.classList.contains("is-floating") && !document.querySelector(".card-float-place"), "the close puts the card back and leaves its pill");
+      require(card.querySelector(".card-status.is-waiting") && close.getAttribute("aria-label") === "取消", "the card is still waiting and its close is named Cancel again");
+      require(!window.__look.calls.some(call => call.method === "integrations.card_close"), "collapsing sends no cancel request");
     }
     if (name === "card-float-back") {
       require(!card.classList.contains("is-floating") && !document.querySelector(".card-float-place"), "the card is back in its place");

@@ -299,8 +299,6 @@ export function createAgent(app: AppContext, places?: {
   // A panel dragged wider or narrower leaves the reading place where it was (reading-place.ts); a dock that grows or shrinks
   // under a thread that follows its bottom is followed by the thread's one stick to the bottom (message-rich.ts).
   keepReadingPlace(scroller, ".thread > li");
-  // A card waiting for the owner, scrolled out of sight, floats at the top of the conversation (card-float.ts).
-  mountCardFloat({ stage, scroller, thread });
   const none = el.querySelector<HTMLElement>(".ra-none")!;
   const wait = el.querySelector<HTMLElement>(".ra-wait")!;
   const dock = el.querySelector<HTMLElement>(".ra-dock")!;
@@ -365,6 +363,8 @@ export function createAgent(app: AppContext, places?: {
       if (visible && !scroller.hidden) drawThread();
     },
   });
+  // A card waiting for the owner, scrolled out of sight, floats at the top of the conversation (card-float.ts).
+  const cardFloat = mountCardFloat({ stage, scroller, thread, memberOfCard: () => members.member() });
   el.prepend(members.column);
   el.append(members.details);
   el.append(members.settings.el);
@@ -892,6 +892,7 @@ export function createAgent(app: AppContext, places?: {
    * Raphael's or the member's. Every thread's voice button is the gold emblem (拉斐爾大師), never a picture.
    */
   function drawFaces(): void {
+    cardFloat.sync();
     drawComposerTask();
     // Each conversation wears its member's colour, Raphael's being the first blue slime's (R-UI-81).
     const member = members.member(), color = memberColor(member);

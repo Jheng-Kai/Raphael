@@ -711,13 +711,16 @@ npm run look -- status-light-idle status-light-idle-open status-light-list statu
 ## A waiting card read out of sight
 
 A card that waits for the owner stays where it was born (card-float.ts, R-CARD-FLOAT-01). When the newest one is read
-out of sight, one pill at the top of the conversation names it (a warning dot, the card's title, an arrow named 回到原位).
-Its press stands the card itself over the thread, fixed and centred under the pill, as wide as it was in the thread, with a spacer in its
-place, so the card's fields and buttons keep working; 回到原位 scrolls back to it. The look fixture `keyCardLater` adds
-twelve turns after the key card so that it can be read out of sight.
+out of sight, a pill at the top shows its title, chevron and 回到原位 arrow in one contrasting ink over the slime's colour.
+The pill squishes on the first appearance per card when motion is allowed. A press stands the card itself over the thread,
+fixed and centred under the pill, with its original width and a spacer in its place. The floating × is 收起 and puts it back
+without cancelling (R-CARD-CLOSE-02), as do a second press and Escape. 回到原位 brings the card back into view.
+The look fixture `keyCardLater` adds twelve turns so the waiting card can be read out of sight in a member's conversation
+or in Raphael's. Both conversations have pill and open scenes. The member's collapse scene checks the waiting state, the
+restored 取消 label and the absence of a cancel request. The room tests cover the card speaker's tint and the asking member's fallback tint.
 
 ```powershell
-npm run look -- card-float-pill card-float-open card-float-back computer-key-card --theme both --width 1120,720,1920x1080
+npm run look -- card-float-pill card-float-open card-float-collapse card-float-back card-float-raphael-pill card-float-raphael-open computer-key-card --theme both --width 1120,720,1920x1080
 ```
 
 ## No voice

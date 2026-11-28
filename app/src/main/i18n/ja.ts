@@ -1009,6 +1009,7 @@ export const ja = {
   "status.groupNeeds": "あなたを待っています",
   "status.groupBusy": "作業中",
   "cardFloat.back": "元の位置に戻る",
+  "cardFloat.collapse": "折りたたむ",
   "agent.searchClose": "検索を閉じる",
   "agent.attach": "ファイルを添付",
   "agent.dropFiles": "ドロップしてファイルを追加",

@@ -1298,6 +1298,7 @@ export const tr = {
   "status.groupNeeds": "Seni bekliyor",
   "status.groupBusy": "Çalışıyor",
   "cardFloat.back": "Karta dön",
+  "cardFloat.collapse": "Daralt",
   "agent.searchClose": "Aramayı kapat",
   "agent.attach": "Dosya ekle",
   "agent.dropFiles": "Dosya eklemek için bırakın",
