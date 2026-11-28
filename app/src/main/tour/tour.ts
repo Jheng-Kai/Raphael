@@ -219,7 +219,9 @@ export function createTour(host: TourHost): Tour {
       }
       view?.keepFocus(controls());
     }
-    view?.reflow();
+    // Between the press and what comes next, Raphael stays put: the pressed row may be gone already (a page took the conversation's
+    // place), and placing it again then would send it somewhere it then has to hop back from.
+    if (wait?.kind !== "see" && wait?.kind !== "advance") view?.reflow();
   }
 
   function offerOnce(): void {

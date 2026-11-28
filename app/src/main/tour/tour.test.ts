@@ -113,7 +113,7 @@ test("the offer introduces Raphael and has Skip and Start, with no dim", async (
   const { tour } = harness();
   await offer(tour);
   expect(words()).toBe(t("tour.offer"));
-  expect(words()).toContain("大約兩分鐘");
+  expect(words()).toContain("兩分鐘");
   expect([...bubble().querySelectorAll("button")].map(item => item.textContent)).toEqual(["跳過", "開始"]);
   expect(button("start").classList.contains("pri")).toBe(true);
   expect(button("skip").classList.contains("pri")).toBe(false);
@@ -203,7 +203,7 @@ test("Skip asks before saving the answer, then closes the offer immediately", as
   await offer(tour);
   await press("skip");
   expect(confirmation().querySelector("h2")?.textContent).toBe("確定要跳過導覽嗎？");
-  expect(confirmation().querySelector("p")?.textContent).toBe("跳過之後就不會再出現導覽");
+  expect(confirmation().querySelector("p")?.textContent).toBe("跳過以後，導覽就不會再出現了");
   expect(confirmButton().textContent).toBe("跳過");
   expect(cancelButton().textContent).toBe("取消");
   expect(confirmation().classList.contains("is-quiet")).toBe(true);
@@ -503,6 +503,45 @@ test("the shortcut's keys are large caps that light while held, and Finish comes
   expect(caps().map(cap => cap.hasAttribute("data-down"))).toEqual([true, true]);
   emit({ type: "Dictation", phase: "listening", agent: true });
   expect(button("done")).not.toBeNull();
+});
+
+test("between a press and what it opens, Raphael stays where it is instead of hopping into the page and back", async () => {
+  const { tour, showConversation } = harness();
+  wireSteps(showConversation);
+  for (const selector of ['[data-col="add"]', ".conversation-trigger", ".sidebar-apps", ".mp-trigger"]) find(selector).remove();
+  await begin(tour);
+  expect(stepId()).toBe("account");
+  find(".sidebar-account").click();
+  await settle();
+  expect(stepId()).toBe("dictation");
+  const before = find(".tour-ground").style.left;
+  // The row is gone with its menu and the page took the conversation's place; until the page is explained, nothing moves.
+  find('.account-menu [data-account="dictation"]').click();
+  await settle(300);
+  expect(state()).toBe("do");
+  expect(find(".tour-ground").style.left).toBe(before);
+  await settle(300);
+  expect(state()).toBe("see");
+});
+
+test("the shortcut is practised: the hook's keys light the caps and start nothing, and the practice ends with the tour", async () => {
+  const { tour, emit, practiseKeys } = harness({ dictation_keys: ["AltRight"] });
+  await offer(tour);
+  for (const selector of ['[data-col="add"]', ".conversation-trigger", ".mp-trigger", ".sidebar-apps", ".sidebar-account"]) find(selector).remove();
+  button("start").click();
+  expect(stepId()).toBe("keys");
+  expect(practiseKeys).toHaveBeenLastCalledWith(true);
+  const down = () => [...document.querySelectorAll<HTMLElement>(".tour-keys .tour-key")].map(cap => cap.hasAttribute("data-down"));
+  emit({ type: "Hotkey", kind: "dictation_down" });
+  expect(down()).toEqual([true, false]);
+  expect(button("done")).toBeNull();
+  emit({ type: "Hotkey", kind: "dictation_up" });
+  expect(down()).toEqual([false, false]);
+  emit({ type: "Hotkey", kind: "agent_down" });
+  expect(down()).toEqual([true, true]);
+  expect(button("done")?.classList.contains("pri")).toBe(true);
+  await press("done");
+  expect(practiseKeys).toHaveBeenLastCalledWith(false);
 });
 
 async function reachModelList(tour: Tour): Promise<void> {

@@ -156,24 +156,27 @@ lines, progress labels and confirmation copy come from fifteen `tour.*` catalogu
   | `tour-step-9`, `tour-step-9-seen` | Press 聽寫 in the lit account menu | The dictation page, beside the dimmed sidebar |
   | `tour-step-10`, `tour-step-10-seen` | Press 行事曆 in the account menu the tour opened again | The calendar page |
   | `tour-step-11`, `tour-step-11-seen` | Press Raphael's row | Raphael's own conversation, which stays open to the end |
-  | `tour-step-12` | Hold the quick-ask keys together | Each large key cap lights while held; all down brings Finish |
+  | `tour-step-12` | Hold the quick-ask keys together (practised: they start nothing) | Each large 3D key sinks and lights while held; all down brings Finish |
 
   A missing action is skipped at entry. Nothing moves on by the clock: a press the app does not react to leaves the step
   as it was. 好的 closes what the step opened through the window's own path; after the dictation and calendar pages it
   brings the conversation back and opens the account menu again for the next row, and a resize that closed a menu opens
-  it again. No line of the tour ends with a full stop. Quick ask starting to listen also brings Finish.
+  it again. No line of the tour ends with a full stop. The keys are practised while the last step shows (`hotkeys_practice`), and the practice ends however the tour ends.
 - **Ending early** (`tour-end-ask`, `tour-close`): every step has the shared round End tour
   button at the top right and in the Tab order. End tour and Skip use the compact shared
   confirmation with the ordinary primary button and shared Cancel. The confirmation
   catches presses above the dim and takes keyboard focus. Cancel, Escape and a press
   beside it preserve the same step and open layer and return focus to End tour. Confirm closes the step's layer and removes the tour
   immediately. The saved answer stands. The farewell and its hops belong to Finish.
-- **The motion** (`tour-hop`): the scene enables motion and waits for the jump to settle.
+- **The motion** (`tour-hop`): the scene enables motion and waits for the hops to settle. The motion is the shared
+  `app/src/main/slime-hop.ts` library (plans as numbers, `playHops` on a ground, body and glow), so any slime can travel the same way.
   Raphael never appears elsewhere at once: a step's move and one the layout forces (a resize, a layer that opened) are
-  each one jump from where it stands. 80 ms of crouch, then 300 to 820 ms in the air (260 ms plus 0.55 ms a pixel) rising
-  18 to 150 px (0.3 px a pixel, never above the window), and a 180 ms landing. In the air its eyes turn toward where it
+  hopped along one straight line from where it stands. 80 ms of crouch, then two to six hops (the square root of the
+  distance over 40 px), each 240 to 420 ms in the air and rising 14 to 80 px (never above the window), 70 ms on the
+  ground between them and a 180 ms landing. Hops under way keep their course to the landing; a move the layout forces
+  meanwhile is hopped from there afterwards. In the air its eyes turn toward where it
   goes, as a face seen from the side, and it faces the person again on landing. A nudge of a few pixels only shifts where
-  a jump lands. Its blue light follows the ground and narrows and dims at the top. At rest the shared portrait sits on
+  the hops land. Its blue light follows the ground and narrows and dims at the top. At rest the shared portrait sits on
   whole pixels, and only the light breathes over 2.6 s. The words being left fade where they stand; the new ones appear
   after landing. Reduced motion places both immediately.
 - **The goodbye** (`tour-end`, `tour-end-closed`): Finish clears the dim, Raphael returns to
