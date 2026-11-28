@@ -14,7 +14,7 @@ function contour({ box, radius }: Spot): string {
   return `${opening.join(", ")}, ${opening[0]}, 0 0`;
 }
 
-export function dimClip(spot: Spot, extra?: Spot): string {
-  // Each closed contour returns over the same bridge so it only cuts out its own interior.
-  return `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${contour(spot)}${extra ? ", " + contour(extra) : ""})`;
+export function dimClip(spot: Spot): string {
+  // The opening's closed contour returns over a bridge to the corner so it only cuts out its own interior.
+  return `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${contour(spot)})`;
 }

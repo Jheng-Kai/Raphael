@@ -4557,8 +4557,21 @@ export function checkRendered(name, context = {}) {
     };
     const controls = [...(panel ?? document.querySelector('#nav .side-foot') ?? document.createElement("div")).querySelectorAll(pressable)]
       .map(control => [control, clipped(control)]).filter(([, rect]) => rect);
+    // While a dialog that fills the window is only looked at, Raphael may stand on it (nothing there takes a press), and only then:
+    // no strip round the dialog holds the group, and its title stays readable. The dialog itself never moves for the tour.
+    const standsOn = name.endsWith('-seen') && bubble.dataset.side === 'inside' && panel;
+    if (standsOn) {
+      const box = panel.getBoundingClientRect(), group = 88 + 200, tall = Math.max(b.height, 64);
+      const strips = { left: box.left - 24, right: view.w - box.right - 24, above: box.top - 12 - 44, below: view.h - box.bottom - 24 };
+      require(Math.max(strips.left, strips.right) < group && Math.max(strips.above, strips.below) < tall,
+        `Raphael stands on the dialog only when no strip round it holds the group (${JSON.stringify(strips)})`);
+      const title = panel.querySelector('h1, h2, h3')?.getBoundingClientRect();
+      require(!title || (!touches(b, title) && !touches(floor, title)), "the dialog's title stays clear");
+      require(!panel.closest('[data-tour-clearance]') && !panel.parentElement.style.paddingTop, "the dialog keeps its own place: no padding or shift for the tour");
+    }
     for (const [label, rect] of [["Raphael and its light", floor], ["the bubble", b]]) {
       if (!panel) require(!composer || !touches(rect, composer), `${label} clears the composer`);
+      if (standsOn) continue;
       for (const [control, box] of controls) {
         const name = control.getAttribute("aria-label") || control.textContent.trim() || control.className;
         require(!touches(rect, box), `${label} clears the pressable element ${name}`);
@@ -4571,23 +4584,25 @@ export function checkRendered(name, context = {}) {
     // A step of the walk: its action (tour-step-N), or what that action opened, lit and explained (tour-step-N-seen).
     const seen = name.endsWith('-seen');
     const number = Number(name.slice('tour-step-'.length).replace('-seen', ''));
-    const order = ["composer", "permission", "model", "model-list", "apps", "team", "account", "keys"];
+    const order = ["permission", "model", "model-list", "apps", "team", "account", "dictation", "calendar", "raphael", "keys"];
+    const pages = ["dictation", "calendar", "raphael"];
     const id = order[number - 1];
     require(id && root.dataset.mode === 'step' && root.dataset.step === id && root.dataset.state === (seen ? 'see' : 'do'),
-      `step ${number} of 8 is active ${seen ? 'and explaining what it opened' : 'and waiting for its action'} (${root.dataset.step}, ${root.dataset.state})`);
+      `step ${number} of ${order.length} is active ${seen ? 'and explaining what it opened' : 'and waiting for its action'} (${root.dataset.step}, ${root.dataset.state})`);
     const composerTarget = '.page-agent:not([hidden]) .composer';
-    const targets = [composerTarget + ' .cmp-input', composerTarget + ' .cmp-mode', composerTarget + ' .cmp-model .mp-trigger',
-      '.cb-menu [data-cb-act="models"]', '#nav .sidebar-apps', '#nav [data-col="add"]', '#nav .sidebar-account'];
+    const targets = [composerTarget + ' .cmp-mode', composerTarget + ' .cmp-model .mp-trigger',
+      '.cb-menu [data-cb-act="models"]', '#nav .sidebar-apps', '#nav [data-col="add"]', '#nav .sidebar-account',
+      ...pages.map(row => `.account-menu [data-account="${row}"]`)];
     const progress = bubble.querySelector('.tour-count');
     const dots = [...progress.querySelectorAll('.tour-dot')];
-    require(dots.length === 8 && dots.findIndex(dot => dot.hasAttribute('data-current')) === number - 1 &&
+    require(dots.length === order.length && dots.findIndex(dot => dot.hasAttribute('data-current')) === number - 1 &&
       progress.querySelectorAll('[data-current]').length === 1 && progress.getAttribute('aria-label'),
-    "eight steps appear as dots with just the current one filled and a readable progress label");
+    `${order.length} steps appear as dots with just the current one filled and a readable progress label`);
     require(bubble.querySelector('.tour-title')?.textContent.trim(), "the step has a short title above the spoken line");
     require(!/[。.]$/.test(text), `the spoken line ends without a full stop: ${text}`);
     const close = bubble.querySelector('.tour-head > button.close-button[data-tour="close"]');
     require(visible(close) && close.getAttribute('aria-label') && close.tabIndex === 0, "the heading has the shared round End tour button in the Tab order");
-    if (seen) require(ids.join() === 'gotIt' && buttons[0].classList.contains('pri'), "what a step opened waits for one primary 懂了 and nothing moves on by itself");
+    if (seen) require(ids.join() === 'gotIt' && buttons[0].classList.contains('pri'), "what a step opened waits for one primary 好的 and nothing moves on by itself");
     else require(ids.length === 0, "the instruction bubble has only the close control before any action");
     const dim = getComputedStyle(catcher);
     require(dim.pointerEvents === 'auto' && getComputedStyle(spot).pointerEvents === 'none', "the dim takes presses and the ring leaves the cut-out clear");
@@ -4598,7 +4613,7 @@ export function checkRendered(name, context = {}) {
     const opening = spot.hidden ? null : spot.getBoundingClientRect();
     const radius = opening ? parseFloat(getComputedStyle(spot).borderTopLeftRadius) : 0;
     // Inside a menu the whole menu is lit as well as its framed row: a sample point there is not dimmed by design.
-    const litMenu = !seen && id === 'model-list' && panel ? panel.getBoundingClientRect() : null;
+    const litMenu = !seen && (id === 'model-list' || pages.includes(id)) && panel ? panel.getBoundingClientRect() : null;
     const outsideOpening = ([x, y]) => (!litMenu || x < litMenu.left - 6 || x > litMenu.right + 6 || y < litMenu.top - 6 || y > litMenu.bottom + 6) && (!opening || Math.hypot(
       Math.max(opening.left + radius - x, 0, x - (opening.right - radius)),
       Math.max(opening.top + radius - y, 0, y - (opening.bottom - radius)),
@@ -4628,17 +4643,21 @@ export function checkRendered(name, context = {}) {
       catcher.style.cssText = dimStyle;
     }
     if (seen) {
-      // What the action opened stands lit inside a resting frame, and the group covers none of it.
-      const look = id === 'composer'
-        ? [...document.querySelectorAll('.page-agent:not([hidden]) .tn')].filter(row => row.querySelector('[data-message="question"]')).pop()
-        : panel;
+      // What the action opened stands lit inside a resting frame: the dialog or menu, or the whole page beside the dimmed sidebar.
+      const look = pages.includes(id) ? document.getElementById('main') : panel;
       require(visible(look), `what the step opened is on screen (${id})`);
+      if (pages.includes(id)) {
+        const shown = { dictation: '#main > .page-dictation', calendar: '#main > .au-page', raphael: '#main > .page-agent[data-raphael]' }[id];
+        require(visible(document.querySelector(shown + ':not([hidden])')), `the ${id} page is the one shown`);
+        require(!document.querySelector('.account-menu'), "the account menu closed when its row was pressed");
+        const side = document.querySelector('#nav').getBoundingClientRect();
+        require(document.elementFromPoint(side.left + Math.min(20, side.width / 2), side.top + 60) === catcher, "the sidebar beside the page is dimmed");
+      }
       require(root.dataset.dim === 'spot' && !spot.hidden, "the dim leaves what was opened lit");
       const l = look.getBoundingClientRect(), p = spot.getBoundingClientRect();
       require(p.left <= l.left + 1 && p.top <= l.top + 1 && p.right >= l.right - 1 && p.bottom >= l.bottom - 1, `the lit frame holds all of what was opened: ${[p.left, p.top, p.width, p.height].map(Math.round)} vs ${[l.left, l.top, l.width, l.height].map(Math.round)}`);
       require(getComputedStyle(spot).animationName === 'none', "the frame rests while the person reads");
       require(document.elementFromPoint(l.left + l.width / 2, l.top + Math.min(l.height / 2, 40)) !== catcher, "what was opened is not dimmed");
-      if (id === 'composer') for (const rect of [floor, b]) require(!touches(rect, l), "Raphael, its light and the bubble leave the sent message clear");
     } else if (id === 'keys') {
       require(root.dataset.dim === 'all' && spot.hidden, "nothing is pointed at: the whole window is dimmed, no cut-out");
       const caps = [...bubble.querySelectorAll('.tour-keys kbd')];
@@ -4650,7 +4669,7 @@ export function checkRendered(name, context = {}) {
       require(visible(target), `the target is on screen: ${selector}`);
       require(root.dataset.dim === 'spot' && !spot.hidden, "the dim leaves the action visible");
       const t = target.getBoundingClientRect(), p = spot.getBoundingClientRect();
-      const pad = ({ composer: 6, apps: 4, permission: 4, model: 4, team: 4, account: 4 }[id] ?? 0);
+      const pad = ({ apps: 4, permission: 4, model: 4, team: 4, account: 4 }[id] ?? 0);
       require(Math.abs(p.left - (t.left - pad)) <= 3 && Math.abs(p.top - (t.top - pad)) <= 3 && Math.abs(p.width - (t.width + 2 * pad)) <= 4 && Math.abs(p.height - (t.height + 2 * pad)) <= 4,
         `the cut-out follows the target's box: ${[p.left, p.top, p.width, p.height].map(Math.round)} vs ${[t.left, t.top, t.width, t.height].map(Math.round)}`);
       require(parseFloat(getComputedStyle(spot).borderTopLeftRadius) >= 8, "the cut-out is rounded");

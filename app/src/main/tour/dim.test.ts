@@ -34,14 +34,3 @@ test("a wide rounded opening can extend past the window and keep the centre clea
   expect(painted(clip, 720, 480, 478, 142)).toBe(true);
   expect(painted(clip, 720, 480, 481, 240)).toBe(true);
 });
-
-test("the composer field and its send button have separate openings", () => {
-  const clip = dimClip(
-    { box: { left: 118, top: 360, width: 560, height: 60 }, radius: 14 },
-    { box: { left: 646, top: 430, width: 32, height: 32 }, radius: 16 },
-  );
-  expect(painted(clip, 720, 480, 400, 390)).toBe(false);
-  expect(painted(clip, 720, 480, 660, 446)).toBe(false);
-  expect(painted(clip, 720, 480, 620, 446)).toBe(true);
-  expect(painted(clip, 720, 480, 719, 479)).toBe(true);
-});

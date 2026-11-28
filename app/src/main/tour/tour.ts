@@ -3,13 +3,13 @@
 import { onLocaleChange, t } from "../i18n";
 import { confirmDelete } from "../member-dialogs";
 import type { NavStep } from "../nav-history";
-import { sendsOnEnter } from "../pages/agent";
+import { raphaelName } from "../raphael";
 import type { AppContext, DeviceSettings } from "../types";
 import { closeMenu, holdMenuOpen } from "../ui";
 import { CAPTION_CONTROLS, createView, type Pressed, type TourView, type ViewModel } from "./view";
-import { COMPOSER, COMPOSER_FIELD, LAYERS, SEND, STEPS, askKeys, boxOf, firstShown, pressableBoxes, spotOf, type Layer } from "./steps";
+import { COMPOSER, LAYERS, STEPS, askKeys, boxOf, firstShown, pressableBoxes, spotOf, type Layer } from "./steps";
 
-export type TourHost = Pick<AppContext, "closeSettings" | "onEvent"> & {
+export type TourHost = Pick<AppContext, "closeSettings" | "onEvent" | "go"> & {
   device(): DeviceSettings;
   setDevice(patch: Partial<DeviceSettings>): Promise<unknown>;
   isConversation(): boolean;
@@ -38,15 +38,14 @@ export function createTour(host: TourHost): Tour {
   let phase: Phase = "idle";
   let view: TourView | null = null;
   let at = 0;
-  /** The step's action is done and what it opened is lit and explained, until the person presses 懂了. */
+  /** The step's action is done and what it opened is lit and explained, until the person presses 好的. */
   let seeing = false;
   let answered = false;
   let finishReady = false;
   let canFinish = false;
-  let message = "";
-  let previousMessages = new Set<string>();
   let priorLayer: HTMLElement | null = null;
-  let cancelling: HTMLElement | null = null;
+  /** A control the tour presses itself (the maker's Cancel, the account button that opens the menu again). */
+  let pressing: HTMLElement | null = null;
   const ownedLayers = new Map<Layer, HTMLElement>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let settle: ReturnType<typeof setTimeout> | undefined;
@@ -74,24 +73,12 @@ export function createTour(host: TourHost): Tour {
     const selector = stepNow().target;
     return selector ? firstShown(selector, { includeInert }) : null;
   };
-  const send = () => stepNow().id === "composer" && !seeing ? firstShown(SEND) : null;
-  const controls = () => cancelling ? [cancelling] : seeing || wait?.kind === "advance" ? [] :
-    [target(), send()].flatMap(el => el ? [el] : []);
+  const controls = () => pressing ? [pressing] : seeing || wait?.kind === "advance" ? [] : [target()].flatMap(el => el ? [el] : []);
   const openLayer = () => layer(stepNow().opens) ?? layer(stepNow().layer);
-  /** What the person looks at once the step's action is done: the message they sent, or what the step opened. */
+  /** What the person looks at once the step's action is done: the page it went to, or what it opened. */
   const lookAt = (): HTMLElement | null => {
     const step = stepNow();
-    if (step.id === "composer") {
-      const fresh = ownerMessages().filter(el => !previousMessages.has(messageKey(el)));
-      const sent = fresh[fresh.length - 1];
-      return sent?.closest<HTMLElement>(".tn") ?? (step.look ? firstShown(step.look) : null);
-    }
     return step.look ? firstShown(step.look, { includeInert: true }) : openLayer();
-  };
-  const ownerMessages = () => [...document.querySelectorAll<HTMLElement>('.page-agent:not([hidden]) .tn [data-message="question"] .message-text')];
-  const messageKey = (el: HTMLElement) => {
-    const row = el.closest<HTMLElement>(".tn")!;
-    return row.dataset.id ?? row.dataset.session ?? el.textContent;
   };
 
   function model(): ViewModel {
@@ -107,7 +94,7 @@ export function createTour(host: TourHost): Tour {
     const step = stepNow()!;
     const progress = { current: at + 1, total: STEPS.length, label: t("tour.progress", { current: at + 1, total: STEPS.length }) };
     if (seeing && step.seen) {
-      const looked = () => { const el = lookAt(); return el ? spotOf(el, 6) : null; };
+      const looked = () => { const el = lookAt(); return el ? spotOf(el, step.page ? 0 : 6) : null; };
       return {
         mode: "step", step: step.id, label, title: t(step.title), closeLabel: t("tour.close"),
         text: t(step.seen), progress, seeing: true,
@@ -116,14 +103,18 @@ export function createTour(host: TourHost): Tour {
         locate: () => { const spot = looked(); return spot ? { ...spot, dim: true } : null; },
         lit: looked,
         lookArea: lookAt,
-        layer: step.id === "composer" ? () => null : openLayer,
+        layer: lookAt,
         prefer: step.prefer, align: "center", origin,
-        keepControlsClear: () => { const el = lookAt(); return el ? [boxOf(el)] : keepControlsClear(); },
+        // Raphael never stands on what is looked at; a page that fills the window keeps at least its composer clear.
+        keepControlsClear: () => {
+          const el = lookAt(), composer = step.page ? firstShown(COMPOSER) : null;
+          return el ? [boxOf(el), ...(composer ? [boxOf(composer)] : [])] : keepControlsClear();
+        },
       };
     }
     return {
       mode: "step", step: step.id, label, title: t(step.title), closeLabel: t("tour.close"),
-      text: t(step.text),
+      text: t(step.text, { name: raphaelName() }),
       ...(step.keys ? { keys: askKeys(host.device()) } : {}),
       progress,
       buttons: step.keys && finishReady ? [{ id: "done", label: t("tour.done"), primary: true }] : [],
@@ -134,7 +125,6 @@ export function createTour(host: TourHost): Tour {
       },
       // Inside a menu the whole menu stays lit, so the person sees where the framed row is.
       ...(step.layer ? { lit: () => { const el = layer(step.layer); return el ? spotOf(el, 4) : null; } } : {}),
-      extraSpot: () => { const el = send(); return el ? spotOf(el, 2) : null; },
       layer: openLayer,
       ...(step.id === "account" ? { anchor: () => anchorSpot()?.box ?? null } : {}),
       prefer: step.prefer, align: step.id === "account" ? "start" : "center", origin,
@@ -188,9 +178,7 @@ export function createTour(host: TourHost): Tour {
       if (wait?.kind === "action") {
         const opened = layer(step.opens);
         if (opened && step.opens && opened !== priorLayer) ownedLayers.set(step.opens, opened);
-        const reacted = step.id === "composer"
-          ? ownerMessages().some(el => !previousMessages.has(messageKey(el)) && el.textContent?.trim() === message)
-          : (opened !== null && opened !== priorLayer) || step.reacted?.();
+        const reacted = (opened !== null && opened !== priorLayer) || step.reacted?.();
         if (reacted && step.seen) setWait("see", REACTION_MS);
         else if (reacted) setWait("advance", REACTION_MS);
       } else if (!wait && !seeing && step.target && !target()) {
@@ -250,16 +238,11 @@ export function createTour(host: TourHost): Tour {
   }
 
   function targetPressed(): void {
-    if (cancelling || seeing || stepNow().id === "composer") return;
+    if (pressing || seeing) return;
     watchAction();
   }
 
-  function captureAction(event: Event): void {
-    if (phase !== "step" || confirmation || wait || seeing || !(event.target instanceof HTMLElement)) return;
-    if (stepNow().id === "composer" && event.type === "submit" && event.target.matches(COMPOSER)) watchMessage();
-  }
-
-  /** The step's action is done: light what it opened and explain it, until 懂了. */
+  /** The step's action is done: light what it opened and explain it, until 好的. */
   function see(): void {
     clearWait();
     seeing = true;
@@ -267,13 +250,10 @@ export function createTour(host: TourHost): Tour {
     view?.keepFocus(controls());
   }
 
-  function watchMessage(): void {
-    if (wait) return;
-    const field = firstShown(COMPOSER_FIELD) as HTMLTextAreaElement | null;
-    message = field?.value.trim() ?? "";
-    if (!message) return;
-    previousMessages = new Set(ownerMessages().map(messageKey));
-    watchAction();
+  /** The tour presses one of the window's own controls, which its spotlight lets through for that press alone. */
+  function press(control: HTMLElement | null): void {
+    pressing = control;
+    try { control?.click(); } finally { pressing = null; }
   }
 
   function closeOpened(keep?: Layer): void {
@@ -282,17 +262,24 @@ export function createTour(host: TourHost): Tour {
       ownedLayers.delete(id);
       if (panel !== layer(id)) continue;
       if (id === "apps" || id === "settings") host.closeSettings();
-      else if (id === "team") {
-        cancelling = panel.querySelector<HTMLElement>('[data-dlg="cancel"]');
-        try { cancelling?.click(); } finally { cancelling = null; }
-      }
+      else if (id === "team") press(panel.querySelector<HTMLElement>('[data-dlg="cancel"]'));
       else closeMenu();
     }
+  }
+
+  /** The next row of the account menu waits after a look at another row's page: the conversation comes back and the menu opens again. */
+  function reopenAccount(): void {
+    if (stepNow().layer !== "account" || layer("account")) return;
+    if (!host.isConversation()) host.go("agent");
+    press(account());
+    const menu = layer("account");
+    if (menu) ownedLayers.set("account", menu);
   }
 
   function arrive(): void {
     clearWait();
     seeing = false;
+    reopenAccount();
     while (stepNow().target && !target()) {
       at++;
       closeOpened(stepNow().layer);
@@ -420,10 +407,7 @@ export function createTour(host: TourHost): Tour {
     if (event.key === "Tab" && event.type === "keydown" && !modified) {
       view?.tab(allowed, event.shiftKey);
     } else if (event.key !== "Escape" && event.key !== "Tab" && event.target instanceof Element) {
-      if (allowed.some(control => control.contains(event.target as Node))) {
-        if (stepNow().id === "composer" && event.type === "keydown" && event.target.closest(COMPOSER_FIELD) && sendsOnEnter(event)) watchMessage();
-        return;
-      }
+      if (allowed.some(control => control.contains(event.target as Node))) return;
       if (view?.contains(event.target) || event.target.closest(CAPTION_CONTROLS)) {
         // Keep native button activation while keeping keys out of other open surfaces.
         event.stopImmediatePropagation();
@@ -454,8 +438,6 @@ export function createTour(host: TourHost): Tour {
     observer.observe(document.body, { attributes: true, childList: true, subtree: true });
     observer.observe(document.documentElement, { attributes: true });
     document.addEventListener("focusin", schedule);
-    window.addEventListener("submit", captureAction, true);
-    window.addEventListener("input", captureAction, true);
     window.addEventListener("resize", schedule);
     window.addEventListener("scroll", schedule, true);
     window.addEventListener("keydown", walkKey, true);
@@ -474,8 +456,6 @@ export function createTour(host: TourHost): Tour {
       frame = 0;
       observer.disconnect();
       document.removeEventListener("focusin", schedule);
-      window.removeEventListener("submit", captureAction, true);
-      window.removeEventListener("input", captureAction, true);
       window.removeEventListener("resize", schedule);
       window.removeEventListener("scroll", schedule, true);
       window.removeEventListener("keydown", walkKey, true);

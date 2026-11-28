@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { EDGE, EDGE_TOP, GROUP_GAP, SPOT_GAP, groundBox, placeAroundLayer, placeGroup, type Box, type PlaceInput } from "./place";
+import { EDGE, EDGE_TOP, GROUP_GAP, SPOT_GAP, groundBox, placeAroundLayer, placeGroup, placeInside, type Box, type PlaceInput } from "./place";
 
 const view = { width: 1120, height: 900 };
 const bubble = { width: 260, height: 110 };
@@ -126,4 +126,30 @@ test("the offer stands over the account button at its left edge", () => {
   expect(found.side).toBe("above");
   expect(found.slime.left).toBe(face.left);
   expect(bottom(found.bubble)).toBe(face.top - SPOT_GAP);
+});
+
+test("a dialog that fills the window is stood on at its lower right, clear of its title, and never moved", () => {
+  const dialog: Box = { left: 90, top: 40, width: 900, height: 560 };
+  const title: Box = { left: 122, top: 64, width: 130, height: 28 };
+  const small = { width: 1080, height: 640 };
+  expect(placeAroundLayer({ ...base, view: small, spot: dialog, prefer: ["right"], controls: [dialog, title] }, dialog)).toBeNull();
+  const found = placeInside({ ...base, view: small, spot: dialog, prefer: ["right"], controls: [dialog, title] }, dialog);
+  expect(found.side).toBe("inside");
+  for (const part of [found.bubble, found.slime]) {
+    expect(part.left).toBeGreaterThanOrEqual(dialog.left);
+    expect(right(part)).toBeLessThanOrEqual(right(dialog));
+    expect(bottom(part)).toBeLessThanOrEqual(bottom(dialog));
+    expect(apart(part, title)).toBe(true);
+  }
+  // At its lower right: the dialog's own corner, not the window's middle.
+  expect(right(found.bubble)).toBe(right(dialog) - 24);
+  expect(bottom(found.bubble)).toBe(bottom(dialog) - 24);
+});
+
+test("a page looked at from a narrow window keeps its composer clear", () => {
+  const page: Box = { left: 85, top: 0, width: 635, height: 900 };
+  const composer: Box = { left: 120, top: 780, width: 568, height: 92 };
+  const found = placeInside({ ...base, view: { width: 720, height: 900 }, spot: page, prefer: ["right"], controls: [page, composer] }, page);
+  expect(apart(found.bubble, composer) && apart(found.slime, composer)).toBe(true);
+  expect(bottom(found.bubble)).toBeLessThanOrEqual(composer.top);
 });

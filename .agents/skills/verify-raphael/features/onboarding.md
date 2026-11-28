@@ -138,24 +138,27 @@ lines, progress labels and confirmation copy come from fifteen `tour.*` catalogu
   Cancel, Escape or a press beside it returns focus to Skip. Confirming saves the answer
   and dismisses the offer in `tour-offer-skip`.
 - **The walk**: every step is one framed action. When the app reacts, a step that opened something
-  worth a look lights it inside a resting frame with one plain line and waits for 懂了, for as long
+  worth a look lights it inside a resting frame with one plain line and waits for 好的, for as long
   as the owner reads. `tour-step-N` captures the instruction; `tour-step-N-seen` captures what
-  the action opened, lit and explained.
+  the action opened, lit and explained. The composer is not a step.
 
   | Look scenes | Action | What is lit and explained |
   | --- | --- | --- |
-  | `tour-step-1`, `tour-step-1-seen` | Type a greeting and press Enter | The sent message, where the replies appear |
-  | `tour-step-2`, `tour-step-2-seen` | Press the permissions chip | Its menu, and what Manual and Auto mean |
-  | `tour-step-3` | Press the model chip | (its menu opens and the tour moves on into it) |
-  | `tour-step-4`, `tour-step-4-seen` | Press the model name inside the lit menu | The model list |
-  | `tour-step-5`, `tour-step-5-seen` | Press Connect apps | The dialog |
-  | `tour-step-6`, `tour-step-6-seen` | Press the sidebar plus | The member maker, cancelled on 懂了 without creating a member |
-  | `tour-step-7`, `tour-step-7-seen` | Press the account avatar | The account menu |
-  | `tour-step-8` | Try the quick-ask shortcut | Listening makes Finish appear |
+  | `tour-step-1`, `tour-step-1-seen` | Press the permissions chip | Its menu, and what Manual and Auto mean |
+  | `tour-step-2` | Press the model chip | (its menu opens and the tour moves on into it) |
+  | `tour-step-3`, `tour-step-3-seen` | Press the model name inside the lit menu | The model list |
+  | `tour-step-4`, `tour-step-4-seen` | Press Connect apps | The dialog |
+  | `tour-step-5`, `tour-step-5-seen` | Press the sidebar plus | The member maker, cancelled on 好的 without creating a member |
+  | `tour-step-6` | Press the account avatar | (its menu opens and the tour moves on into it) |
+  | `tour-step-7`, `tour-step-7-seen` | Press 聽寫 in the lit account menu | The dictation page, beside the dimmed sidebar |
+  | `tour-step-8`, `tour-step-8-seen` | Press 行事曆 in the account menu the tour opened again | The calendar page |
+  | `tour-step-9`, `tour-step-9-seen` | Press Raphael's row | Raphael's own conversation, which stays open to the end |
+  | `tour-step-10` | Try the quick-ask shortcut | Listening makes Finish appear |
 
   A missing action is skipped at entry, and a press with no reaction after four seconds still
-  explains (or moves on when nothing opened). 懂了 closes what the step opened through the
-  window's own path. No line of the tour ends with a full stop. The last step draws the
+  explains (or moves on when nothing opened). 好的 closes what the step opened through the
+  window's own path; after the dictation and calendar pages it brings the conversation back and
+  opens the account menu again for the next row. No line of the tour ends with a full stop. The last step draws the
   configured shortcut as key caps and offers Finish after eight seconds if listening has not started.
 - **Ending early** (`tour-end-ask`, `tour-close`): every step has the shared round End tour
   button at the top right and in the Tab order. End tour and Skip use the compact shared
@@ -175,15 +178,18 @@ lines, progress labels and confirmation copy come from fifteen `tour.*` catalogu
   the sidebar foot and hops twice as the farewell appears. Each hop is 12 px high and
   takes 150 ms. The farewell fades 4.5 s after it appears. Reduced motion skips both hops.
 - **The checks**: `page-unshifted` checks the app root and the zero scroll offsets in
-  `after-onboarding`, the offer scenes, `tour-step-1`, `tour-step-5`, every `-seen` scene and
+  `after-onboarding`, the offer scenes, `tour-step-1`, `tour-step-4`, every `-seen` scene and
   `tour-end`. The dim covers the window edges and opens on the action. The full group stays
   inside the viewport and clears the ring and every visible pressable element in the open
-  layer, including connection buttons. The group tries the space beside the layer, the open
-  part of its header, then the dim above or below it. A nearly full dialog can reserve a dim
-  strip. In a short window, the member maker can move sideways to keep its look picker usable. Check both apps scenes at the owner's 1080 × 640 size as well as the usual sizes.
+  layer, including connection buttons. The window's own dialogs, menus and pages never move or
+  get padded for the tour at any size: the group tries the space beside the layer (its bubble
+  narrows to no less than 200 px to fit a strip), the open part of its header, then the dim above
+  or below it. Only while a dialog that leaves no such strip is looked at does Raphael stand on
+  its lower right, clear of its title; the check then proves no strip could hold the group. Check
+  the apps, maker and page scenes at the owner's 1080 × 640 size as well as the usual sizes.
 
 ```powershell
-npm run look -- tour-offer tour-offer-returning tour-offer-settings-open tour-offer-skip-ask tour-offer-skip tour-offer-escape tour-step-1 tour-step-1-seen tour-step-2 tour-step-2-seen tour-step-3 tour-step-4 tour-step-4-seen tour-step-5 tour-step-5-seen tour-step-6 tour-step-6-seen tour-step-7 tour-step-7-seen tour-step-8 tour-hop tour-end tour-end-closed tour-end-ask tour-close --theme both --width 1120,720,1920x1080,1080x640
+npm run look -- tour-offer tour-offer-returning tour-offer-settings-open tour-offer-skip-ask tour-offer-skip tour-offer-escape tour-step-1 tour-step-1-seen tour-step-2 tour-step-3 tour-step-3-seen tour-step-4 tour-step-4-seen tour-step-5 tour-step-5-seen tour-step-6 tour-step-7 tour-step-7-seen tour-step-8 tour-step-8-seen tour-step-9 tour-step-9-seen tour-step-10 tour-hop tour-end tour-end-closed tour-end-ask tour-close --theme both --width 1120,720,1920x1080,1080x640
 ```
 
 Native verification still needs the real window. Look exercises the app with fixture data.

@@ -4,10 +4,6 @@
 .mb-scrim.tour-confirm { z-index: 165; }
 .tour-catch { position: absolute; inset: 0; display: none; background: var(--scrim); }
 .tour[data-mode="step"] .tour-catch { display: block; pointer-events: auto; }
-/* A nearly full tour dialog can leave a clear strip above its controls. */
-.modal-scrim[data-tour-clearance="above"] { padding-top: var(--tour-clearance); }
-.mb-scrim[data-tour-clearance="side"] > .cr-dialog { justify-self: start; }
-:root:has(.mb-scrim[data-tour-clearance="side"]) .tour-bubble { max-width: min(264px, calc(100% - 136px)); }
 :root:has(.tour[data-mode="step"]) .window-chrome { visibility: hidden; }
 :root:has(.tour[data-mode="step"]) .window-chrome .window-controls { visibility: visible; }
 :root:has(.tour[data-mode="step"]) .window-resize { pointer-events: none; }

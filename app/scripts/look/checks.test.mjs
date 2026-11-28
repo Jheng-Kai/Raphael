@@ -63,8 +63,8 @@ it.each(["keys", "apps"])("hit-tests the dim at the window edges of the %s step"
           <button class="btn icon close-button" data-tour="close" aria-label="End tour"><svg></svg></button>
         </div>
         <p class="tour-text">Raphael's guided tour</p>
-        <span class="tour-count" role="img" aria-label="Step ${highlightsSearch ? 5 : 8} of 8">${Array.from({ length: 8 }, (_, index) =>
-          `<span class="tour-dot"${index === (highlightsSearch ? 4 : 7) ? " data-current" : ""}></span>`).join("")}</span>
+        <span class="tour-count" role="img" aria-label="Step ${highlightsSearch ? 4 : 10} of 10">${Array.from({ length: 10 }, (_, index) =>
+          `<span class="tour-dot"${index === (highlightsSearch ? 3 : 9) ? " data-current" : ""}></span>`).join("")}</span>
         ${highlightsSearch ? '<div class="tour-foot"><div class="tour-buttons"><button class="btn sm pri" data-tour="gotIt">Got it</button></div></div>' : ""}
         <div class="tour-keys"><kbd>Alt</kbd><kbd>R</kbd></div>
       </div>
@@ -91,7 +91,7 @@ it.each(["keys", "apps"])("hit-tests the dim at the window edges of the %s step"
   const dim = doc.querySelector(".tour-catch");
   const captionGlyph = doc.querySelector(".window-button svg");
   const dragStrip = doc.querySelector(".window-drag");
-  const check = () => checkRendered(highlightsSearch ? "tour-step-5-seen" : "tour-step-8");
+  const check = () => checkRendered(highlightsSearch ? "tour-step-4-seen" : "tour-step-10");
   const hits = new Map(highlightsSearch ? [["0.25,38.5", doc.body], ["355,48", doc.querySelector(".modal")], ["355,243", doc.querySelector(".modal")]] : []);
   doc.elementFromPoint = (x, y) => {
     if (Math.round(x) >= doc.documentElement.clientWidth || Math.round(y) >= doc.documentElement.clientHeight) return null;
@@ -105,6 +105,20 @@ it.each(["keys", "apps"])("hit-tests the dim at the window edges of the %s step"
       expect(check().pressable).toBe(2);
       measure(".modal button", 320, 150, 120, 45);
       expect(check).toThrow("the bubble clears the pressable element Telegram Connect");
+      // Standing on the dialog is allowed only while it leaves no strip for the group, and the dialog keeps its place.
+      const bubble = doc.querySelector(".tour-bubble");
+      bubble.dataset.side = "inside";
+      expect(check).toThrow("Raphael stands on the dialog only when no strip round it holds the group");
+      measure(".modal", 0, 8, 710, 560);
+      measure(".tour-spot", 0, 8, 710, 560);
+      hits.set("355,288", doc.querySelector(".modal"));
+      expect(check().side).toBe("inside");
+      doc.querySelector(".modal-scrim").style.paddingTop = "120px";
+      expect(check).toThrow("the dialog keeps its own place");
+      doc.querySelector(".modal-scrim").style.paddingTop = "";
+      delete bubble.dataset.side;
+      measure(".modal", 0, 8, 710, 470);
+      measure(".tour-spot", 0, 8, 710, 470);
       measure(".modal button", 570, 100, 120, 45);
     }
     expect(check().dimPoints).toEqual([

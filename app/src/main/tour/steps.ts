@@ -4,10 +4,10 @@ import { bindingLabels } from "../keys";
 import type { DeviceSettings } from "../types";
 import type { Box, Side } from "./place";
 
-type StepId = "composer" | "permission" | "model" | "model-list" | "apps" | "team" | "account" | "keys";
-type Line = "composer" | "permission" | "model" | "modelList" | "apps" | "team" | "account" | "keys";
-type Seen = "composerSeen" | "permissionSeen" | "modelListSeen" | "appsSeen" | "teamSeen" | "accountSeen";
-type Title = "composer" | "permission" | "model" | "apps" | "team" | "account" | "keys";
+type StepId = "permission" | "model" | "model-list" | "apps" | "team" | "account" | "dictation" | "calendar" | "raphael" | "keys";
+type Line = "permission" | "model" | "modelList" | "apps" | "team" | "account" | "dictation" | "calendar" | "raphael" | "keys";
+type Seen = "permissionSeen" | "modelListSeen" | "appsSeen" | "teamSeen" | "dictationSeen" | "calendarSeen" | "raphaelSeen";
+type Title = "permission" | "model" | "apps" | "team" | "account" | "dictation" | "calendar" | "raphael" | "keys";
 export type Layer = keyof typeof LAYERS;
 
 /** The target's box with the room round it and the corner radius of the cut-out. */
@@ -28,6 +28,8 @@ export interface TourStep {
   target?: string;
   layer?: Layer;
   opens?: Layer;
+  /** The page the step's row goes to, instead of a layer: the tour comes back to the conversation once it was looked at. */
+  page?: string;
   reacted?: () => boolean;
   prefer: readonly Side[];
   pad?: number;
@@ -74,7 +76,17 @@ export const LAYERS = {
   settings: '.modal-scrim[data-page="settings"]:not([data-standalone]) > .modal',
 } as const;
 
-export const THREAD = ".page-agent:not([hidden]) .ra-scroll";
+/** The page area beside the sidebar, lit while a page the account menu opened is looked at. */
+export const PAGE_AREA = "#main";
+const PAGES = {
+  dictation: "#main > .page-dictation",
+  calendar: "#main > .au-page",
+  raphael: "#main > .page-agent[data-raphael]",
+} as const;
+const accountRow = (id: string) => `${LAYERS.account} [data-account="${id}"]`;
+const pageStep = (id: keyof typeof PAGES): Pick<TourStep, "target" | "layer" | "page" | "look" | "reacted"> => ({
+  target: accountRow(id), layer: "account", page: PAGES[id], look: PAGE_AREA, reacted: () => !!firstShown(PAGES[id]),
+});
 
 export const PRESSABLE = 'button, a[href], input:not([type="hidden"]), select, textarea, summary, [contenteditable], [role="button"], [role="menuitem"], [role="tab"], [role="radio"], [role="switch"], [data-conn][data-row]';
 
@@ -96,8 +108,6 @@ export function pressableBoxes(layer: HTMLElement): Box[] {
 }
 
 export const STEPS: readonly TourStep[] = [
-  { id: "composer", title: "tour.composerTitle", text: "tour.composer", seen: "tour.composerSeen", look: THREAD,
-    target: COMPOSER_FIELD, prefer: ["above"], pad: 6 },
   { id: "permission", title: "tour.permissionTitle", text: "tour.permission", seen: "tour.permissionSeen",
     target: ACTION_MODE, opens: "permission", prefer: ["above"], pad: 4 },
   { id: "model", title: "tour.modelTitle", text: "tour.model", target: COMPOSER + " .cmp-model .mp-trigger:not(:disabled)",
@@ -109,8 +119,12 @@ export const STEPS: readonly TourStep[] = [
     target: "#nav .sidebar-apps", opens: "apps", prefer: ["right", "above"], pad: 4 },
   { id: "team", title: "tour.teamTitle", text: "tour.team", seen: "tour.teamSeen",
     target: '#nav [data-col="add"]', opens: "team", prefer: ["right", "below"], pad: 4 },
-  { id: "account", title: "tour.accountTitle", text: "tour.account", seen: "tour.accountSeen",
+  { id: "account", title: "tour.accountTitle", text: "tour.account",
     target: "#nav .sidebar-account", opens: "account", prefer: ["above"], pad: 4 },
+  // Each row of the account menu worth knowing is pressed in turn; after a look the tour opens the menu again for the next one.
+  { id: "dictation", title: "tour.dictationTitle", text: "tour.dictation", seen: "tour.dictationSeen", ...pageStep("dictation"), prefer: ["right", "above"] },
+  { id: "calendar", title: "tour.calendarTitle", text: "tour.calendar", seen: "tour.calendarSeen", ...pageStep("calendar"), prefer: ["right", "above"] },
+  { id: "raphael", title: "tour.raphaelTitle", text: "tour.raphael", seen: "tour.raphaelSeen", ...pageStep("raphael"), prefer: ["right", "above"] },
   { id: "keys", title: "tour.keysTitle", text: "tour.keys", prefer: ["inside"], keys: true },
 ];
 

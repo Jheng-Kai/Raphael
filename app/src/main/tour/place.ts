@@ -149,6 +149,22 @@ export function placeAroundLayer(input: PlaceInput, layer: Box, header?: Box): P
   return null;
 }
 
+/**
+ * The last resort while something that fills the window is looked at: the group stands on it, at its lower right, clear of what
+ * must stay readable there (its title, a composer). A box that covers most of the area is what is looked at itself, not a control.
+ */
+export function placeInside(input: PlaceInput, area: Box): Placement {
+  const { view } = input;
+  const placed = candidate("inside", { ...input, spot: area });
+  const left = Math.max(EDGE, area.left), top = Math.max(EDGE_TOP, area.top);
+  const bounds = { left, top, width: Math.min(view.width - EDGE, area.left + area.width) - left, height: Math.min(view.height - EDGE, area.top + area.height) - top };
+  const most = (box: Box) => box.width * box.height >= area.width * area.height / 2;
+  const free = nearestFree(placed.all, bounds, (input.controls ?? []).filter(box => !most(box)));
+  if (!free) return placed;
+  const shift = (box: Box) => ({ ...box, left: box.left + free.left - placed.all.left, top: box.top + free.top - placed.all.top });
+  return { side: "inside", slime: shift(placed.slime), bubble: shift(placed.bubble) };
+}
+
 /** Search the free window when the usual anchors are crowded. */
 function placeInWindow(input: PlaceInput, placed: ReturnType<typeof candidate>, obstacles: readonly Box[]): Placement {
   const { view, slimeInset = 0 } = input;

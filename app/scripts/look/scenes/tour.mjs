@@ -1,4 +1,4 @@
-import { scene, click, type, typing, wait, waitGone, check, key, page, pressAt, waitCall } from "./steps.mjs";
+import { scene, click, type, wait, waitGone, check, key, page, pressAt, waitCall } from "./steps.mjs";
 
 const returning = { start: "app", tourUnanswered: true, tourQuickAsk: true };
 const firstRun = { onboarding: true, tourUnanswered: true };
@@ -19,20 +19,29 @@ const guide = [click('[data-ob="next"]'), wait('#ob-first-name'), type('#ob-firs
 const apps = '.modal-scrim[data-standalone="connections"]:not([hidden]):not(.leaving)';
 const maker = ".mb-scrim:not(.leaving) > .cr-dialog";
 const GOT_IT = '.tour [data-tour="gotIt"]';
+const ACCOUNT_MENU = "#app-popover.account-menu";
+const row = id => click(`${ACCOUNT_MENU} [data-account="${id}"]`);
 // [id, what the person does, the actions, whether what it opens is then lit and explained, what must hold once the tour moves on]
 const steps = [
-  ["composer", "Send a greeting in the conversation", [typing(agent + " .cmp-input", "你好", "{Enter}"),
-    waitCall("agent_ask_text"), { action: "wait-text", selector: '.page-agent:not([hidden]) [data-message="question"] .message-text', text: "你好" }], true],
   ["permission", "Open the permission menu", [click(agent + " .cmp-mode"), wait(".cb-menu .cb-modes")], true, [waitGone(".cb-menu")]],
   ["model", "Open the model menu", [click(agent + " .cmp-model .mp-trigger"), wait(".cb-menu .cb-now")], false],
   ["model-list", "Open the model list inside the model menu", [click('.cb-menu [data-cb-act="models"]'), wait('.cb-menu .cb-body[data-view="models"]')], true, [waitGone(".cb-menu")]],
   ["apps", "Open the Connect apps dialog", [click("#nav .sidebar-apps"), wait(apps + " #conn-search")], true, [waitGone(apps), check("page-unshifted")]],
   ["team", "Open the member maker from the sidebar plus", [click('#nav [data-col="add"]'), wait(maker)], true, [waitGone(maker), check("tour-no-member-created")]],
-  ["account", "Open the account menu", [click("#nav .sidebar-account"), wait(".account-menu")], true, [waitGone(".account-menu")]],
+  ["account", "Open the account menu", [click("#nav .sidebar-account"), wait(ACCOUNT_MENU)], false],
+  // Each page is looked at, and 好的 brings the conversation back with the account menu open again for the next row.
+  ["dictation", "Press 聽寫 in the account menu", [row("dictation"), wait("#main > .page-dictation:not([hidden])")], true,
+    [wait(".page-agent:not([hidden]) .composer"), wait(ACCOUNT_MENU)]],
+  ["calendar", "Press 行事曆 in the account menu", [row("calendar"), wait("#main > .au-page:not([hidden])")], true,
+    [wait(".page-agent:not([hidden]) .composer"), wait(ACCOUNT_MENU)]],
+  ["raphael", "Press Raphael's own row in the account menu", [row("raphael"), wait("#main > .page-agent[data-raphael]:not([hidden])")], true,
+    [check("page-unshifted")]],
   ["keys", "Try the quick-ask shortcut and finish", [
     { action: "key", key: "Space", altRight: true }, wait(FINISH, 1500),
   ], false],
 ];
+const MODEL_LIST = steps.findIndex(([id]) => id === "model-list");
+const KEYS = steps.findIndex(([id]) => id === "keys");
 const step = (index, timeout) => wait('.tour[data-step="' + steps[index][0] + '"][data-state="do"]', timeout);
 const seeing = index => wait('.tour[data-step="' + steps[index][0] + '"][data-state="see"]', 3500);
 const inspect = index => check("tour-step-" + (index + 1));
@@ -61,26 +70,26 @@ export default [
     [wait(OFFER), key("Escape"), waitGone(".tour"), check("tour-closed"), check("tour-unanswered")], returning),
   ...steps.map(([, description], index) => ({
     ...scene("tour-step-" + (index + 1), description,
-      [...to(index), inspect(index), ...([0, 4].includes(index) ? [check("page-unshifted")] : [])], returning),
+      [...to(index), inspect(index), ...([0, 3].includes(index) ? [check("page-unshifted")] : [])], returning),
     afterCapture: act(index),
   })),
-  // What a step opened, lit and explained, waiting for 懂了.
+  // What a step opened, lit and explained, waiting for 好的.
   ...steps.flatMap(([, description, , seen], index) => seen ? [{
-    ...scene("tour-step-" + (index + 1) + "-seen", description + ": what it opened is lit and explained until 懂了",
+    ...scene("tour-step-" + (index + 1) + "-seen", description + ": what it opened is lit and explained until 好的",
       [...to(index), ...act(index), check("tour-step-" + (index + 1) + "-seen"), check("page-unshifted")], returning),
     afterCapture: gotIt(index),
   }] : []),
   scene("tour-end", "Finish sends Raphael back to the sidebar foot with a short goodbye",
-    [...to(7), ...act(7), click(FINISH), ...goodbye, check("page-unshifted")], returning),
+    [...to(KEYS), ...act(KEYS), click(FINISH), ...goodbye, check("page-unshifted")], returning),
   scene("tour-end-closed", "The goodbye fades and the window is ready for input",
-    [...to(7), wait(FINISH, 10000), click(FINISH), wait(BYE), waitGone(".tour"), check("tour-closed")], returning),
+    [...to(KEYS), wait(FINISH, 10000), click(FINISH), wait(BYE), waitGone(".tour"), check("tour-closed")], returning),
   scene("tour-end-ask", "The shared End tour confirmation takes input above the dim and open model menu",
-    [...to(3), click(CLOSE), wait(CONFIRM), check("tour-confirm-end")], returning),
+    [...to(MODEL_LIST), click(CLOSE), wait(CONFIRM), check("tour-confirm-end")], returning),
   scene("tour-close", "Escape resumes the same step, then confirming End tour clears the tour and open menu",
-    [...to(3), click(CLOSE), wait(CONFIRM), key("Escape"), waitGone(CONFIRM),
-      inspect(3), click(CLOSE), wait(CONFIRM), click(CONFIRM_ACTION), waitGone(".tour"),
+    [...to(MODEL_LIST), click(CLOSE), wait(CONFIRM), key("Escape"), waitGone(CONFIRM),
+      inspect(MODEL_LIST), click(CLOSE), wait(CONFIRM), click(CONFIRM_ACTION), waitGone(".tour"),
       waitGone(".cb-menu"), check("tour-closed"), check("tour-saved-once")], returning),
-  { ...scene("tour-hop", "Raphael hops along the way to the sent greeting with its grounded blue light",
+  { ...scene("tour-hop", "Raphael hops along the way to the permission menu with its grounded blue light",
     [wait(OFFER), { action: "settle-motion" }, check("tour-offer"), ...begin.slice(1), { action: "settle-motion" },
       ...act(0), { action: "settle-motion" }, check("tour-step-1-seen")], returning), motion: true },
 ];

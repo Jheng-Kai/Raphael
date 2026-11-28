@@ -6,7 +6,7 @@ import { openMemberCreator } from "../member-creator";
 import { setLocale, t } from "../i18n";
 import { closeMenu, openPopover } from "../ui";
 import type { DeviceSettings, MainEvent } from "../types";
-import { STEPS } from "./steps";
+import { STEPS, type TourStep } from "./steps";
 import { BYE_MS, OFFER_DELAY_MS, createTour, type Tour } from "./tour";
 
 function place(el: Element, left: number, top: number, width: number, height: number): void {
@@ -60,17 +60,21 @@ function harness(patch: Partial<DeviceSettings> = {}) {
   place(find(".mp-trigger"), 900, 832, 120, 26);
   place(find(".cmp-send"), 1040, 830, 28, 28);
   place(find('[data-col="add"]'), 315, 40, 30, 30);
+  place(find("#main"), 348, 0, 772, 900);
+  place(find(".page-agent"), 348, 0, 772, 900);
   const device = { onboarded: true, agent_keys: ["AltRight+Space"], tour_offered: false, ...patch } as DeviceSettings;
   const setDevice = vi.fn(async (change: Partial<DeviceSettings>) => Object.assign(device, change));
   const closeSettings = vi.fn(() => find(".modal-scrim")?.remove());
   let conversation = true;
+  // Going back to the conversation takes the other pages away, as the app's own `go("agent")` hides them.
+  const go = vi.fn(() => { find("#main").querySelectorAll(".page-dictation, .au-page").forEach(page => page.remove()); conversation = true; });
   const listeners = new Set<(event: MainEvent) => void>();
   const emit = (event: MainEvent) => listeners.forEach(listener => listener(event));
-  const tour = createTour({ device: () => device, setDevice, closeSettings, isConversation: () => conversation,
+  const tour = createTour({ device: () => device, setDevice, closeSettings, go, isConversation: () => conversation,
     onEvent: listener => { listeners.add(listener); return () => void listeners.delete(listener); } });
   const showConversation = (shown: boolean) => { conversation = shown; tour.conversationChanged(); };
   tours.push(tour);
-  return { tour, device, setDevice, closeSettings, showConversation, emit };
+  return { tour, device, setDevice, closeSettings, showConversation, emit, go };
 }
 
 async function offer(tour: Tour): Promise<void> {
@@ -265,26 +269,10 @@ test("the offer gives up quietly when the account button never appears", async (
 });
 
 const stepId = () => find(".tour")?.dataset.step;
-const submit = () => {
-  const field = find(".cmp-input") as HTMLTextAreaElement;
-  field.value = "Hello";
-  field.dispatchEvent(new Event("input", { bubbles: true }));
-  find(".composer").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-};
-const thread = () => find(".page-agent");
-const ownerMessage = (id: number, words: string) => {
-  thread().insertAdjacentHTML("beforeend", `<div class="tn" data-id="${id}"><div data-message="question"><div class="message-text">${words}</div></div></div>`);
-};
 const state = () => find(".tour")?.dataset.state;
-const reachPermission = async (tour: Tour) => {
-  await begin(tour);
-  submit();
-  ownerMessage(1, "Hello");
-  await settle();
-  await press("gotIt");
-};
+const line = (key: TourStep["text"]) => t(key, { name: t("agent.title") });
 
-function wireSteps() {
+function wireSteps(showConversation: (shown: boolean) => void) {
   const open = (selector: string, html: string) => {
     const parent = document.createElement("div");
     parent.innerHTML = html;
@@ -333,33 +321,50 @@ function wireSteps() {
     });
     maker.el.querySelector('[data-dlg="cancel"]')!.addEventListener("click", cancel);
   });
+  // The account menu's rows go to pages, as the app's do: dictation and the calendar take the conversation's place, Raphael's opens in it.
+  const rows = ["dictation", "calendar", "raphael", "settings"];
   find(".sidebar-account").addEventListener("click", () => {
-    const menu = openPopover(find(".sidebar-account"), '<button data-account="settings">Settings</button>', { className: "menu account-menu", role: "menu" });
+    if (find(".account-menu")) { closeMenu(); return; }
+    const menu = openPopover(find(".sidebar-account"), rows.map(id => `<button data-account="${id}">${id}</button>`).join(""), { className: "menu account-menu", role: "menu" });
     place(menu, 12, 600, 240, 240);
+    for (const [index, row] of [...menu.querySelectorAll<HTMLElement>("button")].entries()) place(row, 16, 606 + index * 32, 232, 30);
+    menu.addEventListener("click", event => {
+      const id = (event.target as HTMLElement).closest<HTMLElement>("[data-account]")?.dataset.account;
+      closeMenu();
+      if (id === "raphael") { find(".page-agent").setAttribute("data-raphael", ""); return; }
+      const page = document.createElement(id === "calendar" ? "section" : "div");
+      page.className = id === "calendar" ? "au-page" : "page page-dictation";
+      find("#main").append(page);
+      place(page, 348, 0, 772, 900);
+      showConversation(false);
+    });
   });
   return { create, cancel };
 }
 
-test("every step is one action, and what it opens is lit and explained until 懂了, with no Next or Back", async () => {
-  const { tour, closeSettings, emit } = harness();
-  const { create, cancel } = wireSteps();
+test("every step is one action, and what it opens is lit and explained until 好的, with no Next or Back", async () => {
+  const { tour, closeSettings, emit, go, showConversation } = harness();
+  const { create, cancel } = wireSteps(showConversation);
+  const row = (id: string) => () => find(`.account-menu [data-account="${id}"]`).click();
   const actions = [
-    () => { submit(); ownerMessage(1, "Hello"); },
     () => find(".cmp-mode").click(),
     () => find(".mp-trigger").click(),
     () => find('[data-cb-act="models"]').click(),
     () => find(".sidebar-apps").click(),
     () => find('[data-col="add"]').click(),
     () => find(".sidebar-account").click(),
+    row("dictation"), row("calendar"), row("raphael"),
   ];
 
-  ownerMessage(0, "Hello");
   await begin(tour);
+  expect(STEPS.map(step => step.id)).toEqual(["permission", "model", "model-list", "apps", "team", "account", "dictation", "calendar", "raphael", "keys"]);
   for (const [index, step] of STEPS.entries()) {
     expect(stepId()).toBe(step.id);
     expect(state()).toBe("do");
-    expect(count()).toBe(`${index + 1}/8`);
-    expect(words()).toBe(t(step.text));
+    expect(count()).toBe(`${index + 1}/10`);
+    expect(words()).toBe(line(step.text));
+    // A row of the account menu is framed inside the menu, which the tour opened again after the last page was looked at.
+    if (step.layer === "account") expect(find(".account-menu")).not.toBeNull();
     expect([...bubble().querySelectorAll("button")].map(el => el.dataset.tour)).toEqual(["close"]);
     emit({ type: "Dictation", phase: "processing", agent: true });
     document.body.append(document.createElement("hr"));
@@ -372,16 +377,22 @@ test("every step is one action, and what it opens is lit and explained until 懂
     expect(stepId()).toBe(step.id);
     await settle(60);
     if (!step.seen) continue;
-    // The person reads at their own pace: nothing moves on until 懂了.
+    // The person reads at their own pace: nothing moves on until 好的.
     expect(stepId()).toBe(step.id);
-    expect(state()).toBe("see");
+    expect(state(), step.id).toBe("see");
     expect(words()).toBe(t(step.seen));
+    expect(button("gotIt").textContent).toBe("好的");
     expect([...bubble().querySelectorAll("button")].map(el => el.dataset.tour)).toEqual(["close", "gotIt"]);
     expect(spot().hidden).toBe(false);
+    // A page is lit whole, beside the dimmed sidebar.
+    if (step.page) expect(spot().style.left).toBe("348px");
     await settle(30000);
     expect(stepId()).toBe(step.id);
     await press("gotIt");
   }
+  // Dictation and the calendar each gave the conversation back for the next row; Raphael's own conversation stays open.
+  expect(go.mock.calls).toEqual([["agent"], ["agent"]]);
+  expect(find(".page-agent").hasAttribute("data-raphael")).toBe(true);
   expect(closeSettings).toHaveBeenCalledTimes(1);
   expect(find(".cb-menu")).toBeNull();
   expect(find(".account-menu")).toBeNull();
@@ -401,36 +412,9 @@ test("every step is one action, and what it opens is lit and explained until 懂
   expect(mode()).toBeUndefined();
 });
 
-test("the composer advances only when its submitted owner message appears", async () => {
-  const { tour } = harness();
-  await begin(tour);
-  find(".cmp-input").focus();
-  find(".cmp-input").click();
-  find(".cmp-input").dispatchEvent(new Event("input", { bubbles: true }));
-  await settle(4100);
-  expect(stepId()).toBe("composer");
-  ownerMessage(1, "Hello");
-  const field = find(".cmp-input") as HTMLTextAreaElement;
-  field.value = "Hello";
-  key("Enter", field, true);
-  await settle(4100);
-  expect(stepId()).toBe("composer");
-  key("Enter", field);
-  ownerMessage(2, "Another message");
-  await settle();
-  expect(stepId()).toBe("composer");
-  ownerMessage(3, "Hello");
-  await settle();
-  expect(stepId()).toBe("composer");
-  expect(state()).toBe("see");
-  expect(words()).toBe(t("tour.composerSeen"));
-  await press("gotIt");
-  expect(stepId()).toBe("permission");
-});
-
 test("an attempted action with no reaction advances after four seconds", async () => {
   const { tour } = harness();
-  await reachPermission(tour);
+  await begin(tour);
   find(".cmp-mode").click();
   await settle(3999);
   expect(stepId()).toBe("permission");
@@ -440,11 +424,10 @@ test("an attempted action with no reaction advances after four seconds", async (
 
 test("a missing target skips immediately and keeps the original progress count", async () => {
   const { tour } = harness();
-  find(".cmp-input").remove();
   find(".cmp-mode").remove();
   await begin(tour);
   expect(stepId()).toBe("model");
-  expect(count()).toBe("3/8");
+  expect(count()).toBe("2/10");
 });
 
 test("an unavailable quick ask still offers Finish after eight seconds", async () => {
@@ -461,7 +444,7 @@ test("an unavailable quick ask still offers Finish after eight seconds", async (
 
 test("the action fallback timer waits for the confirmation to close", async () => {
   const { tour } = harness();
-  await reachPermission(tour);
+  await begin(tour);
   find(".cmp-mode").click();
   await press("close");
   await settle(5000);
@@ -472,9 +455,9 @@ test("the action fallback timer waits for the confirmation to close", async () =
 });
 
 test.each(["Cancel", "Escape", "outside press"])("%s from End tour resumes the same step and open layer", async method => {
-  const { tour } = harness();
-  wireSteps();
-  await reachPermission(tour);
+  const { tour, showConversation } = harness();
+  wireSteps(showConversation);
+  await begin(tour);
   find(".cmp-mode").click();
   await settle();
   await press("close");
@@ -488,9 +471,9 @@ test.each(["Cancel", "Escape", "outside press"])("%s from End tour resumes the s
 });
 
 test("confirming End tour closes its layer and removes the tour immediately without a goodbye", async () => {
-  const { tour } = harness();
-  wireSteps();
-  for (const selector of [".cmp-input", ".cmp-mode"]) find(selector).remove();
+  const { tour, showConversation } = harness();
+  wireSteps(showConversation);
+  find(".cmp-mode").remove();
   await begin(tour);
   find(".mp-trigger").click();
   await settle();
@@ -502,10 +485,10 @@ test("confirming End tour closes its layer and removes the tour immediately with
   expect(find(".cb-menu")).toBeNull();
 });
 
-test("Tab cycles through the composer field, send and the close button while outside presses are blocked", async () => {
+test("Tab cycles through the framed control and the close button while outside presses are blocked", async () => {
   const { tour } = harness();
   await begin(tour);
-  const field = find(".cmp-input"), send = find(".cmp-send");
+  const mode = find(".cmp-mode");
   const outside = vi.fn(), caption = vi.fn();
   find(".sidebar-account").addEventListener("click", outside);
   find(".window-controls button").addEventListener("click", caption);
@@ -516,25 +499,38 @@ test("Tab cycles through the composer field, send and the close button while out
 
   button("close").focus();
   key("Tab", button("close"));
-  expect(document.activeElement).toBe(field);
-  key("Tab", field);
-  expect(document.activeElement).toBe(send);
-  key("Tab", send);
+  expect(document.activeElement).toBe(mode);
+  key("Tab", mode);
   expect(document.activeElement).toBe(button("close"));
   expect(key("Escape").defaultPrevented).toBe(true);
   expect(tour.navigate("back")).toBe(true);
-  expect(stepId()).toBe("composer");
+  expect(stepId()).toBe("permission");
 });
 
 test("placement follows a resized target without a hop, and locale changes redraw the line", async () => {
   const { tour } = harness();
   await begin(tour);
-  expect(spot().style.left).toBe("399px");
-  place(find(".composer"), 120, 780, 568, 100);
-  place(find(".cmp-input"), 134, 785, 536, 40);
+  expect(spot().style.left).toBe("436px");
+  place(find(".cmp-mode"), 160, 832, 60, 26);
   window.dispatchEvent(new Event("resize"));
   await settle();
-  expect(spot().style.left).toBe("128px");
+  expect(spot().style.left).toBe("156px");
   setLocale("ja");
-  expect(words()).toBe(t("tour.composer"));
+  expect(words()).toBe(t("tour.permission"));
+});
+
+test("a dialog the tour lights keeps its place: nothing pads or moves the window's own layer", async () => {
+  const { tour, showConversation } = harness();
+  wireSteps(showConversation);
+  await begin(tour);
+  for (const selector of [".cmp-mode", ".mp-trigger"]) find(selector).remove();
+  await settle();
+  expect(stepId()).toBe("apps");
+  find(".sidebar-apps").click();
+  await settle();
+  expect(state()).toBe("see");
+  const scrim = find('.modal-scrim[data-standalone="connections"]');
+  expect(scrim.hasAttribute("data-tour-clearance")).toBe(false);
+  expect(scrim.style.paddingTop).toBe("");
+  expect(scrim.style.getPropertyValue("--tour-clearance")).toBe("");
 });

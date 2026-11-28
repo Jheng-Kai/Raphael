@@ -38,7 +38,7 @@ pill; dictation and the calendar sit beside it in the account menu, and the pill
 
 ## How to get to it (user POV)
 
-Open the app: the chief of staff's conversation (Raphael's when there is no slime). Press the round face at the bottom left (the bottom of the rail): 用量, 聽寫, 行事曆, Raphael, 導覽 (Raphael's guided tour of the window, onboarding.md), 設定. The
+Open the app: the chief of staff's conversation (Raphael's when there is no slime). Press the round face at the bottom left (the bottom of the rail): 用量, 聽寫, 行事曆, Raphael (its own conversation; the guided tour presses 聽寫, 行事曆 and this row in turn, onboarding.md), 設定. The
 pill beside it is 連結應用程式.
 
 ## Driving it with look

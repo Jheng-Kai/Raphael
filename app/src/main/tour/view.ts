@@ -5,7 +5,7 @@ import { RAPHAEL_ID, faceHTML } from "../members";
 import { bindNavLayer } from "../nav-layers";
 import { btn, esc, headerCloseButton, keys, reducedMotion, replay } from "../ui";
 import { dimClip } from "./dim";
-import { EDGE_TOP, placeAroundLayer, placeGroup, type Box, type PlaceInput, type Placement, type Side } from "./place";
+import { EDGE, GROUP_GAP, SPOT_GAP, placeAroundLayer, placeGroup, placeInside, type Box, type PlaceInput, type Placement, type Side } from "./place";
 import { boxOf, type Spot } from "./steps";
 import "./tour.css";
 
@@ -36,7 +36,6 @@ export interface ViewModel {
   seeing?: boolean;
   /** While looking, the lit thing still scrolls under the wheel (a long model list). */
   lookArea?: () => HTMLElement | null;
-  extraSpot?: () => Spot | null;
   layer?: () => HTMLElement | null;
   /** An independent anchor when Raphael stands beside a different surface from the cut-out. */
   anchor?: () => Box | null;
@@ -65,6 +64,8 @@ export interface TourView {
 
 const SLIME = 64;
 const GROUND_INSET = 16;
+/** The narrowest the bubble gets to stand beside an open layer. */
+const MIN_BUBBLE = 200;
 // The 64 px portrait has padding around its drawing. Anchor the pose and light at the drawn foot.
 const FOOT = 52;
 const BODY_HEIGHT = 40;
@@ -102,7 +103,6 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
   // The walk owns layer navigation and consumes both directions until Finish.
   bindNavLayer(bubble, () => {}, { active: () => model?.mode === "step", step: () => true });
   let placed: Box | null = null;
-  let reserved: HTMLElement | null = null;
   let leaving: ReturnType<typeof setTimeout> | undefined;
   let playing: { plan: MotionPlan; body: Animation; tracks: Animation[] } | null = null;
 
@@ -179,13 +179,20 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
       (count || buttons ? `<div class="tour-foot">${count}<div class="tour-buttons">${buttons}</div></div>` : "");
   }
 
-  function restoreLayer(): void {
-    reserved?.style.removeProperty("--tour-clearance");
-    reserved?.removeAttribute("data-tour-clearance");
-    reserved = null;
+  /** Beside a layer with a strip too narrow for the words at their width: the bubble narrows to the strip (not below 200 px) and tries again. */
+  function besideNarrowed(input: PlaceInput, box: Box, header?: Box): Placement | null {
+    const strip = Math.max(box.left - SPOT_GAP - EDGE, input.view.width - EDGE - (box.left + box.width + SPOT_GAP));
+    const width = Math.floor(strip - (GROUND_INSET + SLIME + GROUP_GAP)) - 2;
+    if (width < MIN_BUBBLE || width >= input.bubble.width) return null;
+    bubble.style.maxWidth = `${width}px`;
+    const placed = placeAroundLayer({ ...input, bubble: { width: bubble.offsetWidth, height: bubble.offsetHeight } }, box, header);
+    if (!placed) bubble.style.removeProperty("max-width");
+    return placed;
   }
 
+  // The window's own layers never move for the tour: Raphael stands beside what is open, or, when that fills the window, on it.
   function place(next: ViewModel, anchor: Box | null, clear: readonly Box[], controls: readonly Box[], layer: HTMLElement | null): Placement {
+    bubble.style.removeProperty("max-width");
     const input: PlaceInput = {
       spot: anchor,
       view: { width: document.documentElement.clientWidth || innerWidth, height: document.documentElement.clientHeight || innerHeight },
@@ -208,37 +215,18 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
         input.controls = [...controls, words.getBoundingClientRect()];
       }
     }
-    const beside = placeAroundLayer(input, boxOf(layer), header?.getBoundingClientRect());
+    const box = boxOf(layer), head = header?.getBoundingClientRect();
+    const beside = placeAroundLayer(input, box, head) ?? besideNarrowed(input, box, head);
     if (beside) return beside;
-    const scrim = layer.parentElement;
-    if (scrim?.matches(".mb-scrim") && layer.matches(".cr-dialog")) {
-      // Keep the look picker at its normal height when a short window leaves no strip above the maker.
-      if (scrim.dataset.tourClearance !== "side") scrim.dataset.tourClearance = "side";
-      reserved = scrim;
-      input.bubble = { width: bubble.offsetWidth, height: bubble.offsetHeight };
-      input.spot = next.locate()?.box ?? null;
-      input.controls = next.keepControlsClear?.();
-      return placeAroundLayer(input, boxOf(layer)) ?? placeGroup(input);
-    }
-    if (scrim?.matches(".modal-scrim")) {
-      // Make enough room above a nearly full-window dialog to show the entire instruction and portrait.
-      const clearance = `${EDGE_TOP + Math.max(input.bubble.height, SLIME) + 16}px`;
-      if (scrim.style.getPropertyValue("--tour-clearance") !== clearance) scrim.style.setProperty("--tour-clearance", clearance);
-      if (scrim.dataset.tourClearance !== "above") scrim.dataset.tourClearance = "above";
-      reserved = scrim;
-      const outside = placeAroundLayer({ ...input, controls: next.keepControlsClear?.() }, boxOf(layer));
-      if (outside) return outside;
-    }
-    return placeGroup(input);
+    // Only something looked at may be stood on, and only where its title stays clear: nothing there takes a press.
+    return next.seeing ? placeInside(input, box) : placeGroup(input);
   }
 
   function apply(next: ViewModel, hop: boolean, celebrate = false): number {
     const spot = next.locate();
-    const extra = next.extraSpot?.();
     const layer = next.layer?.() ?? null;
-    if (reserved && reserved !== layer?.parentElement) restoreLayer();
     const anchor = next.anchor?.() ?? null;
-    const clear = [...(anchor && spot ? [spot.box] : []), ...(extra ? [extra.box] : [])];
+    const clear = anchor && spot ? [spot.box] : [];
     const controls = next.keepControlsClear?.() ?? [];
     const placement = place(next, anchor ?? spot?.box ?? null, clear, controls, layer);
     const to = placement.slime;
@@ -272,7 +260,7 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
     const cut = next.mode === "step" ? next.lit?.() ?? ring : null;
     root.dataset.dim = next.mode !== "step" ? "none" : cut ? "spot" : "all";
     if (next.mode === "step") root.dataset.state = next.seeing ? "see" : "do"; else delete root.dataset.state;
-    dim.style.clipPath = cut ? dimClip(cut, extra ?? undefined) : "";
+    dim.style.clipPath = cut ? dimClip(cut) : "";
     spotEl.hidden = !ring;
     if (ring) {
       spotEl.style.left = `${ring.box.left}px`; spotEl.style.top = `${ring.box.top}px`;
@@ -348,7 +336,7 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
       root.classList.add("is-leaving");
       leaving = setTimeout(done, 220);
     },
-    destroy() { clearTimeout(leaving); cancelMotion(); restoreLayer(); for (const type of owned) window.removeEventListener(type, own, true); root.remove(); },
+    destroy() { clearTimeout(leaving); cancelMotion(); for (const type of owned) window.removeEventListener(type, own, true); root.remove(); },
   };
 }
 

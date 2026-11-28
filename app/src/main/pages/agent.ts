@@ -1293,6 +1293,8 @@ export function createAgent(app: AppContext, places?: {
     // An open conversation between members follows the turns it is read from, and closes with its conversation.
     if (peer) queueMicrotask(() => peer?.update());
     stage.setAttribute("aria-busy", String(pending));
+    // Whose space the page shows: the guided tour knows from it that Raphael's own conversation is open.
+    el.toggleAttribute("data-raphael", inRaphael());
     // Only a thread not read yet says it is loading: a refresh of an empty one keeps its ordinary empty layout (R-UI-71, R-UI-183).
     if (pending && isEmpty() && !loadedThread) {
       wait.innerHTML = loadingHTML();
