@@ -1124,9 +1124,9 @@ export function createSettings(app: AppContext): SettingsPage {
         const button = target.closest<HTMLElement>("[data-project]")!;
         const path = brain?.project_folders?.[Number(button.dataset.project)];
         if (path === undefined) break;
-        // The row's × (R-UI-56): the red dialog asks, and only its red button removes the folder from the list.
+        // The row's × (R-UI-56): ask before removing the folder from the list.
         const name = projectDetails.get(path)?.name ?? folderName(path);
-        void confirmDelete(name, { words: { title: t("confirm.removeTitle", { p0: name }), hint: t("projectFolders.removeHint"), action: t("projectFolders.remove") } }).then(yes => {
+        void confirmDelete(name, { quiet: true, words: { title: t("confirm.removeTitle", { p0: name }), hint: t("projectFolders.removeHint"), action: t("projectFolders.remove") } }).then(yes => {
           if (yes) changeProjects(async current => (await api.settingsSet("project_folders",
             (current.project_folders ?? []).filter(project => project !== path))).settings);
         });

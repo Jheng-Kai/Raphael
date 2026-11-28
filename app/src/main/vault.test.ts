@@ -153,9 +153,10 @@ it("removes an entry from its page: the trash asks in the red dialog deleting a 
   await openPage(root, "contact");
   const trash = root.querySelector<HTMLElement>('.vault-page-head [data-vault="remove"]')!;
   expect(trash.getAttribute("aria-label")).toBe("移除");
+  expect(trash.classList.contains("danger")).toBe(true);
   trash.click();
   // The dialog names the entry and says what goes; the trash stays a trash, and nothing is removed yet.
-  const dialog = document.querySelector<HTMLElement>(".mb-dialog.mb-delete")!;
+  const dialog = document.querySelector<HTMLElement>(".mb-dialog.mb-delete:not(.is-quiet)")!;
   expect(dialog.querySelector("h2")!.textContent).toBe("移除「Work」？");
   expect(dialog.querySelector(".mb-dlg-body")!.textContent).toBe("移除後，成員就不能再使用這筆資料，也無法復原。");
   expect(root.querySelector("[data-asking]")).toBeNull();

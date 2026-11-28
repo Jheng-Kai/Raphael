@@ -56,12 +56,12 @@ export function cliModels(clis: readonly CliBrain[], availableOnly = true): Cata
 }
 /**
  * A connected account's one action, at its card's right: the unplugged plug, never a ⋯ and never a trash, since disconnecting
- * deletes nothing (the CLI keeps its own login; ChatGPT signs in again). It asks first, in the red dialog.
+ * deletes nothing (the CLI keeps its own login; ChatGPT signs in again). It asks first, in the quiet dialog.
  */
 const disconnectButton = (name: string, attrs: string): string => iconButton("unplug", `${t("brains.disconnect")} ${name}`, attrs, "cli-disconnect");
-/** The red dialog that asks before an account is disconnected; true once its red button is pressed. */
+/** Asks before disconnecting an account and resolves true on confirmation. */
 const askDisconnect = (name: string): Promise<boolean> =>
-  confirmDelete(name, { words: { title: t("confirm.disconnectTitle", { p0: name }), hint: t("brains.disconnectHint", { p0: name }), action: t("brains.disconnect") } });
+  confirmDelete(name, { quiet: true, words: { title: t("confirm.disconnectTitle", { p0: name }), hint: t("brains.disconnectHint", { p0: name }), action: t("brains.disconnect") } });
 function chatgptCardHTML(v: CliBrainsView, k = ""): string {
   const account = v.chatgpt;
   const signing = !!account?.signing_in;

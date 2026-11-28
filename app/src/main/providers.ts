@@ -393,7 +393,7 @@ export function createProviders(host: ProvidersHost) {
     if (!id || state.busy || open.view !== "settings") return;
     const name = providerOf(state)?.name ?? kindOf(state)?.name ?? "";
     // The red dialog asks (R-UI-56); the provider is removed only by its red button.
-    if (!(await confirmDelete(name, { words: { title: t("confirm.deleteTitle", { p0: name }), hint: t("providers.removeHint"), action: t("members.delete") } }))) return;
+    if (!(await confirmDelete(name, { words: { title: t("confirm.deleteTitle", { p0: name }), hint: t("providers.removeHint"), action: t("members.delete") }, quiet: true }))) return;
     if (state.open !== open || state.busy) return;
     state.busy = true; state.error = null; redraw();
     try {

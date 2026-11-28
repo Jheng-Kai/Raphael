@@ -1297,14 +1297,14 @@ export function createConnections(host: ConnectionsHost): Connections {
     else focusOn('[data-k="cs-have"]');
   }
 
-  /** Asks in the red dialog naming the app (R-UI-56); nothing is disconnected or deleted unless its red button is pressed. */
+  /** Asks in the quiet dialog naming the app (R-UI-56) before disconnecting or deleting it. */
   async function disconnect(id: string): Promise<void> {
     const group = groupById(id);
     const name = group?.name ?? id;
     const words = group?.source
       ? { title: t("confirm.disconnectTitle", { p0: name }), hint: t("conn.disconnectHint"), action: t("conn.disconnect") }
       : { title: t("confirm.deleteTitle", { p0: name }), hint: t("members.deleteHint"), action: t("mcp.delete") };
-    if (!(await confirmDelete(name, { words }))) return;
+    if (!(await confirmDelete(name, { words, quiet: true }))) return;
     disconnectNow(id);
   }
 
@@ -1325,7 +1325,7 @@ export function createConnections(host: ConnectionsHost): Connections {
   /**
    * Removes one account of an app (R-ACCT-01). One that is not connected (waiting, expired, revoked, failed) goes at once; a connected
    * one asks first, in the app's one delete question. The last connected account is the app itself: that is the app's own disconnect,
-   * with its own question (the red dialog the app's menu asks), and the owner's own Google, which has one account, is that too.
+   * with its own question (the quiet dialog the app's menu opens), and the owner's own Google, which has one account, is that too.
    */
   async function removeAccount(id: string, accountId: string): Promise<void> {
     const group = groupById(id);
@@ -1338,7 +1338,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       return;
     }
     const name = accountName(account, (group.accounts ?? []).indexOf(account), (group.accounts?.length ?? 0) > 1);
-    if (connected && !(await confirmDelete(name, { words: { title: t("account.removeConfirm", { p0: name }), hint: t("account.removeHint"), action: t("account.remove") } }))) return;
+    if (connected && !(await confirmDelete(name, { quiet: true, words: { title: t("account.removeConfirm", { p0: name }), hint: t("account.removeHint"), action: t("account.remove") } }))) return;
     void act(id, async () => { await api.connectorsRemoveAccount(id, accountId); });
   }
 
@@ -1505,7 +1505,7 @@ export function createConnections(host: ConnectionsHost): Connections {
         const panel = openPopover(button, [
           ...(!group.source ? [["test-server", t("mcp.test")], ["edit-server", t("mcp.edit")]] : []),
           ["disconnect", t(group.source ? "conn.disconnect" : "mcp.delete")],
-        ].map(([act, label]) => `<button type="button" role="menuitem"${act === "disconnect" ? ' class="danger"' : ""} data-conn="${act}" data-id="${esc(id)}">${esc(label)}</button>`).join(""), { className: "menu", role: "menu", label: t("mcp.actions") });
+        ].map(([act, label]) => `<button type="button" role="menuitem" data-conn="${act}" data-id="${esc(id)}">${esc(label)}</button>`).join(""), { className: "menu", role: "menu", label: t("mcp.actions") });
         panel.addEventListener("click", event => {
           const action = (event.target as Element).closest("[data-conn]");
           if (action) {
@@ -1646,7 +1646,7 @@ export function createConnections(host: ConnectionsHost): Connections {
         const panel = openPopover(button,
           (dead ? `<button type="button" role="menuitem" data-conn="account-relogin"${attrs}>${esc(t("conn.relogin"))}</button>` : "") +
           `<button type="button" role="menuitem" data-conn="account-label"${attrs}>${esc(t("members.rename"))}</button>` +
-          `<button type="button" role="menuitem" class="danger" data-conn="account-remove"${attrs}>${esc(t("account.remove"))}</button>`,
+          `<button type="button" role="menuitem" data-conn="account-remove"${attrs}>${esc(t("account.remove"))}</button>`,
           { className: "menu", role: "menu", label: t("mcp.actions") });
         panel.addEventListener("click", (event) => {
           const action = (event.target as Element).closest("[data-conn]");

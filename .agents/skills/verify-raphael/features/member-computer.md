@@ -1381,7 +1381,7 @@ npm run look -- computer-maintenance-menu computer-maintenance-restart computer-
 Compare maintenance/idle menus to takeover-menu and computer-menu-teach-only, reset to member-delete-ask,
 and sleeping/working faces and header icon controls to desktop-panel at matching
 theme/size. Maintenance descriptions use the shared mdesc rows, so their content
-requires a wider/taller menu; reset adds a scope paragraph to the shared dialog.
+requires a wider/taller menu; reset is red in the menu and adds a scope paragraph and a red primary button to the shared dialog.
 The header face uses 28px to fit beside the existing icon buttons; its art and
 states are unchanged. Tests: test_lifecycle.py, test_vm.py, test_latency.py, test_viewer.py,
 test_smooth_computer.py, test_settings.py, desktop-viewer.test.ts and

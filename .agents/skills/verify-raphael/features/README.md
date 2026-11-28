@@ -1,5 +1,24 @@
 # Raphael feature map
 
+## Red action controls
+
+R-UI-184 uses ordinary controls for everyday removals. Compare the quiet
+confirmations (`.mb-delete.is-quiet`) in `cli-account-disconnect-ask`,
+`accounts-remove-ask`, `accounts-remove-last`, `connections-delete`,
+`safety-rule-delete-dialog`, `model-choices-local-menu` and
+`skill-library-page-remove` with the red confirmations in `member-delete-ask`,
+`room-delete`, `vault-entry-remove-dialog`, `mode-bypass-confirm` and
+`computer-maintenance-reset`. Menu and icon scenes include `accounts-menu`,
+`accounts-relogin-menu`, `server-menu`, `member-row-menu`, `room-menu`,
+`computer-maintenance-menu` and `safety-rules-icons`. The
+`automations-delete-own`, `raphael-skills`, `connector-uninstalled` and
+`project-folder-remove` journeys exercise quiet confirmation before removing.
+`messaging-paired-aligned` and `work-messaging-pairing` show messaging cards.
+`missing-provider-repair` shows the provider's Remove button.
+`window-hover-close` and `window-hover-modal` check the caption's ordinary hover.
+
+Run the selected scenes in both themes at 1120, 720 and 1920×1080.
+
 ## Project folders
 
 See [Member computer](member-computer.md#the-owners-files-read-everywhere-write-in-the-owners-folders-r-pc-04-r-pc-05)

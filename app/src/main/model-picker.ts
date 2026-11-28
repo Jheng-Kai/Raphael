@@ -1091,7 +1091,7 @@ class MountedPicker implements ModelPicker {
     if (act === "cancel") this.o.onCancelLocal?.();
     if (act === "local-menu" && name) {
       const local = this.o.local, model = Array.isArray(local?.models) ? local.models.find(item => item.name === name) : undefined;
-      // The red dialog asks (R-UI-56); the model is deleted only by its red button.
+      // Ask for confirmation before deleting the model (R-UI-56).
       if (local && model) openActions(target, [{ id: "delete", label: t("local.deleteLabel", { p0: target.dataset.title ?? name }), icon: "trash", ask: deleteWords(model, local) }], () => this.o.onDeleteLocal?.(name));
     }
   }

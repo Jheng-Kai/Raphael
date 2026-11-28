@@ -195,13 +195,13 @@ describe("the controller", () => {
     expect(c.view().expanded).toBeNull();
   });
 
-  test("disconnect asks in the red dialog and happens only by its red button", async () => {
+  test("disconnect asks in the quiet dialog and runs only after confirmation", async () => {
     api.telegramStatus.mockResolvedValue(status());
     const c = make();
     await c.load();
     vi.mocked(confirmDelete).mockResolvedValueOnce(false);
     click(c, "disconnect");
-    expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Telegram", { words: { title: "中斷連線 Telegram？", hint: t("msg.tg.disconnectHint"), action: "中斷連線" } });
+    expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Telegram", { quiet: true, words: { title: "中斷連線 Telegram？", hint: t("msg.tg.disconnectHint"), action: "中斷連線" } });
     await new Promise(resolve => setTimeout(resolve));
     expect(api.telegramDisconnect).not.toHaveBeenCalled(); // Cancel, Escape and the scrim do nothing
     api.telegramDisconnect.mockResolvedValue(status({ connected: false, bot: null }));

@@ -1,6 +1,6 @@
 // The local tab of the speech-to-text picker without its page: what each model of the catalogue
 // shows (name, languages, size, a line on what it is for and its state), the confirmations before a
-// download or a deletion (the red dialog's words), and the progress of a download. The popover around it is tried in the app.
+// download or a deletion (the quiet dialog's words), and the progress of a download. The popover around it is tried in the app.
 
 import { afterEach, describe, expect, test } from "vitest";
 import { setLocale } from "./i18n";
@@ -172,7 +172,7 @@ describe("a model that is not downloaded", () => {
 });
 
 describe("deleting a model", () => {
-  test("is asked in the red dialog, whose words say what it frees and that it comes back by downloading", () => {
+  test("is asked in the quiet dialog, whose words say what it frees and that it comes back by downloading", () => {
     expect(deleteWords(paraformer, view())).toEqual({
       title: "刪除 Paraformer（釋出 227 MB）？", hint: "要再使用，得重新下載。", action: "刪除",
     });

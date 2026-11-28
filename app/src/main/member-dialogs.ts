@@ -180,23 +180,24 @@ export function openDialog(o: DialogOptions): Dialog {
   return dialog;
 }
 
-/** The words of the red confirmation dialog: the question about that one thing, what happens, and the red button's action. */
+/** The words of the confirmation dialog: the question, the consequence and the action. */
 export interface ConfirmWords { title: string; hint: string; action: string }
 
 /**
  * Confirms a deletion with the app's one delete dialog: a small box with the
- * title, one sentence and one row of two equal buttons, Cancel then a red Delete, no × and no lines (members.css `.mb-delete`).
+ * title, one sentence and one row of two equal buttons, Cancel then the action, no × and no lines (members.css `.mb-delete`).
+ * The quiet option uses the ordinary primary button for routine removals.
  * A member's own says that the member and its conversation go for good. Nothing is asked about what the deletion also clears
  * (a member's computer is the app's to remove, without a word to the owner). The focus starts on Cancel, so Enter never deletes.
  */
-export function confirmDelete(name: string, options: { member?: boolean; words?: ConfirmWords } = {}): Promise<boolean> {
+export function confirmDelete(name: string, options: { member?: boolean; words?: ConfirmWords; quiet?: boolean } = {}): Promise<boolean> {
   return new Promise((resolve) => {
     let answer = false;
     openDialog({
       title: options.words?.title ?? t("members.deleteConfirm", { p0: name }),
       body: `<p>${esc(options.words?.hint ?? t(options.member ? "members.deleteForever" : "members.deleteHint"))}</p>`,
       describedByBody: true,
-      cls: "mb-confirm mb-delete",
+      cls: options.quiet ? "mb-confirm mb-delete is-quiet" : "mb-confirm mb-delete",
       noClose: true,
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(options.words?.action ?? t("members.delete")), attrs: ' data-dlg="delete"' } },
       onAct(act, _target, dialog) {

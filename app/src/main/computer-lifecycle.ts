@@ -23,12 +23,12 @@ export function mountComputerLifecycle(holder: HTMLElement, member: () => number
       if (action !== 'reset') { void perform(action, captured); return; }
       openDialog({ title: t('desktop.resetConfirm'), cls: 'mb-confirm', blockNavigation: true, describedByBody: true,
         body: `<p>${esc(t('desktop.resetHint'))}</p><p>${esc(t(captured.mode === 'shared' ? 'desktop.shared' : 'desktop.perMember'))}</p>`,
-        actions: { secondary: btn(esc(t('common.cancel')), '', ' data-dlg="cancel"'), primary: { label: esc(t('desktop.reset')), attrs: ' data-dlg="reset"' } },
+        actions: { secondary: btn(esc(t('common.cancel')), '', ' data-dlg="cancel"'), primary: { label: esc(t('desktop.reset')), attrs: ' data-dlg="reset"', danger: true } },
         onAct(action, _target, dialog) { dialog.close(); if (action === 'reset' && owner === member()) void perform('reset', captured); } });
     };
     openMenu(button, [], '', () => {}, t(captured.mode === 'shared' ? 'desktop.shared' : 'desktop.perMember'), [
       { label: t('desktop.wait'), desc: t('desktop.waitHint'), run() { closeMenu(); } },
-      ...(['restart','update','repair','reset'] as const).map(action => ({ label: t(maintenanceWords[action][0]), desc: t(maintenanceWords[action][1]), busy: !!captured.lifecycle,
+      ...(['restart','update','repair','reset'] as const).map(action => ({ label: t(maintenanceWords[action][0]), desc: t(maintenanceWords[action][1]), busy: !!captured.lifecycle, danger: action === 'reset',
         run() { run(action); } })),
       { label: t('desktop.sleepAfter'), desc: t(captured.idle_minutes === 0 ? 'desktop.neverSleep' : 'desktop.sleepMinutes', {p0: captured.idle_minutes ?? 15}),
         run() {

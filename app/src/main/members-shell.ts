@@ -664,7 +664,7 @@ export function createMembers(host: MembersHost): MembersShell {
 
   async function deleteGroup(id: number): Promise<void> {
     const group = list?.groups.find((g) => g.id === id);
-    if (!group || !(await confirmDelete(group.name))) return;
+    if (!group || !(await confirmDelete(group.name, { quiet: true }))) return;
     await groupChange(() => api.groupsDelete(id));
   }
 

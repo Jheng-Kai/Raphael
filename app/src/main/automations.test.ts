@@ -475,7 +475,7 @@ describe("the calendar's own events",()=>{
   expect(document.querySelector('.au-pop-editor')).toBeNull();
   page.hide();
  });
- test("an own event shows its time, notes and who added it, with edit, and delete only in its ⋯, asking in the red dialog",async()=>{
+ test("an own event shows its time, notes and who added it, with edit, and delete only in its ⋯, asking in the quiet dialog",async()=>{
   const page=await open([own(4,"Dentist",at(14),at(15),{notes:"Bring card",added_by:2,name:"Bob",member_id:2})],"calendar-week:2026-10-24");
   click('[data-entry="own:4"][data-au="entry"]');
   const panel=document.querySelector('.au-pop-detail')!;
@@ -484,7 +484,7 @@ describe("the calendar's own events",()=>{
   click('.au-pop-detail [data-pop="more"]');
   click('#app-popover [data-pick]');
   expect(document.getElementById("app-popover")).toBeNull();
-  expect(document.querySelector('.mb-delete h2')?.textContent).toBe("Delete Dentist?");
+  expect(document.querySelector('.mb-delete.is-quiet h2')?.textContent).toBe("Delete Dentist?");
   expect(document.querySelector('.mb-delete [data-dlg="delete"]')?.textContent).toBe("Delete");
   expect(api.calendarDelete).not.toHaveBeenCalled();
   click('.mb-delete [data-dlg="cancel"]');await flush();

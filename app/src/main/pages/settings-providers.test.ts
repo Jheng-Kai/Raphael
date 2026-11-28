@@ -993,11 +993,11 @@ test("General removes only the selected project and adds a picked folder", async
   await mount("general");
   await flush();
   expect(page.el.querySelector('[data-row="project-folder"] .project-branch')?.textContent).toBe("main");
-  // Each row has its trash and no ⋯: it asks in the red dialog with no menu first, Cancel does nothing, and only the red button removes.
+  // Each row has its trash and no ⋯: it asks in the quiet dialog with no menu first, Cancel does nothing, and only the confirmation button removes.
   expect(page.el.querySelector('[data-row="project-folder"] [data-overflow], [data-act="project-menu"]')).toBeNull();
   click('[data-act="project-remove"][data-project="0"]');
   expect(document.getElementById("app-popover")).toBeNull();
-  expect(document.querySelector(".mb-delete h2")?.textContent).toBe("Remove Repo?");
+  expect(document.querySelector(".mb-delete.is-quiet h2")?.textContent).toBe("Remove Repo?");
   expect(api.settingsSet).not.toHaveBeenCalled();
   click('.mb-delete [data-dlg="cancel"]');
   await flush();

@@ -364,7 +364,7 @@ describe("the page of one service", () => {
 
   test("a stored key: 「已設定」 in muted words and a bordered 「移除」, and no field", () => {
     const d = inDialog(dialog("search", "brave", { status: status({ braveKey: true }) }));
-    expect(d).toContain('<span class="action-destructive"><button type="button" class="btn danger" data-svc="clear" data-service="brave">移除</button></span><span class="val">已設定</span>');
+    expect(d).toContain('<span class="action-destructive"><button type="button" class="btn" data-svc="clear" data-service="brave">移除</button></span><span class="val">已設定</span>');
     expect(d).not.toContain(keyInputId("brave"));
   });
 
@@ -411,7 +411,7 @@ describe("the page of one service", () => {
 
   test("uses text buttons and the shared header icon buttons", () => {
     for (const d of [dialog("search", "brave"), dialog("search", "searxng")]) {
-      for (const tag of buttons(inDialog(d))) expect(tag).toMatch(/class="btn(?: icon(?: (?:back|close)-button)?| pri| danger)?"/);
+      for (const tag of buttons(inDialog(d))) expect(tag).toMatch(/class="btn(?: icon(?: (?:back|close)-button)?| pri)?"/);
     }
   });
 });

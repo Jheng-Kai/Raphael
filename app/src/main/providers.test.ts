@@ -408,7 +408,7 @@ test.each(["auth", "offline", "error"] as const)("a failed automatic test shows 
   expect(root.querySelector('[data-pv="replace"]')).not.toBeNull();
 });
 
-test("removing a provider asks in the red dialog before removing the connection", async () => {
+test("removing a provider asks in the quiet dialog before removing the connection", async () => {
   setLocale("zh-TW");
   const panel = mount(); await panel.load();
   click('[data-pv="open"]'); await flush();
@@ -421,7 +421,7 @@ test("removing a provider asks in the red dialog before removing the connection"
   expect(trash.getAttribute("aria-label")).toContain("OpenAI");
   expect(root.querySelector("#pv-dialog")?.textContent).not.toContain("移除");
   expect(document.querySelector(".mb-delete")?.textContent).not.toContain("移除");
-  expect(document.querySelector(".mb-delete h2")?.textContent).toContain("刪除");
+  expect(document.querySelector(".mb-delete.is-quiet h2")?.textContent).toContain("刪除");
   expect(document.querySelector('.mb-delete [data-dlg="delete"]')?.textContent).toBe("刪除");
   expect(document.querySelector(".mb-delete .mb-dlg-body")?.textContent).toBe(t("providers.removeHint"));
   document.querySelector<HTMLElement>('.mb-delete [data-dlg="cancel"]')!.click(); await flush();

@@ -574,7 +574,7 @@ clearing (`confirmDelete` in member-dialogs.ts: a member, a group, a room, a con
 | title to sentence | 8 px (`--sp-2`) |
 | sentence to buttons | 24 px (`--sp-5`) |
 | buttons | 30 px tall (`--h-field`), 139 + 139, 8 px apart, pill |
-| colours | Cancel `--btn`, Delete `--close` with `--on-close` |
+| colours | Cancel `--btn`, ordinary action `--accent` with `--on-accent`, high-impact action `--close` with `--on-close` (R-UI-184) |
 
 `delete-confirmation` asserts the shape (box 320, two buttons of one width filling it, 刪除 at the right in the
 red, no ×, no rule line, the focus on 取消, a sentence of two lines whose longest line takes at least three quarters of

@@ -76,7 +76,7 @@ function pageHTML(v: VaultView, close: string): string {
   // What the fields hold: what was typed since (kept across a redraw), else what is saved.
   const draft = v.draft ?? null, values = { ...(v.values ?? {}), ...(draft ?? {}) }, shown = new Set(v.revealed ?? []);
   const title = composio ? "Composio" : editing ? editing.label : `${word("new")} · ${word(kind)}`;
-  const remove = editing ? iconButton("trash", word("remove"), ' data-vault="remove"') : "";
+  const remove = editing ? iconButton("trash", word("remove"), ' data-vault="remove"', "", { danger: true }) : "";
   // 儲存 stands in the page's header, which stays in sight as the page scrolls (as Team skills' controls do), never under
   // a long list of members.
   const head = `<header class="set-head vault-page-head"><span class="back-title">${backButton(word("back"), ' data-vault="cancel" data-k="vault-back"', "back-link")}` +

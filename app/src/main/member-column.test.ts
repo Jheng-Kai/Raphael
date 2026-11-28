@@ -578,7 +578,7 @@ describe("words not yet sent (R-SIDE-05)", () => {
   });
 });
 
-// R-UI-56: an item that destroys something asks in the red dialog; nothing is done until its red button is pressed.
+// R-UI-56: an item can ask for confirmation before its action runs.
 describe("a menu item that destroys", () => {
   const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve));
   const words = { title: "移除「pstack」？", hint: "移除後就不能再用它，也無法復原。", action: "移除" };
@@ -595,11 +595,13 @@ describe("a menu item that destroys", () => {
   const dialog = (): HTMLElement | null => document.querySelector<HTMLElement>(".mb-dialog.mb-delete");
   afterEach(() => { closeMenu(); document.body.innerHTML = ""; });
 
-  test("its press closes the menu and opens the red dialog, asks nowhere in the menu and does nothing yet", () => {
+  test("its press closes the menu and opens the confirmation, asks nowhere in the menu and does nothing yet", () => {
     const { picked } = opened();
     expect(item("delete").textContent).toBe("移除");
+    expect(item("delete").classList.contains("danger")).toBe(false);
     item("delete").click();
     expect(document.getElementById("app-popover")).toBeNull();
+    expect(dialog()?.classList.contains("is-quiet")).toBe(true);
     expect(dialog()?.querySelector("h2")?.textContent).toBe("移除「pstack」？");
     expect(dialog()?.querySelector(".mb-dlg-body")?.textContent).toBe("移除後就不能再用它，也無法復原。");
     expect(dialog()?.querySelector('[data-dlg="delete"]')?.textContent).toBe("移除");
@@ -624,7 +626,7 @@ describe("a menu item that destroys", () => {
     expect(picked).not.toHaveBeenCalled();
   });
 
-  test("only the red button picks the item, once", async () => {
+  test("only the confirmation picks the item, once", async () => {
     const { picked } = opened();
     item("delete").click();
     dialog()!.querySelector<HTMLElement>('[data-dlg="delete"]')!.click();
@@ -647,17 +649,17 @@ describe("openConfirmMenu", () => {
   const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve));
   afterEach(() => { closeMenu(); document.body.innerHTML = ""; });
 
-  test("is one red item whose press opens the red dialog, and only that dialog's red button runs", async () => {
+  test("opens a quiet confirmation from one ordinary item and only runs after confirmation", async () => {
     const anchor = document.createElement("button");
     document.body.append(anchor);
     const run = vi.fn();
     openConfirmMenu(anchor, { label: "刪除", ask: { title: "刪除「午餐」？", hint: "此操作無法復原。", action: "刪除" }, run });
     const item = document.querySelector<HTMLElement>("#app-popover [data-pick]")!;
     expect(item.textContent).toBe("刪除");
-    expect(item.classList.contains("danger")).toBe(true);
+    expect(item.classList.contains("danger")).toBe(false);
     item.click();
     expect(document.getElementById("app-popover")).toBeNull();
-    expect(document.querySelector(".mb-delete h2")?.textContent).toBe("刪除「午餐」？");
+    expect(document.querySelector(".mb-delete.is-quiet h2")?.textContent).toBe("刪除「午餐」？");
     expect(run).not.toHaveBeenCalled();
     document.querySelector<HTMLElement>('.mb-delete [data-dlg="cancel"]')!.click();
     await settle();

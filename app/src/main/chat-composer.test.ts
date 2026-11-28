@@ -115,7 +115,7 @@ test("全部允許 is entered only through the red delete dialog, and Cancel kee
  const before=view.el.querySelector(".cmp-mode span")!.textContent;
  expect(before).not.toBe("Allow all");
  await choose();
- const dialog=document.querySelector<HTMLElement>(".mb-delete")!;
+ const dialog=document.querySelector<HTMLElement>(".mb-delete:not(.is-quiet)")!;
  expect(dialog.textContent).toContain("Turn on Allow all?");
  expect(dialog.textContent).toContain("Members will not ask for your approval before any action");
  expect(dialog.textContent).toContain("This raises the risk of data loss or leaks.");

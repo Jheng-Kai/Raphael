@@ -4,9 +4,10 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { btn, iconButton, iconBtn, menuPlacement, submenuPlacement, meter, sel, selText, setMeter } from "./ui";
 
-test("trash actions share destructive styling while other icon controls remain neutral", () => {
-  expect(iconButton("trash", "Delete")).toContain('class="btn icon danger"');
-  expect(iconBtn("trash", "Remove", ' data-act="delete"', "mb-tool")).toContain('class="btn icon danger row mb-tool"');
+test("trash icons use the ordinary icon style unless explicitly marked as high-impact", () => {
+  expect(iconButton("trash", "Delete")).toContain('class="btn icon"');
+  expect(iconButton("trash", "Delete", "", "", { danger: true })).toContain('class="btn icon danger"');
+  expect(iconBtn("trash", "Remove", ' data-act="delete"', "mb-tool")).toContain('class="btn icon row mb-tool"');
   expect(iconButton("search", "Search")).not.toContain("danger");
 });
 
@@ -160,8 +161,9 @@ describe("the main window's actions", () => {
 
   test("are buttons with a shape: no quiet buttons that read as text, and no links that act", () => {
     for (const file of sources) {
-      // The shared card exit is a real button with an explicit quiet treatment.
-      const text = read(file).replace(/\bcard-quiet\b/g, "card-exit");
+      // The card exit is a real button, and the delete dialog's quiet modifier keeps its framed primary.
+      const text = read(file).replace(/\bcard-quiet\b/g, "card-exit")
+        .replace(/\bmb-delete( |:not\(\.)is-quiet\b/g, "mb-delete$1ordinary");
       expect(text, file).not.toMatch(/["'`][^"'`\n]*\bquiet\b[^"'`\n]*["'`]/);
       // `class=\"link\"` in the catalogs, `class="link"` in the pages, `.link` in the styles
       // (`.link` itself, not a class that only begins with it, such as a link chip's `.link-chip`)

@@ -487,19 +487,19 @@ export function checkRendered(name, context = {}) {
       const items = [...document.querySelectorAll('#app-popover [role="menuitem"]')];
       require(items.map(item => item.textContent).join("|") === "重新登入|重新命名|移除", `重新登入, then 重新命名 and 移除: ${items.map(item => item.textContent).join("|")}`);
       require(items.every(item => visible(item)) && inside(document.querySelector("#app-popover"), document.documentElement), "the menu is whole in the window");
-      require(items[2].classList.contains("danger") && !items[0].classList.contains("danger"), "only 移除 is red");
+      require(items.every(item => !item.classList.contains("danger")), "all account actions use ordinary colors");
       require(rows.map(row => row.querySelector(".st").textContent).join("|") === "已連結|已過期", "the dead row says 已過期");
     }
     if (name === "accounts-menu") {
       const items = [...document.querySelectorAll('#app-popover [role="menuitem"]')];
       require(items.map(item => item.textContent).join("|") === "重新命名|移除", "the menu has 重新命名 and 移除, in that order");
-      require(items[1].classList.contains("danger") && !items[0].classList.contains("danger"), "移除 is red and last");
+      require(items.every(item => !item.classList.contains("danger")), "rename and remove use ordinary colors");
       require(items.every(item => visible(item)) && inside(document.querySelector("#app-popover"), document.documentElement), "the menu is whole in the window");
       require(document.querySelector('[data-conn="account-menu"][data-account="ca_wait"]').getAttribute("aria-expanded") === "true", "the ⋯ that opened it says so");
     }
     if (name === "accounts-remove-ask") {
       const dialog = document.querySelector(".mb-delete");
-      require(visible(dialog) && inside(dialog, document.documentElement), "the question is whole in the window");
+      require(visible(dialog) && dialog.classList.contains("is-quiet") && inside(dialog, document.documentElement), "the quiet question is whole in the window");
       require(dialog.querySelector("h2, .mb-dlg-title, [id*=title]")?.textContent === "移除「工作信箱」？", "the title is 移除「工作信箱」？");
       require(dialog.querySelector("p")?.textContent === "移除後就不能再用這個帳號。", "one sentence says members lose this account");
       const buttons = [...dialog.querySelectorAll(".mb-dlg-act .btn, .action-row .btn")];
@@ -519,7 +519,7 @@ export function checkRendered(name, context = {}) {
     }
     if (name === "accounts-remove-last") {
       const dialog = document.querySelector(".mb-delete");
-      require(visible(dialog) && inside(dialog, document.documentElement), "the question is whole in the window");
+      require(visible(dialog) && dialog.classList.contains("is-quiet") && inside(dialog, document.documentElement), "the quiet question is whole in the window");
       require(made("connectors.remove_account").length === 0 && made("connectors.disconnect").length === 0, "nothing is removed or disconnected before the answer");
       require(dialog.querySelector("h2, .mb-dlg-title, [id*=title]")?.textContent === "中斷連線 Gmail？", "the dialog asks the app's own disconnect question, 中斷連線 Gmail？, not an account's");
       const buttons = [...dialog.querySelectorAll(".mb-dlg-act .btn, .action-row .btn")];
@@ -775,11 +775,11 @@ export function checkRendered(name, context = {}) {
       headHoldsOnScroll(document.querySelector('.modal-scrim .modal-body'), close, [back, title]);
     }
     if (name === 'skill-library-page-remove') {
-      // The package page's trash asks at once in the red dialog naming the package, with no menu before it.
+      // The package page's trash opens the quiet dialog naming the package, with no menu before it.
       const dialog = document.querySelector('.mb-dialog.mb-delete');
-      require(visible(dialog) && dialog.querySelector('h2').textContent === '移除「pstack」？' && !document.querySelector('#app-popover'), 'the red dialog names the package, with no menu before it');
-      require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join('|') === '取消|刪除', '取消 then a red 刪除');
-      require(!window.__look.calls.some(call => call.method === 'skills.library.delete'), 'nothing is deleted before the red button');
+      require(visible(dialog) && dialog.classList.contains('is-quiet') && dialog.querySelector('h2').textContent === '移除「pstack」？' && !document.querySelector('#app-popover'), 'the quiet dialog names the package, with no menu before it');
+      require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join('|') === '取消|刪除', '取消 then 刪除');
+      require(!window.__look.calls.some(call => call.method === 'skills.library.delete'), 'nothing is deleted before confirmation');
     }
     if (name === 'skill-library-row-lit') {
       // The lit row is the card itself, never a smaller rounded box inside it.
@@ -1654,9 +1654,11 @@ export function checkRendered(name, context = {}) {
       const menu = document.querySelector('.menu');
       require(visible(menu) && menu.querySelectorAll('.mdesc').length === 6, 'each maintenance action explains preservation and removal');
       require([...menu.querySelectorAll('.mt')].slice(0,5).map(node=>node.textContent).join('/') === '稍候/重新啟動/更新/修復/重設', 'escalation order is fixed');
+      require([...menu.querySelectorAll('.danger')].map(item => item.dataset.action).join() === '4', 'only reset is red');
       require(!calls.length, 'opening the menu has no maintenance effect');
     } else if (name === 'computer-maintenance-reset') {
       require(visible(document.querySelector('.mb-confirm')) && document.querySelector('.mb-confirm').textContent.includes('大家共用'), 'reset names shared scope in the shared confirmation');
+      require(visible(document.querySelector('.mb-confirm [data-dlg="reset"].danger')), 'the reset confirmation is red');
       require(!calls.length, 'reset has not been sent before yes');
     } else {
       const action = name === 'computer-maintenance-reset-done' ? 'reset' : name.split('-').at(-1);
@@ -1993,18 +1995,18 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "safety-rules-icons") {
     const rows = [...document.querySelectorAll('.rules-row')];
-    require(rows.length === 3 && rows.every(row => visible(row.querySelector('[data-rule="edit"] svg')) && visible(row.querySelector('[data-rule="delete"].danger svg')) && !row.querySelector('[data-rule="more"], [data-overflow]')),
-      "each rule has its pencil and its red trash on its row, and no ⋯");
+    require(rows.length === 3 && rows.every(row => visible(row.querySelector('[data-rule="edit"] svg')) && visible(row.querySelector('[data-rule="delete"]:not(.danger) svg')) && !row.querySelector('[data-rule="more"], [data-overflow]')),
+      "each rule has its pencil and its ordinary trash icon on its row, and no ⋯");
     const tools = rows.map(row => row.querySelector('.rules-tools').getBoundingClientRect());
     require(tools.every(box => Math.abs(box.right - tools[0].right) <= 1), "the icons end on one line at the right of the rows");
     return {check:name};
   }
   if (name === "safety-rule-delete-dialog") {
     const dialog = document.querySelector('.mb-dialog.mb-delete');
-    require(visible(dialog) && dialog.querySelector('h2').textContent === '刪除「刪除檔案」？', "the red dialog names the rule");
-    require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join('|') === '取消|刪除', "取消 then a red 刪除");
+    require(visible(dialog) && dialog.classList.contains('is-quiet') && dialog.querySelector('h2').textContent === '刪除「刪除檔案」？', "the quiet dialog names the rule");
+    require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join('|') === '取消|刪除', "取消 then 刪除");
     require(!document.querySelector('#app-popover') && visible(document.querySelector('.modal-scrim .rules')), "no menu came first, and Settings stays open behind it");
-    require(!window.__look.calls.some(call => call.method === 'safety.rules.delete'), "nothing is deleted before the red button");
+    require(!window.__look.calls.some(call => call.method === 'safety.rules.delete'), "nothing is deleted before confirmation");
     return {check:name};
   }
   if (name === "project-folders-settings") {
@@ -5744,7 +5746,7 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "skill-deleted-final") {
-    // The delete asked in the red dialog, went through the
+    // The deletion asked for confirmation, went through the
     // same owner boundary, and nothing in the list offers to bring the skill back.
     const pane = document.querySelector('.ms-pane'), calls = window.__look.calls;
     require(calls.some(c => c.method === "members.skills.delete" && c.params.id === 31), "Raphael deletes the skill through the same owner boundary");
@@ -5766,16 +5768,16 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "local-model-asks") {
     const dialog = document.querySelector(".mb-dialog.mb-delete");
-    require(visible(dialog) && /SenseVoice/.test(dialog.querySelector("h2")?.textContent ?? ""), "the red dialog asks about that model before anything is deleted");
+    require(visible(dialog) && dialog.classList.contains("is-quiet") && /SenseVoice/.test(dialog.querySelector("h2")?.textContent ?? ""), "the quiet dialog asks about that model before anything is deleted");
     require(!document.querySelector(".lm-confirm") && !document.querySelector("#app-popover"), "no row asks in its own place");
     require(!window.__look.calls.some(call => call.method === "models.delete"), "nothing is deleted before the answer");
     return { check: name };
   }
   if (name === "connections-delete-ask") {
     const dialog = document.querySelector(".mb-dialog.mb-delete");
-    require(visible(dialog) && dialog.querySelector("h2")?.textContent.startsWith("刪除「"), "the red dialog asks about that one server");
+    require(visible(dialog) && dialog.classList.contains("is-quiet") && dialog.querySelector("h2")?.textContent.startsWith("刪除「"), "the quiet dialog asks about that one server");
     require(!document.querySelector('.menu [data-conn="disconnect"]'), "no menu asks in its own place");
-    require(!window.__look.calls.some(call => call.method === "integrations.disconnect"), "nothing is deleted before the red button");
+    require(!window.__look.calls.some(call => call.method === "integrations.disconnect"), "nothing is deleted before confirmation");
     return { check: name };
   }
 
@@ -7923,14 +7925,14 @@ export function checkRendered(name, context = {}) {
     require(visible(row), "the Codex card is visible");
     const calls = window.__look.calls;
     if (name === "cli-account-disconnect-ask") {
-      // The card's one action is the unplugged plug (no ⋯, no trash); it asks in the red dialog, and nothing is disconnected yet.
+      // The card's one action is the unplugged plug (no ⋯, no trash); it asks in the quiet dialog before disconnecting.
       const dialog = document.querySelector('.mb-dialog.mb-delete');
-      require(visible(dialog) && dialog.querySelector('h2').textContent === '中斷連線 Codex？', "the red dialog names the account");
+      require(visible(dialog) && dialog.classList.contains('is-quiet') && dialog.querySelector('h2').textContent === '中斷連線 Codex？', "the quiet dialog names the account");
       require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join('|') === '取消|中斷連線', "取消 then 中斷連線");
       require(visible(row.querySelector('[data-cli-disconnect="codex"] svg')) && !row.querySelector('[data-overflow], .btn.icon.danger'), "the card has its unplug, no ⋯ and no trash");
-      require(!calls.some(call => call.method === 'brains.cli_disconnect'), "nothing is disconnected before the red button");
+      require(!calls.some(call => call.method === 'brains.cli_disconnect'), "nothing is disconnected before confirmation");
     } else {
-      require(calls.filter(call => call.method === 'brains.cli_disconnect' && call.params.id === 'codex').length === 1, "the red button disconnects exactly once");
+      require(calls.filter(call => call.method === 'brains.cli_disconnect' && call.params.id === 'codex').length === 1, "confirmation disconnects exactly once");
       const cli = window.__look.data.clis.find(cli => cli.id === 'codex');
       require(cli.logged_in === true, "the CLI's own login remains intact");
       if (name === "cli-account-disconnected") {
@@ -9953,7 +9955,7 @@ export function checkRendered(name, context = {}) {
     const dialog = document.querySelector(".mb-confirm.mb-delete"), danger = dialog?.querySelector('[data-dlg="delete"]');
     require(visible(dialog) && !document.querySelector("#app-popover"), "the menu gave way to the delete dialog");
     require(dialog.textContent.includes("開啟全部允許？") && dialog.textContent.includes("成員執行任何操作前都不會先問你") && dialog.textContent.includes("資料遺失或外洩的風險"), "it says what the mode does and the risk");
-    require(danger?.textContent.trim() === "全部允許" && document.activeElement === dialog.querySelector('[data-dlg="cancel"]'), "the red button names the mode, and the focus starts on Cancel");
+    require(!dialog?.classList.contains("is-quiet") && danger?.textContent.trim() === "全部允許" && document.activeElement === dialog.querySelector('[data-dlg="cancel"]'), "the red button names the mode, and the focus starts on Cancel");
     require(!window.__look.calls.some(call => call.method === "settings.set" && call.params?.key === "action_mode"), "nothing is saved before the press");
     return { check: name };
   }
@@ -10763,14 +10765,14 @@ export function checkRendered(name, context = {}) {
     return { check: name, rows: body.querySelectorAll('.cs-linked').length };
   }
   if (name === "connector-uninstall-ask") {
-    // R-UI-56: the app's menu closed and the red dialog asks, naming the app; nothing is disconnected before its red button.
+    // R-UI-56: the app's menu closes and the quiet dialog asks for confirmation.
     const dialog = document.querySelector(".mb-dialog.mb-delete");
-    require(visible(dialog), "the red dialog asks");
+    require(visible(dialog) && dialog.classList.contains("is-quiet"), "the quiet dialog asks");
     require(dialog.querySelector("h2")?.textContent === "中斷連線 Notion？", `the title asks about that one app: ${dialog.querySelector("h2")?.textContent}`);
     const buttons = [...dialog.querySelectorAll(".mb-dlg-act .btn, .action-row .btn")];
     require(buttons.map(button => button.textContent).join("|") === "取消|中斷連線", "the buttons are 取消 and 中斷連線");
     require(!document.querySelector('.menu [data-conn="disconnect"]'), "no menu asks in its own place");
-    require(!window.__look.calls.some(call => call.method === "connectors.disconnect"), "nothing is disconnected before the red button");
+    require(!window.__look.calls.some(call => call.method === "connectors.disconnect"), "nothing is disconnected before confirmation");
     return { check: name };
   }
   if (name === "apps-count") {

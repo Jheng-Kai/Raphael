@@ -3,6 +3,7 @@
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import ts from "typescript-6";
 import { describe, expect, test } from "vitest";
 import { en } from "./main/i18n/en";
 import { ja } from "./main/i18n/ja";
@@ -75,11 +76,88 @@ test("closing is a ×, never a 「關閉」 text button", () => {
   }
 });
 
-test("what destroys asks in the red confirmation dialog, never in its own place (R-UI-56)", () => {
+test("a removal asks in the shared confirmation dialog, never in its own place (R-UI-56)", () => {
   // The first press turning an item or a button into its question, and a second press confirming, is gone from the whole app.
   for (const file of sources) expect(read(file), rel(file)).not.toMatch(/data-asking|data-confirm-item|DISCONNECT_CONFIRM_MS/);
   const asked = Object.entries(zhTW).filter(([, text]) => /^(?:確定(?:刪除|移除|中斷)|再按一次刪除)/.test(text)).map(([key]) => key);
   expect(asked).toEqual([]);
+});
+
+test("red actions are limited to the approved high-impact actions (R-UI-184)", () => {
+  const approved = [
+    'chat-composer.ts: confirmDelete("")',
+    "computer-lifecycle.ts: danger for esc(t('desktop.reset')) = true",
+    "computer-lifecycle.ts: danger for t(maintenanceWords[action][0]) = action === 'reset'",
+    "group-chats.ts: confirmDelete(room.name)",
+    'group-chats.ts: danger for "delete" = true',
+    'member-column.ts: danger for "delete" = true',
+    "member-actions.ts: confirmDelete(m.name)",
+    "vault.ts: confirmDelete(entry.label)",
+    'vault.ts: danger for iconButton("trash", word("remove"), \' data-vault="remove"\', "", { danger: true }) = true',
+  ];
+  const uses: string[] = [];
+  const literalClasses: string[] = [];
+  for (const file of sources) {
+    const path = rel(file);
+    const source = ts.createSourceFile(path, read(file), ts.ScriptTarget.Latest, true);
+    const names = new Set(["confirmDelete"]);
+    for (const statement of source.statements) {
+      if (!ts.isImportDeclaration(statement)) continue;
+      const bindings = statement.importClause?.namedBindings;
+      if (!bindings || !ts.isNamedImports(bindings)) continue;
+      for (const binding of bindings.elements) if (binding.propertyName?.text === "confirmDelete") names.add(binding.name.text);
+    }
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node)) {
+        const target = ts.isPropertyAccessExpression(node.expression) ? node.expression.name : node.expression;
+        if (ts.isIdentifier(target) && names.has(target.text)) {
+          const options = node.arguments[1];
+          // A later spread or computed key can override quiet, so count that call as red.
+          const quiet = options && ts.isObjectLiteralExpression(options) && [...options.properties].reverse().find(property =>
+            ts.isSpreadAssignment(property) || (property.name && (ts.isComputedPropertyName(property.name) || /^['"]?quiet['"]?$/.test(property.name.getText(source)))));
+          if (!quiet || !ts.isPropertyAssignment(quiet) || ts.isComputedPropertyName(quiet.name) || quiet.initializer.kind !== ts.SyntaxKind.TrueKeyword) {
+            uses.push(`${path}: confirmDelete(${node.arguments[0]?.getText(source) ?? ""})`);
+          }
+        }
+      }
+      if ((ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) && /^['"]?danger['"]?$/.test(node.name.getText(source))) {
+        const value = ts.isPropertyAssignment(node) ? node.initializer.getText(source) : node.name.text;
+        if (value !== "false") {
+          const object = node.parent;
+          const context = object.properties.find((property): property is ts.PropertyAssignment =>
+            ts.isPropertyAssignment(property) && /^(id|attrs|label)$/.test(property.name.getText(source)));
+          uses.push(`${path}: danger for ${context?.initializer.getText(source) ?? object.parent.getText(source)} = ${value}`);
+        }
+      }
+      if ((ts.isStringLiteralLike(node) || ts.isTemplateLiteralToken(node)) &&
+        (/(?:^|\s)danger(?:\s|$)/.test(node.text) || /\bclass\s*=\s*["'][^"']*\bdanger\b/.test(node.text))) {
+        literalClasses.push(`${path}: ${node.parent.getText(source)}`);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  expect(uses.sort()).toEqual(approved.sort());
+  expect(literalClasses.sort()).toEqual([
+    'member-column.ts: item.danger ? \' class="danger"\' : ""',
+    'ui.ts: a.danger ? " danger" : ""',
+    'ui.ts: b.danger ? "danger" : ""',
+    'ui.ts: options.danger ? " danger" : ""',
+  ].sort());
+
+  const redFillSelectors = mainFiles.filter(file => file.endsWith(".css")).flatMap(file =>
+    [...read(file).replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(([, , body]) => /var\(--(?:on-)?close\)/.test(body!))
+      .map(([, selector]) => `${rel(file)}: ${selector!.trim()}`));
+  expect(redFillSelectors.sort()).toEqual([
+    "members.css: .mb-confirm.mb-delete:not(.is-quiet) .mb-dlg-act .btn.pri",
+    "members.css: .mb-confirm.mb-delete:not(.is-quiet) .mb-dlg-act .btn.pri:hover:not(:disabled), .mb-confirm.mb-delete:not(.is-quiet) .mb-dlg-act .btn.pri:active:not(:disabled)",
+    "styles.css: .btn.pri.danger",
+    "styles.css: .btn.pri.danger:hover:not(:disabled), .btn.pri.danger:active:not(:disabled)",
+    // The Windows caption close keeps the platform's red under the pointer (R-UI-16).
+    "styles.css: .window-close:active",
+    "styles.css: .window-close:hover",
+  ]);
 });
 
 describe("action rows", () => {
@@ -90,11 +168,11 @@ describe("action rows", () => {
       destructive: { label: "Delete", attrs: ' data-action="delete"' },
     });
     expect([...html.matchAll(/data-action="([^"]+)"/g)].map((m) => m[1])).toEqual(["delete", "cancel", "save"]);
-    expect(html).toMatch(/class="action-destructive"><button[^>]*class="btn danger"/);
+    expect(html).toMatch(/class="action-destructive"><button[^>]*class="btn"/);
     expect(html).toMatch(/class="btn pri" data-action="save" disabled>Save<\/button><\/div>$/);
   });
 
-  test("a delete confirmation separates danger on the left from Cancel on the right", () => {
+  test("a removal action keeps its own space before Cancel", () => {
     const html = actionRow({ secondary: btn("Cancel"), destructive: { label: "Delete" } });
     expect(html).toMatch(/Delete<\/button><\/span><button[^>]*>Cancel<\/button><\/div>$/);
     expect(html).not.toContain("btn pri");

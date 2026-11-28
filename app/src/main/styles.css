@@ -373,8 +373,10 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .btn.icon.pri:active:not(:disabled) { background: transparent; border-color: transparent; color: color-mix(in srgb, var(--accent-icon) 85%, transparent); }
 /* The small one on a row: copy, delete, close, previous month. */
 .btn.icon.row { width: var(--h-ctl-sm); min-height: var(--h-ctl-sm); padding: 0; }
-/* Scope interaction tokens so menu, icon and page-specific controls retain destructive intent. */
+/* Scope warning colors to controls explicitly marked for high-impact actions. */
 .danger { --hover: var(--danger-hover); --pressed: var(--danger-pressed); --hover-edge: var(--err); --btn-edge: var(--err); --text: var(--err); --text-2: var(--err); --text-3: var(--err); --accent-text: var(--err); color: var(--err); }
+.btn.pri.danger { border-color: var(--close); background: var(--close); color: var(--on-close); }
+.btn.pri.danger:hover:not(:disabled), .btn.pri.danger:active:not(:disabled) { border-color: var(--close); background: var(--close); filter: brightness(0.9); }
 /* Form actions share their visual and keyboard order, including narrow, wrapped rows. */
 .action-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--sp-2); min-width: 0; }
 .action-destructive { display: flex; margin-inline-end: auto; }

@@ -1,6 +1,6 @@
 // The owner's safety rules in Settings control which actions Raphael asks about, allows or
 // denies (the core's agent/safety.py). A framed add action follows the draft and verdict menu.
-// Each saved row has a pencil that edits it and a trash that asks in the red dialog before it deletes (Settings has no
+// Each saved row has a pencil that edits it and a trash that asks in the quiet dialog before it deletes (Settings has no
 // right click and no ⋯); rules are always read and have no opt-out switch.
 //
 // `rulesHTML` draws it from a snapshot (pure, so its rules can be tested without a browser);
@@ -265,11 +265,11 @@ export function createRules(host: RulesHost): RulesPanel {
     }
   }
 
-  /** The trash: the red dialog asks first, and only its red button deletes; a refused delete reads the list again. */
+  /** The trash asks before deleting. A refused delete reads the list again. */
   async function remove(id: number): Promise<void> {
     const rule = rules().find((r) => r.id === id);
     if (!rule) return;
-    if (!(await confirmDelete(rule.action, { words: { title: t("confirm.deleteTitle", { p0: rule.action }), hint: t("rules.deleteHint"), action: t("members.delete") } }))) return;
+    if (!(await confirmDelete(rule.action, { quiet: true, words: { title: t("confirm.deleteTitle", { p0: rule.action }), hint: t("rules.deleteHint"), action: t("members.delete") } }))) return;
     if (editing?.id === id) editing = null;
     hidden = [...hidden, id];
     redraw();
