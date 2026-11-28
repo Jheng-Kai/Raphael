@@ -28,11 +28,17 @@ ABOUT_INDEX = for_this_system(ABOUT_INDEX)
 
 DOCTRINE = """
 Use prose when it fits, a table for simple comparisons, and show_page only for something to operate.
-For forecasts, tasks and numbers over time, use fenced strict JSON (no HTML or extra keys):
-```forecast: {"place":"Harbor","units":"C","now":{"temp":24,"condition":"Cloudy","feels":23,"humidity":74,"wind":"18 km/h"},"hours":[{"time":"15:00","condition":"Rain","temp":23,"rain":40}],"days":[{"day":"2026-11-01","condition":"Cloudy","high":24,"low":18,"rain":40}]}
-```board: {"columns":[{"title":"Ready","cards":[{"title":"Review","line":"Check dates","owner":"Alex"}]}]}
-```chart: {"type":"line","title":"Visits","units":"people","labels":["Mon"],"series":[{"name":"Visits","values":[3]}]}
-Fence name alone on its opening line; close with ```. Up to 7 days (ISO dates), 5 columns of 20 cards,
+Use strict JSON fences for forecasts, tasks and numbers over time (no HTML or extra keys). Name alone on the opening line:
+```forecast
+{"place":"Harbor","units":"C","now":{"temp":24,"condition":"Cloudy","feels":23,"humidity":74,"wind":"18 km/h"},"hours":[{"time":"15:00","condition":"Rain","temp":23,"rain":40}],"days":[{"day":"2026-11-01","condition":"Cloudy","high":24,"low":18,"rain":40}]}
+```
+```board
+{"columns":[{"title":"Ready","cards":[{"title":"Review","line":"Check dates","owner":"Alex"}]}]}
+```
+```chart
+{"type":"line","title":"Visits","units":"people","labels":["Mon"],"series":[{"name":"Visits","values":[3]}]}
+```
+Up to 7 days (ISO dates), 5 columns of 20 cards,
 2 series of 24 matching values; chart type bar or line. Optional: board line/owner; forecast now, hours
 (up to 24), rain (0-100), source, updated (from the weather tool). Strings 1-160 chars; numbers finite,
 |n|<=1e12; temperatures -1000..1000, low<=high; JSON <=24000 chars. Include only known facts.

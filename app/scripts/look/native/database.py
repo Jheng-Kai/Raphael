@@ -183,10 +183,9 @@ elif operation == "init":
     connection = connect(database)
     from raphael_core.agent.conversations import Conversations
 
-    # The persisted quick thread is lazy in production. Seed the prerequisite through its store,
+    # The main conversation is lazy in production. Seed the prerequisite through its store,
     # then drive all new conversations, turns and deletions from the real UI.
     Conversations(connection).main()
-    Conversations(connection).quick()
     if len(sys.argv) > 3 and sys.argv[3] == "startup-rooms":
         from raphael_core.members.store import MemberStore
         store = MemberStore(connection)
@@ -279,10 +278,10 @@ elif operation == "init":
     if len(sys.argv) > 3 and sys.argv[3] == "rich-content":
         from raphael_core.agent.history import AgentHistory
 
-        fixture = json.loads((Path(__file__).resolve().parent.parent / "fixture.json").read_text(encoding="utf-8"))
+        rich = json.loads((Path(__file__).resolve().parent.parent / "fixture.json").read_text(encoding="utf-8"))["richContent"]
         AgentHistory(connection).add(
             session_id="native-rich-content", question="Review the research summary.", route="answer",
-            prefix="", text=fixture["richContent"]["reply"], status="done", source="app",
+            prefix="", text=f'{rich["reply"]}\n\n{rich["form-chart-bar"]}', status="done", source="app",
         )
     if len(sys.argv) > 3 and sys.argv[3] == "pages":
         from raphael_core.agent.history import AgentHistory

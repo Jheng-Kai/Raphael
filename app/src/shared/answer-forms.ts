@@ -24,11 +24,12 @@ const forecastHour = (h: unknown): boolean => object(h) && keys(h, ["time", "con
 const forecastNow = (n: unknown): boolean => object(n) && keys(n, ["temp", "condition"], ["feels", "humidity", "wind"]) && temperature(n.temp) && word(n.condition) &&
   maybe(n, "feels", temperature) && maybe(n, "humidity", percent) && maybe(n, "wind", word);
 
-export const isAnswerFormKind = (kind: string): boolean => ["forecast", "board", "chart"].includes(kind);
+export const isAnswerFormKind = (info: string): boolean => /^(forecast|board|chart):?$/i.test(info);
 
 /** Strict, bounded data only. Invalid and provisional content stays in the ordinary code path. */
-export function parseAnswerForm(kind: string, source: string): AnswerForm | null {
-  if (!isAnswerFormKind(kind) || source.length > 24000) return null;
+export function parseAnswerForm(info: string, source: string): AnswerForm | null {
+  if (!isAnswerFormKind(info) || source.length > 24000) return null;
+  const kind = info.toLowerCase().replace(/:$/, "");
   try {
     const v: unknown = JSON.parse(source);
     if (!object(v)) return null;
@@ -60,11 +61,11 @@ export function answerFormText(form: AnswerForm): string {
 export function formsPlainText(text: string): string {
   const lines = text.replace(/\r\n?/g, "\n").split("\n"), out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const fence = /^[ \t]*(`{3,}|~{3,})[ \t]*([^\s`]*)[^`]*$/.exec(lines[i]);
+    const fence = /^[ \t]*(`{3,}|~{3,})[ \t]*([^`]*)$/.exec(lines[i]);
     if (!fence) { out.push(lines[i]); continue; }
     const start = i, source: string[] = [], end = new RegExp(`^[ \t]*${fence[1][0]}{${fence[1].length},}[ \t]*$`);
     while (++i < lines.length && !end.test(lines[i])) source.push(lines[i]);
-    const form = i < lines.length ? parseAnswerForm(fence[2].toLowerCase(), source.join("\n")) : null;
+    const form = i < lines.length ? parseAnswerForm(fence[2].trimEnd(), source.join("\n")) : null;
     out.push(form ? answerFormText(form) : lines.slice(start, Math.min(i + 1, lines.length)).join("\n"));
   }
   return out.join("\n");

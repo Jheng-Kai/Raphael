@@ -13,7 +13,7 @@ export const journeys = [
   { name: "appearance", description: "Real Appearance dropdown, theme persistence and narrow rows at three native sizes" },
   { name: "owner-face", description: "A window that may load before the core still hears it: a saved owner photo reaches the sidebar" },
   { name: "sidebar-foot", description: "Inspect the resizable sidebar, in-place search, the foot (the face and the Connections pill) and the account menu in the real WebView" },
-  { name: "rich-content", description: "Persisted rich reply renders tables, highlighted code and SVG; remote images require consent" },
+  { name: "rich-content", description: "Persisted rich reply renders tables, highlighted code, diagrams and a saved chart; remote images require consent" },
   { name: "conversation-and-learned-pill", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "hidden-window", description: "Close to tray and minimize suspend page timers; returning catches up a fake reply completed while hidden" },
   { name: "hidden-window-refused", description: "The same returns while WebView2 refuses the normal-memory step (0x8007139F): the page still shows and runs" },
@@ -363,9 +363,13 @@ export async function drive(name, context) {
     return;
   }
   if (name === "rich-content") {
-    await chat(page);
+    await perform(page, { action: "member", id: 0 });
     result.richContent = [];
     const code = '.message-code:not(.message-diagram)', diagram = '.message-diagram[data-diagram-state="rendered"]';
+    await wait(page, '.message-chart');
+    await perform(page, { action: "scroll", selector: '.message-chart' });
+    result.richContent.push(await page.evaluate(checkRendered, "form-chart-bar"));
+    await capture("chart-fence");
     await wait(page, '.message-table');
     await perform(page, { action: "scroll", selector: code });
     await wait(page, '.message-code[data-highlighted="true"]');
