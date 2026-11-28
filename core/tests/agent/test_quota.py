@@ -447,3 +447,28 @@ def test_a_window_read_again_far_above_its_last_tenth_was_reset_and_is_told_agai
     store.record("claude", _window(12, voucher, "weekly"))
     store.record("claude", _window(9, voucher, "weekly"))
     assert [params["remaining_percent"] for method, params in events if method == "quota.warning"] == [4, 8]
+
+
+async def test_a_spent_window_with_credits_to_draw_keeps_its_credits_in_every_reading_and_blocks_nothing(make_rig, monkeypatch):
+    # The owner's Codex five-hour window was spent while credits were left: Codex ran on credits, yet the usage said only
+    # 額度已用完, because no reading carried the credits to the window. A live read and the cached one both carry them, and
+    # the subscription is not recorded as spent.
+    rig, _heard = _signed_in_codex(monkeypatch, make_rig)
+    reset = rig.service.quotas.now_ms() // 1000 + 3600
+    credits = {"has_credits": True, "unlimited": False, "balance": 20636.3}
+
+    async def live(_brains):
+        return _live_codex({"period": "fiveHour", "remaining_percent": 0, "resets_at": reset},
+                           {"period": "weekly", "remaining_percent": 84, "resets_at": reset + 6 * 86400}, credits=credits)
+    monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", live)
+    result = await rig.call("usage.allowances")
+    assert result["brains"][0]["credits"] == credits
+    assert result["quotas"] == []
+
+    async def forbidden(_brains):
+        raise AssertionError("A cached read must not touch the CLI")
+    monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", forbidden)
+    cached = await rig.call("usage.allowances", {"refresh": False})
+    assert cached["brains"][0]["credits"] == credits
+    assert [(w["period"], w["status"]) for w in cached["brains"][0]["windows"]] == [("fiveHour", "rejected"), ("weekly", "allowed")]
+    assert cached["quotas"] == []

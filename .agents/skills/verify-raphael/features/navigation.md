@@ -44,7 +44,7 @@ pill beside it is 連結應用程式.
 ## Driving it with look
 
 ```powershell
-npm run look -- start-conversation start-startup-order foot-rest foot-starter-apps foot-apps-one foot-apps-one-starter foot-apps-two foot-apps-three foot-account-menu foot-usage-submenu foot-usage-two foot-usage-default foot-usage-owner foot-usage-none foot-usage-manage foot-account-keys foot-usage-keys foot-account-outside foot-account-dictation foot-account-calendar foot-account-settings foot-pill-hover foot-pill-reduced foot-pill-narrow daily-footer-away sidebar-air sidebar-air-foot sidebar-rail opener-toggle-settings opener-toggle-account-menu after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- start-conversation start-startup-order foot-rest foot-starter-apps foot-apps-one foot-apps-one-starter foot-apps-two foot-apps-three foot-account-menu foot-usage-submenu foot-usage-two foot-usage-credits foot-usage-default foot-usage-owner foot-usage-none foot-usage-manage foot-account-keys foot-usage-keys foot-account-outside foot-account-dictation foot-account-calendar foot-account-settings foot-pill-hover foot-pill-reduced foot-pill-narrow daily-footer-away sidebar-air sidebar-air-foot sidebar-rail opener-toggle-settings opener-toggle-account-menu after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 The Connections pill always shows three marks beside its words, read by `foot-pill-marks-<ids>` in the order the scene's apps must give: the connected

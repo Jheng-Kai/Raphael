@@ -192,3 +192,24 @@ def test_synthetic_files_have_real_magic_and_inline_text():
     assert "晨光計畫" in text_context(attachments("text"))
     assert attachments("image")[0].data.startswith(b"\x89PNG")
     assert PdfReader(BytesIO(attachments("pdf")[0].data)).metadata.title == "星河筆記"
+
+
+async def test_the_live_run_keeps_each_clis_own_sign_in_and_never_names_claudes_folder(tmp_path, monkeypatch):
+    # Naming CLAUDE_CONFIG_DIR, even as ~/.claude, moves Claude Code's sign-in to another Keychain item on a Mac: every
+    # Claude cell answered "Not logged in" while the app's own runs worked. The run keeps the owner's environment for it.
+    import raphael_core.evaluate.guardian as guardian
+    seen = []
+
+    async def recording(model, member, scenario, *, brains, **kwargs):
+        seen.append(dict(brains.environ))
+        return {"brain": model, "member": member, "scenario": scenario.name, "status": "SKIP", "tools": [], "latency_ms": 0, "cost_usd": None, "reason": "test"}
+    monkeypatch.setattr(guardian, "cell", recording)
+    brains = FakeBrains(tmp_path)
+    brains.environ = {"HOME": str(tmp_path), "PATH": "/usr/bin"}
+    await run(["cli:claude:haiku"], tmp_path, max_turns=1, brains=brains, client=FakeClient([]))
+    assert seen and all("CLAUDE_CONFIG_DIR" not in environ for environ in seen)
+    assert all(environ["CODEX_HOME"] == str(tmp_path / ".codex") for environ in seen)
+    brains.environ = {**brains.environ, "CLAUDE_CONFIG_DIR": "/elsewhere/claude"}
+    seen.clear()
+    await run(["cli:claude:haiku"], tmp_path, max_turns=1, brains=brains, client=FakeClient([]))
+    assert all(environ["CLAUDE_CONFIG_DIR"] == "/elsewhere/claude" for environ in seen)
