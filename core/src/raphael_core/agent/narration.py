@@ -31,8 +31,7 @@ from .tools import ToolResult
 from ..failures import PATIENT_WAITS, RETRY_WAITS, classify, tool_failure
 from ..retry_utils import MODEL_SILENCE_S, Outage
 
-LANGUAGE_RULES = """Thinking, progress and replies follow the speaker's own language instructions, otherwise the owner's words.
-The interface language never selects the language of authored speech.
+LANGUAGE_RULES = """Use the same reply-language rule for public thinking and progress as for replies.
 """
 
 PUBLIC_PROGRESS_RULES = MESSAGE_RULES + """

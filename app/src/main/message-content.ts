@@ -23,13 +23,28 @@ const LOCAL_PATH = /^(?:\/(?!\/)|[A-Za-z]:[\\/])/;
 const drivePath = (path: string): string => !IS_MAC && /^\/?[A-Za-z]:[\\/]/.test(path)
   ? path.replace(/^\/(?=[A-Za-z]:)/, "").replace(/\//g, "\\") : path;
 
-function pathHTML(path: string, query: string, teamChip = true): string {
+/**
+ * A `file://` address of this computer as the path it names (`file:///Users/a%20b` → `/Users/a b`, `file:///C:/x` →
+ * `C:/x`), or null for another host or one that does not decode. A reply that linked a file this way showed the whole
+ * link as words, too long to break, and its table ran past the card.
+ */
+export function fileUrlPath(target: string): string | null {
+  const match = /^file:\/\/(?:localhost)?(\/[^?#]*)$/i.exec(target);
+  if (!match) return null;
+  try {
+    const path = decodeURIComponent(match[1]);
+    return /[\u0000-\u001f]/.test(path) ? null : /^\/[A-Za-z]:[\\/]/.test(path) ? path.slice(1) : path;
+  } catch { return null; }
+}
+
+/** A path as inline code, pressable once checked; `name` shows it by its name instead, with the whole path as its title. */
+function pathHTML(path: string, query: string, teamChip = true, name?: string): string {
   if (teamChip && TEAM_FILE.test(path)) {
     return fileChipHTML(highlightHTML(path.slice(path.lastIndexOf("/") + 1), query), ` data-act="team-file-open" data-path="${esc(path)}"`);
   }
   const shown = drivePath(path);
   const candidate = LOCAL_PATH.test(path) && path.length <= 4096 && !/[\u0000-\u001f]/.test(path);
-  return `<code${candidate ? ` data-message-path="${esc(shown)}"` : ""}>${highlightHTML(shown, query)}</code>`;
+  return `<code${candidate ? ` data-message-path="${esc(shown)}"` : ""}${name ? ` title="${esc(shown)}"` : ""}>${highlightHTML(name ?? shown, query)}</code>`;
 }
 
 function barePath(text: string, at: number): string {
@@ -229,16 +244,22 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
         let end = middle + 2, level = 1;
         for (; end < text.length && level; end++) { if (text[end] === "(") level++; if (text[end] === ")") level--; }
         if (!level) {
-          const target = linkDestination(text.slice(middle + 2, end - 1));
+          const destination = linkDestination(text.slice(middle + 2, end - 1));
+          const target = fileUrlPath(destination) ?? destination;
           const label = text.slice(at + 1, middle);
           const html = link(target, label);
           if (html) { flush(); out += html; at = end; continue; }
           if (isAttachmentLink(target)) { flush(); out += attachmentLinkHTML(target, label, files, query); at = end; continue; }
-          // A local destination shows its path beside any distinct label.
+          // A local destination shows its path beside any distinct label. A label that is the file's own name (in code
+          // marks or not) is the path shown by that name, the whole path a hover away and the press still on the path
+          // (R-UI-185): a file manager's reply listed four files of one folder as four whole paths, and every file
+          // linked as [.lab](…/.lab) said its name twice.
           if (LOCAL_PATH.test(target) || target.startsWith("/")) {
             flush();
-            const said = drivePath(label.trim()), base = target.slice(Math.max(target.lastIndexOf("/"), target.lastIndexOf("\\")) + 1);
-            const words = said && said !== drivePath(target) && said !== base ? inline(label, query, true, urls, depth + 1, mentions, files, owner) + " " : "";
+            const said = drivePath(label.trim().replace(/^(`+)(.+)\1$/, "$2").trim());
+            const folder = target.replace(/[\\/]+$/, ""), base = folder.slice(Math.max(folder.lastIndexOf("/"), folder.lastIndexOf("\\")) + 1);
+            if (said && base && said === base) { out += pathHTML(target, query, true, base); at = end; continue; }
+            const words = said && said !== drivePath(target) ? inline(label, query, true, urls, depth + 1, mentions, files, owner) + " " : "";
             out += words + pathHTML(target, query); at = end; continue;
           }
         }
@@ -299,7 +320,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
 export type MessageBlock =
   | { type: "text"; source: string }
   | { type: "table"; source: string; headers: string[]; align: ("left" | "center" | "right")[]; rows: string[][] }
-  | { type: "code" | "diagram"; source: string; language: string; complete: boolean }
+  | { type: "code" | "diagram"; source: string; language: string; info: string; complete: boolean }
   | { type: "image"; source: string; alt: string; url: string }
   /** A toggle, `<details>` with its `<summary>`: `body` is Markdown of its own. */
   | { type: "details"; source: string; summary: string; body: string; open: boolean; complete: boolean };
@@ -311,13 +332,13 @@ export function parseMessageBlocks(text: string, streaming = false): MessageBloc
   const blocks: MessageBlock[] = [], pending: string[] = [];
   const flush = (): void => { const source = pending.join("\n").trim(); if (source) blocks.push({ type: "text", source }); pending.length = 0; };
   for (let i = 0; i < lines.length; i++) {
-    const fence = /^\s*(`{3,}|~{3,})\s*([^\s`]*)[^`]*$/.exec(lines[i]);
+    const fence = /^\s*(`{3,}|~{3,})\s*(([^\s`]*)[^`]*)$/.exec(lines[i]);
     if (fence) {
       flush(); const source: string[] = [];
       const end = new RegExp(`^\\s*${fence[1][0]}{${fence[1].length},}\\s*$`);
       while (++i < lines.length && !end.test(lines[i])) source.push(lines[i]);
-      const language = fence[2].toLowerCase();
-      blocks.push({ type: language === "mermaid" ? "diagram" : "code", source: source.join("\n"), language, complete: i < lines.length }); continue;
+      const language = fence[3].toLowerCase();
+      blocks.push({ type: language === "mermaid" ? "diagram" : "code", source: source.join("\n"), language, info: fence[2].trimEnd(), complete: i < lines.length }); continue;
     }
     if (DETAILS_OPEN.test(lines[i])) {
       flush();
@@ -439,9 +460,9 @@ function blockHTML(block: MessageBlock, query: string, urls: Set<string>, stream
   if (block.type === "image") return `<section class="rich-block message-image" data-image-url="${esc(block.url)}"><header class="rich-head"><span>${esc(block.alt || t("chat.image"))}</span><span>${esc(new URL(block.url).host)}</span></header><div class="rich-image-body"><button type="button" class="btn sm" data-rich-act="load-image">${esc(t("chat.loadImage"))}</button></div></section>`;
   const diagram = block.type === "diagram";
   // A form still arriving is half a JSON document: the owner sees that a card is coming, not its source.
-  if (!diagram && !block.complete && streaming && isAnswerFormKind(block.language)) return `<section class="rich-block answer-form-pending" role="status"><header class="rich-head"><span>${esc(t("chat.formPending"))}</span></header></section>`;
+  if (!diagram && !block.complete && streaming && isAnswerFormKind(block.info)) return `<section class="rich-block answer-form-pending" role="status"><header class="rich-head"><span>${esc(t("chat.formPending"))}</span></header></section>`;
   if (!diagram && block.complete) {
-    const form = parseAnswerForm(block.language, block.source);
+    const form = parseAnswerForm(block.info, block.source);
     if (form) return answerFormHTML(form, block.source);
   }
   const showSource = diagram && !!query && block.source.toLocaleLowerCase().includes(query.toLocaleLowerCase());
@@ -512,7 +533,7 @@ export function messagePlainText(text: string, markdown = false, action?: string
   return parseMessageBlocks(composioText(text, action)).map(block => {
     if (block.type === "text") return plainTextBlock(block.source);
     if (block.type === "code" && block.complete) {
-      const form = parseAnswerForm(block.language, block.source);
+      const form = parseAnswerForm(block.info, block.source);
       if (form) return answerFormText(form);
     }
     return block.source;

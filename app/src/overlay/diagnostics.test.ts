@@ -152,7 +152,7 @@ test("event diagnostics log only approved metadata and omit loudness and text", 
 
 test("a greeting and a quiet thought are logged as flags, without Raphael's words", () => {
   const handler = guardHandler(() => {}, log);
-  handler({ type: "show", mode: "listening", line: "《告。主人，請下達指示。》" });
+  handler({ type: "show", mode: "listening", line: "《告。請下達指示。》" });
   handler({ type: "mode", mode: "thinking", quiet: true });
   handler({ type: "mode", mode: "thinking", quiet: true, lines: ["Private waiting line", "Another"] });
   handler({ type: "mode", mode: "thinking", quiet: false });

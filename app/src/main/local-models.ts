@@ -3,7 +3,7 @@
 // has the model's name, the languages it knows, its size, a line on what it is for and its state:
 // 未下載, 下載中 42%, 已下載, 備援 (the model behind the cloud) or 使用中. A model that is not downloaded has a 下載
 // button that starts at once (the row shows its size, and 取消 takes over while it downloads); a
-// downloaded one that is not in use can be deleted, after asking in the red dialog (`deleteWords`).
+// downloaded one that is not in use can be deleted, after asking in the quiet dialog (`deleteWords`).
 //
 // This file only draws and counts. The picker keeps the open tab and the question being asked,
 // and the settings page does the downloading and holds the progress of it.
@@ -101,7 +101,7 @@ export function faceTitle(view: LocalView): string | null {
   return `${t("picker.tabLocal")} · ${model?.title ?? view.active}`;
 }
 
-/** The words of the red dialog before a deletion; the fallback's adds who backs up the cloud afterwards, if anyone. */
+/** The words of the confirmation before a deletion; the fallback's adds who backs up the cloud afterwards, if anyone. */
 export function deleteWords(model: LocalModel, view: LocalView): ConfirmWords {
   const hint = t("local.deleteHint");
   const words = { title: t("local.confirmDelete", { p0: model.title, p1: formatSize(model.size) }), action: t("local.delete") };

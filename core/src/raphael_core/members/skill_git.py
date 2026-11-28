@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -142,10 +143,48 @@ def failure(stderr, where):
     return MemberError("download", "git could not fetch this address", reason="git_failed", host=host, why=_clean(stderr))
 
 
+def _kill(process):
+    """End git and the programs it started (the transport of an address is one of them), on any system."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], stdin=subprocess.DEVNULL, capture_output=True,
+                           creationflags=subprocess.CREATE_NO_WINDOW, timeout=15)
+        else:
+            os.killpg(process.pid, 9)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        process.kill()
+    except OSError:
+        pass
+
+
 def _run(args, env, timeout):
-    """One run of git with no input and no window; a seam the tests replace."""
-    return subprocess.run(args, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          timeout=timeout, env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    """One run of git with no input and no window; a seam the tests replace. The import's own token (skill_progress.py) ends it:
+    git is killed with what it started, and nothing is left running behind the owner's cancel."""
+    from . import skill_progress
+
+    held = skill_progress.token()
+    process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                               encoding="utf-8", errors="replace", env=env, start_new_session=os.name != "nt",
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            out, err = process.communicate(timeout=min(0.2, max(0.01, deadline - time.monotonic())))
+            return subprocess.CompletedProcess(args, process.returncode, out, err)
+        except subprocess.TimeoutExpired:
+            if held is not None and held.cancelled:
+                _kill(process)
+                process.communicate()
+                raise skill_progress.ImportCancelled() from None
+            if time.monotonic() >= deadline:
+                _kill(process)
+                process.communicate()
+                raise subprocess.TimeoutExpired(args, timeout) from None
+        except BaseException:
+            _kill(process)
+            raise
 
 
 def _ssh_command(git, env):
@@ -192,7 +231,10 @@ async def fetch(where, parent, *, seconds=CLONE_SECONDS):
     parent.mkdir(parents=True, exist_ok=True)
     folder = Path(tempfile.mkdtemp(prefix=where.name[:40] + "-", dir=parent))
     try:
-        await asyncio.to_thread(clone, where, folder, seconds=seconds)
+        from .skill_progress import report, threaded
+
+        report("fetch")
+        await threaded(lambda: clone(where, folder, seconds=seconds))
     except BaseException:
         await asyncio.to_thread(shutil.rmtree, folder, True)
         raise

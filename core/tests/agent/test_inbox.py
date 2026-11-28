@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -279,22 +280,31 @@ async def test_stop_takes_back_the_request_nothing_answered_yet_instead_of_leavi
         await asyncio.gather(first, return_exceptions=True)
 
 
-@pytest.mark.parametrize("answer", ["reply", "progress", "step"])
+@pytest.mark.parametrize("answer", ["reply", "progress", "thinking", "event", "step", "card"])
 async def test_stop_keeps_a_request_that_was_answered_or_acted_on(make_rig, monkeypatch, tmp_path, answer):
-    # Once a line was said or a step taken, Stop only stops: taking it back would hide what was said or done.
+    # Once anything of the reply was shown (a line, a thinking line, a step, a card), Stop only stops: the message stays, what
+    # was shown stays, and nothing is written under it, no 已取消 (R-CHAT-STOP-01, R-CHAT-STOP-02).
     from raphael_core.agent.steps import Step
     rig, first, release, calls = await blocked_cli(make_rig, monkeypatch, tmp_path)
     try:
         running = next(t for t in await rig.turns() if t["status"] == "running")
-        if answer != "step":
-            rig.history.add_message(running["id"], answer, "Looking at it now.")
-        else:
+        if answer == "step":
             rig.history.add_steps(running["id"], [Step(kind="tool", tool="web_search", server="Raphael", outcome="ok", ms=10)])
+        elif answer == "card":
+            rig.service.pages.store.write(turn_id=running["id"], member_id=0, conversation_id=running["conversation_id"], title="Plan", html="<p>Plan</p>")
+        else:
+            rig.history.add_message(running["id"], answer, "Looking at it now.")
+        before = next(t for t in await rig.turns() if t["id"] == running["id"])
         stopped = await rig.call("agent.history.stop", {"session_id": running["session_id"], "member_id": 0})
         assert "returned" not in stopped
         ended = next(t for t in await rig.turns() if t["id"] == running["id"])
         assert ended["status"] == "cancelled"
-        assert "cancelled" in ended["messages"][-1]["text"].lower()
+        assert ended["question"] == "Request A"
+        assert ended["messages"] == before["messages"]
+        # It keeps the words it had said and adds none: a reply stays the turn's words, anything else leaves it empty.
+        assert ended["text"] == ("Looking at it now." if answer == "reply" else "") and not ended["prefix"]
+        assert "cancel" not in json.dumps([ended["messages"], ended["text"], ended["prefix"]]).lower()
+        assert "已取消" not in json.dumps(ended, ensure_ascii=False)
     finally:
         release.set()
         await asyncio.gather(first, return_exceptions=True)

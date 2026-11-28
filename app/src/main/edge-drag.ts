@@ -2,7 +2,7 @@
 // there is no button for it. The cursor changes over the edge and a thin line shows while it moves. From the keyboard it is
 // a separator: the arrow keys move it, and Enter does what the pane does when it is dragged as far as it goes.
 
-import { holdLines } from "./reading-place";
+import { followLines } from "./reading-place";
 
 export interface EdgeOptions {
   label: string;
@@ -33,7 +33,8 @@ export function mountEdge(edge: HTMLElement, o: EdgeOptions): () => void {
   // inherited properties on the root (`cursor`, `user-select`) styled every element of the window again, when the pointer went down and again
   // when it came up.
   let shield: HTMLElement | null = null;
-  // The conversations keep their lines while the edge moves and set them once when it is let go (reading-place.ts holdLines).
+  // The conversations take the width they have at every moment of the drag and keep the line the owner reads where it stands
+  // (reading-place.ts followLines).
   let letLinesGo: (() => void) | null = null;
   const end = (): void => {
     if (pointer === null) return;
@@ -54,7 +55,7 @@ export function mountEdge(edge: HTMLElement, o: EdgeOptions): () => void {
     shield.className = "edge-shield";
     shield.setAttribute("aria-hidden", "true");
     document.body.append(shield);
-    letLinesGo = holdLines();
+    letLinesGo = followLines();
   };
   const move = (event: PointerEvent): void => {
     if (pointer !== event.pointerId) return;

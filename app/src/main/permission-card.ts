@@ -8,7 +8,7 @@
 // it in the core's words. The question itself is the one the window already holds (the shell keeps it, `source`
 // "ask"), or the card's own door for a task that went on after the computer was given back (`source` "run").
 
-import { cardDisclosureHTML, cardHTML, cardPromptText, waitingCloseHTML } from "./card";
+import { cardDisclosureHTML, cardHTML, cardPromptText, stoppedTurn, waitingCloseHTML } from "./card";
 import { composioText, isComposioTool } from "./composio-result";
 import { getLocale, t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
@@ -85,7 +85,7 @@ function denyCloseHTML(card: PermissionCard, answerable: boolean): string {
  * One card. `answerable` is false while the window holds no question to answer it with (an `ask` card whose
  * question has not come yet, or is being answered): the buttons are there and cannot be pressed.
  */
-export function permissionCardHTML(card: PermissionCard, answerable = true, memberName?: string): string {
+export function permissionCardHTML(card: PermissionCard, answerable = true, memberName?: string, stopped = false): string {
   if (isComposioTool(card.service, card.tool)) card = { ...card, summary: composioText(card.summary, card.tool, "tool") };
   const waiting = waitsForYes(card);
   const actor = memberName || (localCard(card) ? nameOf(card) : raphaelName());
@@ -100,7 +100,9 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
     const value = card.message?.[key as keyof typeof labels];
     return value ? `<div class="card-field"><span>${esc(t(label))}</span><span>${esc(value)}</span></div>` : "";
   }).join("") + `<p class="card-body">${linkedText(card.message.body)}</p>` : "";
-  const outcome = !waiting ? `<p class="card-body">${esc(permissionStateText(card))}</p>` : "";
+  // A question the owner's Stop closed keeps its action and says nothing of the stop (R-CHAT-STOP-02).
+  const quiet = stopped && card.state === "cancelled";
+  const outcome = !waiting && !quiet ? `<p class="card-body">${esc(permissionStateText(card))}</p>` : "";
   const details = `<div class="card-well">${outcome}${card.message ? message : localCard(card) ? `<pre class="local-command">${esc(card.summary)}</pre>${card.reason ? `<p class="card-body">${esc(card.reason)}</p>` : ""}` : `<div class="card-field"><span>${esc(nameOf(card))}</span><span>${linkedText(card.summary)}</span></div>`}</div>`;
   return cardHTML({
     title, mark: markOf(card),
@@ -109,7 +111,7 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
     body,
     // A command that waits is shown itself, not behind a disclosure: the owner allows what they can read. Once answered it folds away with the rest.
     content: waiting && localCard(card) ? details : !waiting || card.message || !body?.includes(card.summary) ? cardDisclosureHTML(card.id, details) : "",
-    actions: actionHTML(card, answerable), cls: "permission-card",
+    actions: actionHTML(card, answerable), cls: "permission-card", ...(quiet ? { hideStatus: true } : {}),
     ...(waiting ? { close: denyCloseHTML(card, answerable), statusInHeading: true } : {}),
     attrs: ` data-permission-card="${esc(card.id)}" data-card-state="${esc(card.state)}" data-source="${esc(card.source)}" data-kind="${esc(card.kind)}" data-digest="${esc(card.digest)}"`,
   });
@@ -118,7 +120,7 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
 /** The cards a turn shows, below what it said. `answerable` says whether the window can answer a question by its id now. */
 export function permissionCardsHTML(turn: AgentTurn, answerable: (id: string) => boolean = () => true, settled = false, memberName?: string): string {
   return (turn.permissions ?? []).filter(card => waitsForYes(card) !== settled).map(card =>
-    permissionCardHTML(card, card.source === "run" || answerable(card.id), memberName)).join("");
+    permissionCardHTML(card, card.source === "run" || answerable(card.id), memberName, stoppedTurn(turn))).join("");
 }
 
 /** Owner questions share the conversation card, with choices instead of permission controls. */
@@ -129,12 +131,13 @@ export function permissionCardsHTML(turn: AgentTurn, answerable: (id: string) =>
  * to, the way a settled permission card is; the call with `Infinity` gives the cards asked after the last reply.
  */
 export function settledQuestions(turn: AgentTurn): (until: number) => string {
+  const quiet = stoppedTurn(turn);
   const pending = (turn.owner_questions ?? []).filter(question => question.state !== "asked" && (question.kind === "ask_owner" || question.kind === "show_page"))
     .map((question, index) => ({ question, index, at: question.created_at_ms ?? -Infinity }))
     .sort((a, b) => (a.at === b.at ? a.index - b.index : a.at < b.at ? -1 : 1));
   return until => {
     const due: string[] = [];
-    while (pending.length && pending[0]!.at <= until) due.push(ownerQuestionHTML(pending.shift()!.question));
+    while (pending.length && pending[0]!.at <= until) due.push(ownerQuestionHTML(pending.shift()!.question, quiet));
     return due.join("");
   };
 }
@@ -168,7 +171,7 @@ function waitingForm(question: OwnerQuestion, id: string, multiple: boolean): st
     `<div role="alert" hidden></div></div>`;
 }
 
-export function ownerQuestionHTML(question: OwnerQuestion): string {
+export function ownerQuestionHTML(question: OwnerQuestion, stopped = false): string {
   const waiting = question.state === "asked", id = esc(question.id);
   const multiple = !!question.multiple && question.options.length > 1;
   const line = questionAnswerText(question);
@@ -176,7 +179,7 @@ export function ownerQuestionHTML(question: OwnerQuestion): string {
   const left = question.result?.by === "message";
   return cardHTML({ title: question.question, linkTitle: true, status: waiting ? "waiting" : question.state === "cancelled" ? "ready" : "done",
     statusText: waiting ? cardPromptText("question") : question.state === "cancelled" ? t(left ? "ownerQuestion.left" : "ownerQuestion.cancelled") : t("ownerQuestion.answered"),
-    hideStatus: (waiting && cardPromptText("question") === undefined) || (!waiting && line !== null),
+    hideStatus: (waiting && cardPromptText("question") === undefined) || (!waiting && line !== null) || (stopped && question.state === "cancelled" && !left),
     body: waiting ? question.subtitle || (multiple ? t("ownerQuestion.many") : undefined) : undefined,
     content: waiting ? waitingForm(question, id, multiple) : line !== null
       ? `<div class="card-well question-answer">${btn(`<span class="question-answer-text">${esc(line)}</span>${ico("check")}`, "question-answer-line", ' data-owner-line aria-expanded="false"')}</div>` : "",
@@ -199,6 +202,6 @@ const drawsCard = (turn: AgentTurn, id: string): boolean =>
  */
 export const ownerQuestionsHTML = (turn: AgentTurn, settled?: boolean): string => (turn.owner_questions ?? [])
   .filter(question => settled === undefined || (question.state !== "asked") === settled).map(question =>
-  question.kind === "ask_owner" || question.kind === "show_page" ? ownerQuestionHTML(question) :
+  question.kind === "ask_owner" || question.kind === "show_page" ? ownerQuestionHTML(question, stoppedTurn(turn)) :
     question.state === "asked" && !drawsCard(turn, question.card_id) ? `<div class="cc-actions" data-owner-question="${esc(question.id)}">` +
       btn(esc(t("common.cancel")), "sm", ' data-owner-answer="cancel"') + `<div role="alert" hidden></div></div>` : "").join("");

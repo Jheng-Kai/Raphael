@@ -56,6 +56,16 @@ only from the very top; a view one to four px short of the bottom is left alone,
 to following; a scroll of the person's own in that frame is kept. Windows never nudges. The look harness renders in Chromium, so it
 runs the nudge without proving the WebKit repaint; that is checked in the Mac app.
 
+While an edge of the window is dragged (R-PERF-27) the conversation takes the width it has at every moment: nothing holds a column at an
+old width, so no word is covered by the list or the panel. `followLines` (`reading-place.ts`) is called by `edge-drag.ts` when the edge is
+taken: each conversation finds the line its owner reads (`readLine`: the first line whole in view, by its text position, or the bottom for a
+thread at its bottom) and makes one ResizeObserver, told after the page's own, that puts that line back where it stood in the frame of each
+change. A thread read in the middle is told to hold its place (`conversation-hold`); the page's message folds are measured in the same frame
+(`conversation-measure`), so a fold never lags the width by a frame. The column's width goes in steps of 24 px while the edge is held (`data-stepping`, `--step-r` and the `.ra-scroll[data-stepping] > .ra-col`
+rule in `agent.css`: the pane's width rounded down to a grid through the width the column had at the press, never past the pane), so the
+paragraphs wrap again when the width crosses a step, a few times for a drag, and not at every pixel; the line read does not move, and the
+words move sideways with the column between steps. Letting go sets the exact width once. Letting go measures once more and gives the page its own anchor back.
+
 ```powershell
 npm run look -- follow-reply-bottom follow-reply-reading follow-reply-near follow-open-pictures chat send-prompt busy-team-follow busy-team-anchor generated-image picture-message picture-message-menu picture-message-reply page-composer-grows member-settings-back-bottom member-settings-back-kept conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom owner-question-brought owner-question-pending-page owner-question-pending-room --theme both --width 1120,720,1920x1080
 ```
@@ -414,6 +424,26 @@ place with the member answering) and `message-edit-answered`. `message-edit-pict
 the edit up with Escape (`message-edit-draft-back`: the words are back, the message is in the thread once, nothing was sent); `message-edit-draft-sent` sends the edit instead
 (`message-edit-draft-sent`: the words are back, the edited message stands once in its place, one call naming it).
 
+### Stop and Escape twice only stop (R-CHAT-STOP-02, R-CHAT-STOP-01)
+
+```powershell
+npm run look -- stop-after-thinking stop-after-words-esc stop-after-step stop-closes-card stop-before-anything stop-before-anything-esc message-edit-open composer-queued-stop owner-sendnow-order esc-main-armed --theme both --width 1120,720,1920x1080
+```
+
+These scenes open member 1's conversation with its message 8201 still being worked on (`ownerThinking`), and the mock's `stopShown` says what the member has shown of its reply:
+a thinking line (`stop-after-thinking`), words (`stop-after-words-esc`), a step (`stop-after-step`) or nothing (`stop-before-anything`, `stop-before-anything-esc`).
+The mock's `agent.history.stop` settles the turn as the core does: nothing shown, the turn is taken back and its words are returned; anything shown, it is closed
+`cancelled` with the words it had and nothing added. `stop-before` (a step) records the owner's bubble (its words and box) and what was shown (the thinking block, the
+words, the step line). `stop-keeps-reply` asserts, after the composer's Stop (a press) or Escape twice: one `agent.history.stop` and no `agent_retract`, the owner's bubble in the
+thread with its words and its box as before, what was shown there as it was, the member no longer at work, no cancel word anywhere in the thread (已取消, 已中止, 已停止,
+cancel, stopped), no toast or failure card, no failure styling or Run again, and the composer empty and idle. `stop-takes-back` asserts the case of nothing shown: one Stop
+call, the turn gone from the thread, its words in the composer, no word of the stop. `message-edit-open` is the separate action (編輯 in the ⋯ menu) and is unchanged;
+`composer-queued-stop` and `esc-main-armed` are the existing Stop consumers, and `owner-sendnow-order` keeps the wording of a card closed by a newer message (the turn is superseded, not stopped).
+`stop-closes-card` (`stopShown: 'card'`) presses Escape twice at a permission
+question: the card is `cancelled` in the core, keeps its action, has no status, buttons or ×, and the message stays; `stopped-cards.test.ts` holds the same for connection, key, question,
+proposal and draft cards. The group chat's scene is `room-stop-after-reply` in `team-and-rooms.md`. The card of a background task (`taskCardHTML`, `timeline.ts`) is drawn nowhere in the
+app's thread today (only tests call `stepsHTML`), so no scene can show it: a task the owner stopped keeps its count with no 已中止 and no empty `.task-mark` slot in `timeline.test.ts`.
+
 ## An answered message is edited in its own bubble, and keeps its first exchange as a version (R-UI-163)
 
 Once the member has answered the owner's last message, 編輯 opens an editor in that message's own bubble, and sending it makes the edit the message's second
@@ -544,7 +574,7 @@ clearing (`confirmDelete` in member-dialogs.ts: a member, a group, a room, a con
 | title to sentence | 8 px (`--sp-2`) |
 | sentence to buttons | 24 px (`--sp-5`) |
 | buttons | 30 px tall (`--h-field`), 139 + 139, 8 px apart, pill |
-| colours | Cancel `--btn`, Delete `--close` with `--on-close` |
+| colours | Cancel `--btn`, ordinary action `--accent` with `--on-accent`, high-impact action `--close` with `--on-close` (R-UI-184) |
 
 `delete-confirmation` asserts the shape (box 320, two buttons of one width filling it, 刪除 at the right in the
 red, no ×, no rule line, the focus on 取消, a sentence of two lines whose longest line takes at least three quarters of
@@ -681,13 +711,16 @@ npm run look -- status-light-idle status-light-idle-open status-light-list statu
 ## A waiting card read out of sight
 
 A card that waits for the owner stays where it was born (card-float.ts, R-CARD-FLOAT-01). When the newest one is read
-out of sight, one pill at the top of the conversation names it (a warning dot, the card's title, an arrow named 回到原位).
-Its press stands the card itself over the thread, fixed and centred under the pill, as wide as it was in the thread, with a spacer in its
-place, so the card's fields and buttons keep working; 回到原位 scrolls back to it. The look fixture `keyCardLater` adds
-twelve turns after the key card so that it can be read out of sight.
+out of sight, a pill at the top shows its title, chevron and 回到原位 arrow in one contrasting ink over the slime's colour.
+The pill squishes on the first appearance per card when motion is allowed. A press stands the card itself over the thread,
+fixed and centred under the pill, with its original width and a spacer in its place. The floating × is 收起 and puts it back
+without cancelling (R-CARD-CLOSE-02), as do a second press and Escape. 回到原位 brings the card back into view.
+The look fixture `keyCardLater` adds twelve turns so the waiting card can be read out of sight in a member's conversation
+or in Raphael's. Both conversations have pill and open scenes. The member's collapse scene checks the waiting state, the
+restored 取消 label and the absence of a cancel request. The room tests cover the card speaker's tint and the asking member's fallback tint.
 
 ```powershell
-npm run look -- card-float-pill card-float-open card-float-back computer-key-card --theme both --width 1120,720,1920x1080
+npm run look -- card-float-pill card-float-open card-float-collapse card-float-back card-float-raphael-pill card-float-raphael-open computer-key-card --theme both --width 1120,720,1920x1080
 ```
 
 ## No voice
@@ -1686,8 +1719,17 @@ existing retract-and-restore behavior after the second Escape.
 npm run look -- esc-main-armed esc-member-armed esc-recording-cancel composer-stop-pending-result composer-stop-background-result composer-stop-voice-result composer-stop-navigation composer-stop-roster chat --theme both --width 1120,720,1920x1080
 npm run look -- member-delete --theme both --width 1120,720,1920x1080
 npm run look -- page-state-kept page-state-restored page-product page-buy page-expand page-gone page-composer-grows page-inplace page-inplace-back page-inplace-esc page-inplace-update page-inplace-working page-inplace-reply page-inplace-room page-inplace-room-update page-library-open page-library-scrolled page-library-report page-library-back page-library-esc page-library-older page-library-share --theme both --width 1120,720,1920x1080
-npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-long composer-model-none composer-model-none-add composer-model-off settings-models-fresh chooser-openrouter-off settings-provider-directory settings-provider-directory-stt composer-model-menu composer-model-alias model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
+npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-long composer-model-none composer-model-none-add composer-model-off settings-models-fresh chooser-openrouter-off settings-provider-directory settings-provider-directory-stt settings-provider-editor settings-provider-editor-refused settings-provider-editor-local settings-provider-editor-saved settings-provider-editor-settings composer-model-menu composer-model-alias model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
 ```
+
+The guide's AI tools step and Settings › 模型 share the same provider dialog (R-PROV-TEST-01, R-PROV-EDITOR-01).
+`settings-provider-editor` shows setup for OpenAI, with a key link on its label row and one Connect button.
+`settings-provider-editor-refused` uses the synthetic key `look-refused-key` and shows an error below the fields.
+`settings-provider-editor-local` shows LM Studio setup with an address and no key field.
+`settings-provider-editor-saved` checks the automatic test, focused search, scrollable model list and framed button to add another.
+`settings-provider-editor-settings` opens the gear for OpenRouter and shows Back, a trash icon and a configured key with a small framed Replace button to the right of its status.
+`onboarding-provider-editor` checks setup and Connect through the guide, then waits for the save and model results.
+All six scenes use the `provider-editor` check for the layout and controls of the current view.
 
 What the owner does on a page stays with it (R-PAGE-14, issue 236): `page-state-kept` ticks a box, writes a note and a password
 and sets `raphael.state` inside the real frame the core serves (`fixtures/page-state.json`, rendered by `document()`), then waits
@@ -2043,10 +2085,13 @@ question key down and up and no cancellation. `composer-voice-attachment-quick` 
 
 See the feature map. A reply's words grow up to the reading column; a table, a diagram or code takes the
 conversation's whole column, as wide as the composer, and a table's columns take the room their contents need (R-UI-167,
-`reply-measure` and `rich-table-example` measure it). Selected acceptance:
+`reply-measure` and `rich-table-example` measure it). A file linked by its `file://` address shows the path it names, which
+wraps in its cell, so the table fits its card (`rich-file-link-table`, the owner's disk-cleanup table, whose raw link once
+pushed the last columns out of the card); a table still wider than its card keeps a thin bar along its bottom to drag
+(`rich-wide-table` reads its style: the headless browser draws no bar). Selected acceptance:
 
 ```powershell
-npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-table-short-columns rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
+npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-table-short-columns rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table rich-file-link-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
 A diagram opens larger from its whole chart, not only the header's expand icon (R-UI-173): the drawn chart under the header is
@@ -2313,7 +2358,11 @@ core/tests/agent/test_routine_event.py and core/tests/members/test_harness.py.
 
 ## Local paths in member replies
 
-A checked local path is inline code in the conversation, with the same text, background and
+A link to a file on this computer never shows its raw words (R-UI-185): a `file://` address is the path it names, and a
+file linked under its own name (`[report.md](file:///…/report.md)`, in code marks or not) shows that name, with the whole
+path as its title and the press. A label of other words keeps them beside the whole path. The owner's file manager wrote
+230 such links in 44 replies (plain names, names in code marks, encoded spaces); each now renders with no `](`, `file://`
+or `%20` left in its words. A checked local path is inline code in the conversation, with the same text, background and
 spacing as other code. Hover or keyboard focus adds a thin underline and a pointer. Keyboard
 focus also shows the shared focus ring. A path outside the member's workspace, the team files,
 the member and team shared folders and the remembered projects stays plain code. The core resolves
@@ -3047,7 +3096,7 @@ What the member answers to a message written under the page shows under the page
 the first words of its reply as one line (page-inplace-answered); the whole reply is in the thread, one press of the arrow away. The window tells the core which page is open before it
 sends (`pages.viewing`, answered `{viewing}`; the look fixture records them in `window.__look.viewing`), and the core's context says "the page the owner is looking at now: page_id=…" so "here" means it.
 Checks: page-inplace (also under the names page-expanded, page-opened-whole and page-library-open) measures the place, the one frame, the absence of any dialog, scrim or ×, the arrow's size, place, name and
-surface, the folded panel, the page's pill (and that the member's gave way; a room keeps its heading), Share leading the tools at 36 px level with the arrow, the area against the pane and the sidebar, the page's frame against the view's left and right edges (within 1 px, to the window's right edge) and (R-PAGE-11) the area's bottom at the window's foot with the composer standing over it on its own surface, no band in its row (the dock transparent and taking no pointer) and, at rest, the page's frame drawn under the composer, no frame (no corner, edge or clip), the area scrolling; page-inplace-before/-kept the thread's place, the same frame and no reload; page-inplace-escaped the draft and that nothing was sent or stopped.
+surface, the folded panel, the page's pill (and that the member's gave way; a room keeps its heading), Share leading the tools at 36 px level with the arrow, the area against the pane and the sidebar, the page's frame against the view's left and right edges (within 1 px, to the window's right edge) and (R-PAGE-11) the area's bottom and the frame's bottom at the window's foot with the composer standing over it on its own surface, no band in its row (the dock transparent and taking no pointer), nothing painted behind the page (no `::before`, no `--pgv-bg`) and only a measuring `.pgv-foot` in the area, (R-PAGE-15) the composer one line (the +, the permission, the folder and branch and the model are `display: none`, the words and the send or voice button stand in one row, at most 76 px high) and, at rest, no frame (no corner, edge or clip), the area not scrolling; page-inplace-before/-kept the thread's place, the same frame and no reload; page-inplace-escaped the draft and that nothing was sent or stopped.
 
 A page opened from the member's Library (R-PAGE-08) opens the page itself, with its share button, and not the thread at its reply: the press folds the panel, stands the view with the page's title at once and takes the page's place when its card has read it (`pagesHost.show`, `agent.ts openLibraryPage`);
 a page of an older conversation opens that conversation quietly (no turn marked) and the arrow brings back the one that was open, the thread where it was (`TranscriptWindow.snapshot` / `restore`, the scroll) and the panel on its Library tab (`members.foldForPage` / `unfoldAfterPage`, which every open page uses, so a press on the card folds the panel too).
@@ -3055,15 +3104,21 @@ The scenes use the fixture's `libraryPages` (the Library lists the page scenes' 
 `page-library-esc` (Escape does the same), `page-library-older` (`page-library-older-open` / `-kept`: the page's own conversation under it, then the one that was open) and `page-library-share` (`page-library-shared`: one `report_save` with the page's id and no text, a word of where it went, the page still open). The file itself is the core's (`page_file` in `core/src/raphael_core/agent/pages.py`, tested in core/tests/agent/test_pages.py); a look cannot open it, as the core is not there.
 `answer-forms.test.mjs` and `page-card.test.ts` hold the same with stubs and the real module. The look fixture's pages (the product page and the news page) mimic the core's helper, scroll and Escape messages included, and
 `updatePage(id)` / `answerPageAsk(text)` of the mock (`lookCall` steps) stand for the core changing a page and the member replying.
-An open page is edge to edge (R-PAGE-10: a page once opened in a centred 1280 px frame between two dark margins, and it should open as an HTML file does in a browser): `.pgv` takes back the pane's side padding (`--row-edge`; a room's pane has none) and `.pgv-page` has no side padding and no width cap, so the iframe spans the view and the page's own background reaches the sidebar and the window's right edge. The composer is kept (R-PAGE-03: a change is asked for under the page) and, since R-PAGE-11, floats over the page (below); the top keeps the header's slim band (the area's top padding), and nothing scrolls under it, so there is no fade. A report's background fills the view the same way, its column keeping `--pa-colw`. `page-inplace`, `page-base` and `page-report-open` assert the frame's and the report's left and right edges against the view's (1 px), the window's right edge and (R-PAGE-11) the area's bottom at the window's foot with the composer over it; `answer-forms.test.mjs` refuses a page with margins, a page cut off at the composer's row and a band behind the composer. Run `page-inplace page-inplace-room page-base page-library-open page-report page-dashboard` at 1120, 720 and 1920x1080 in both themes.
+An open page is edge to edge (R-PAGE-10: a page once opened in a centred 1280 px frame between two dark margins, and it should open as an HTML file does in a browser): `.pgv` takes back the pane's side padding (`--row-edge`; a room's pane has none) and `.pgv-page` has no side padding and no width cap, so the iframe spans the view and the page's own background reaches the sidebar and the window's right edge. The composer is kept (R-PAGE-03: a change is asked for under the page) and, since R-PAGE-11, floats over the page (below); the header floats over the page's head, transparent (R-PAGE-16), and the frame starts at the window's top edge. A report's background fills the view the same way, its column keeping `--pa-colw`. `page-inplace`, `page-base` and `page-report-open` assert the frame's and the report's left and right edges against the view's (1 px), the window's right edge and (R-PAGE-11) the area's bottom at the window's foot with the composer over it; `answer-forms.test.mjs` refuses a page with margins, a page cut off above the composer's row (a strip under it), anything painted behind the page, a composer that keeps its setting-up controls and a composer that is not one row. Run `page-inplace page-inplace-room page-base page-library-open page-report page-dashboard` at 1120, 720 and 1920x1080 in both themes.
 
-The page runs under the composer (R-PAGE-11: the page was once cut off at the top of the composer, which stood on a band of its own; the composer now floats over the page): `.pgv` takes both rows of the stage, down to the window's foot, while the thread hidden under it keeps its own row beside the composer (its place does not move); the dock (`.ra-dock`) stands over the page with no background and takes no pointer, only what stands in it does (the composer on its own `--panel`, edge and `--composer-shadow`). page-view.ts measures the dock and the answer line while a page stands (`--pgv-dock`, `--pgv-say`, a ResizeObserver) and `--pgv-under` is the composer's row: an HTML page's frame ends above it (the area's bottom padding; the area does not scroll, so `100vh`, sticky and fixed parts act in the frame as in a browser, and a page cannot say it is taller and grow its frame), a report scrolls its last line clear of it (the bottom padding of `.rp-scroll`). Behind that row the area shows the page's own background: the helper reports the page's first non-transparent `background-color` (body, then root) as `background`, the app accepts only a plain `rgb()`/`rgba()` and paints it as `--pgv-bg`, the area's own `--content` without one. The answer line (`.pgv-status`) floats just over the composer on the composer's surface and takes no pointer. The check `page-under-composer` (scenes page-end, page-report-end, page-room-end, page-inplace-reply-end) reads the page to its end with the wheel (`frame-scroll` turns the page in its frame or a report; `frame-expect` waits for the page's own scroll) and asserts the area at the window's foot, the composer over it with no band, the page's last line (an HTML page's window bottom, a report's last section) clear above the composer and the answer line with at most a gap's room past it, an HTML page's area not scrolling, and `elementFromPoint` on the composer the composer's, beside and under it the area's (the page's background) or the report. `page-inplace`, `page-base`, `page-report-open` and `page-inplace-working`/`-answered` assert the same placement at rest. The look audit (R-UI-145, audit.mjs `coverOf`) lets the composer's row stand over what has scrolled under it, as the header's row (R-TOP-01), and still judges a control of that row: before this, a report's tabs under the composer failed page-report.
+The page runs under the composer (R-PAGE-11: the page was once cut off at the top of the composer, which stood on a band of its own; the composer now floats over the page): `.pgv` takes both rows of the stage, down to the window's foot, while the thread hidden under it keeps its own row beside the composer (its place does not move); the dock (`.ra-dock`) stands over the page with no background and takes no pointer, only what stands in it does (the composer on its own `--panel`, edge and `--composer-shadow`). page-view.ts measures the dock and the answer line while a page stands (`--pgv-dock`, `--pgv-say`, a ResizeObserver) and `--pgv-under` is the composer's row: an HTML page's frame runs to the window's foot (the area has no bottom padding; the area does not scroll, so `100vh`, sticky and fixed parts act in the frame as in a browser, and a page cannot say it is taller and grow its frame) and the page is told the room (`.pgv-foot`, a hidden box of `--pgv-under`'s height that page-card.ts measures with a ResizeObserver; it posts `foot` and the helper keeps it as the root's own bottom padding, so the last line scrolls clear above the composer and the page's own canvas runs under it; `page-card.test.ts` drives the observer), a report scrolls its last line clear of it (the bottom padding of `.rp-scroll`). Nothing is painted behind the page: the window used to paint the page's reported `background` (`--pgv-bg`) under the composer's row and the core's document painted the page's body with the app's colour, so a page's own light theme over the app's dark one showed black bands above and below its content (the base style narrows the root, so that body was a strip of the column's width); the helper reports no background any more and `document()` leaves the body alone (R-PAGE-10). The answer line (`.pgv-status`) floats just over the composer on the composer's surface and takes no pointer. The check `page-under-composer` (scenes page-end, page-report-end, page-room-end, page-inplace-reply-end) reads the page to its end with the wheel (`frame-scroll` turns the page in its frame or a report; `frame-expect` waits for the page's own scroll) and asserts the area at the window's foot, the composer over it with no band and as one line, an HTML page's frame bottom at the window's foot (its own last line is `page-band`'s, below) and a report's last section clear above the composer and the answer line with at most a gap's room past it, an HTML page's area not scrolling, and `elementFromPoint` on the composer the composer's, beside and under it the area's or the report. `page-inplace`, `page-base`, `page-report-open` and `page-inplace-working`/`-answered` assert the same placement at rest. The look audit (R-UI-145, audit.mjs `coverOf`) lets the composer's row stand over what has scrolled under it, as the header's row (R-TOP-01), and still judges a control of that row: before this, a report's tabs under the composer failed page-report.
 
 ```powershell
 `page-window-sized` opens a page whose side column is one window tall plus its padding and holds its frame still: on main's helper it grew without end (R-PAGE-12).
-`page-rail` (R-PAGE-10) opens a two-column page (a sticky rail one window tall, its buttons at its foot with `margin-top: auto`, beside a long article; fixture `pageRailHtml`) and scrolls the article inside the page's own window: `checkFrame` `page-rail` asserts, in the frame, that the rail stays at the top and as tall as the window and that both buttons are in the window at the rail's foot, and the app's check `page-rail` asserts that the frame fills the area from under the band to above the composer, ends above the composer, the page's said background (`--pgv-bg`) is painted from the band to the window's foot and the area under the composer is the area, not the frame.
+`page-rail` (R-PAGE-10, R-PAGE-16) opens a two-column page (a sticky rail one window tall, its buttons at its foot with `margin-top: auto`, beside a long article; fixture `pageRailHtml`) and scrolls the article inside the page's own window: `checkFrame` `page-rail` asserts, in the frame, that the rail stays at the top and as tall as the window and that both buttons are in the window at the rail's foot, and the app's check `page-rail` asserts that the frame fills the area from under the band to the window's foot, under the composer, and the window paints nothing behind it. A rail's buttons at the window's foot stand above the composer: the helper moves a fixed or sticky part clear of the composer and the header (R-PAGE-16).
 
-npm run look -- page-inplace page-inplace-room page-inplace-working page-inplace-reply page-inplace-reply-end page-end page-room-end page-base page-base-table page-base-end page-window-sized page-rail page-report page-report-end page-library-open page-library-scrolled page-library-report page-dashboard page-document voice-over-page-listening --theme both --width 1120,720,1920x1080
+R-PAGE-17 (the window's buttons, the fade, the column that reaches the foot): `page-band` now also reads the window's first button at a corner of its cell and holds the ink's contrast with what is behind it to 3 to 1 at least (in the dark app over a light page main's light ink read 1 to 1), asks `checkFrame("page-band-measure")` for the page's ground (`image`: a gradient or picture, the one colour its root or body paints) and for the helper's two layers (`[data-raphael-fade]`: fixed, no pointer, the first colour of its gradient is the page's own, its last is clear), and holds the tone the window was told (`data-page-tone` on the root) to the luminance of that ground (light above 0.179; mixed with no fades for a picture). The header's row between the buttons is sampled at the page's top and at its end: read to its end main's page showed its words there, now the page's colour. `checkFrame("page-tall-reach")` (step `frameCheck`) asks every sticky or fixed column as tall as the window (60 percent or more) that has stuck at the window's top whether it ends at the window's foot: `page-window-sized` (scrolled to the end by the wheel) and the new `page-rail-end` (the rail page read to its end, with `pageCovered("stuck")` and `pageBand("end", "right")`, the right side being the page's own colour beside the rail) run it; on main's helper the rail ended 134 px short at 720 and 171 px short at 1920. `answer-forms.test.mjs`' fixture has no window buttons, so the host check on their plate (`page-inplace`: none over a page of one tone, the pill's surface over a mixed one, the ink dark on light and light on dark) is read from the real scenes. The palette check (`npm run verify`'s contrast) holds `--caption-ink-on-light` against white and `--caption-ink-on-dark` against black at 4.5 to 1.
+
+`page-light` and `page-light-end` (R-PAGE-10, R-PAGE-11, R-PAGE-15; fixture `pageReadingHtml`, flag `pageReading`, served through the core's own `document()`) open a tall reading page that paints its root (`html{background}`) and has a theme of its own, switch it to its light theme with a real press on its button (`frame-click #theme`), and read what the screen shows. `page-band` (driver action `pageBand("top" | "end")`, page-band.mjs, unit-tested by page-band.test.mjs) reads a real capture at three places, in window pixels: above the page's first line (inside the body's width, from the top), below its last line (read to its end), and the window's last row beside the composer; each must show the colour the page paints (its root's, else its body's, read in the frame by `checkFrame("page-band-measure")`), within 3 levels per channel, and the page's last line must end above the composer. On main's document the body was painted black (dark app) or white (light app) over the page's own light colour, and the page's last line stood under the composer: both scenes fail there at all sizes. `page-light` also runs `page-inplace` (frame from the window's top edge to its foot, header transparent, composer one line) and `page-covered`; `page-light-end` runs `page-covered` and `page-under-composer`. The header (R-PAGE-16) is transparent over the page, its three buttons on their own surfaces and the window's buttons with no plate, in the ink the page's tone asks for (R-PAGE-17); `page-band` also reads the header's row between its buttons (page read from its top) and the room above the first line below the head room the page was told; `page-inplace` asserts the frame at the window's top edge, the transparent header, the measuring `.pgv-head` and the window's buttons' surface (answer-forms.test.mjs refuses a header with a surface of its own and a frame that starts under it).
+
+`page-covered` (driver action `pageCovered("top" | "end" | "stuck")`, page-band.mjs, checks.mjs `checkFrame("page-covered")`) measures the composer, the answer line, the header's buttons and the window's own in the frame's coordinates and asks the page which of its pressable parts (links, buttons, fields, `[role=button]`...) stand under them: a part fixed or sticky to the window (itself or an ancestor) is judged against all of them whatever the end, a part of the normal flow only against the header at the page's top and the composer at its end. On main's helper `page-rail` fails it at every size (the rail's buttons stand under the composer: `button#copy` 203 x 43 px under the composer at 720); the helper now moves a fixed or sticky part that reaches into the head or the foot clear (a part as tall as the window as its own padding, a smaller one by its edge), and `checkFrame` `page-rail` asserts that the buttons stand above the room the composer keeps and the rail's first words below the header's buttons, once the rail has stuck. `page-end` reads the base page (which paints nothing of its own, so it is judged against the area's own colour behind it) the same way. The news and product pages of the other scenes are raw fixtures without the core's helper, so they are told nothing of the composer's room and have no `page-band`.
+
+npm run look -- page-inplace page-inplace-room page-inplace-working page-inplace-reply page-inplace-reply-end page-end page-room-end page-base page-base-table page-base-end page-window-sized page-rail page-rail-end page-light page-light-end page-report page-report-end page-library-open page-library-scrolled page-library-report page-dashboard page-document voice-over-page-listening --theme both --width 1120,720,1920x1080
 ```
 
 The voice flyer is the one stage child a page does not put away (R-VC-04; `voice-over-page-listening`, `-hearing`, `-gone`, see
@@ -3156,7 +3211,7 @@ The core stamps `as_of` (ISO text, never 13 digits of milliseconds, which can pa
   report page, only that drawing's elements and attributes, links within the page; the file is
   named after the page as Windows takes a name, `(2)` and on, never over a file, in 設定 › 一般 ›
   member's work folder, or Downloads when that destination is unavailable. The shell selects it in File
-  Explorer; a toast says 已存到「下載」 or the work folder's name (a failure: 檔案沒有存成，請再試一次。),
+  Explorer, which shows it, so no toast says where it went (a failure: 檔案沒有存成，請再試一次。, R-TOAST-01),
   and the report stays open.
 - **The share card** (`conversation-share`): the member's share opens one row, 建立副本 and what
   follows it, whose mark is the member's own face twice (`.share-faces`: 20 px behind and above at
@@ -3201,7 +3256,7 @@ npm run look -- page-report page-report-team page-report-tab page-report-close p
 
 page-report-share checks one `report_save` of the page on screen, a file that starts with its
 policy and holds no script, button or tabs, its title, three drawings of the team, both themes'
-words and the page's own rules with no tag in its style, the toast 已存到「下載」, and the report
+words and the page's own rules with no tag in its style, no toast (R-TOAST-01), and the report
 still open. page-report-file and page-report-file-team are scenes marked `file`: the `saved-file`
 step opens what was saved on its own (a blank page given the file; it is also kept as
 `saved-report.html` in the run), so the runner's app checks stay out of it and the audit treats a
@@ -3417,19 +3472,14 @@ and never opens a token card, including when receiving is off. Panel rows keep s
 other removal/disconnect actions go through conversation tools and existing owner approval.
 Migration 71 changes the account and pairing anchors from secret-card ids to turn ids.
 
-R-AG-LANG-01: UI locale selects fixed app labels/notices only. All authored replies, progress,
-thinking, greetings, reports, recaps and routines follow the speaker's own profile/instructions,
-otherwise the owner's words or conversation. API, CLI, background/routine reports, greetings and
-public narration share this policy. In R-LANG-01 to R-LANG-04 the interface language reaches no model at all: no
-prompt builder takes a language, the "Interface locale" line and the configured reply language line are gone, the
-reply schema offers fixed kinds (`REPLY_KINDS`) the app shows as the interface's prefix, and what is still chosen
-per language for a model (Raphael's name in the roster, a weather place name, 「看這個」, the memory host's mark) is
-read from the conversation's own words (`conversation_language`). Chinese prose without kana follows the owner's Chinese script
-chosen in settings.languages (zh-TW, zh-HK/yue-HK, zh-CN; `textnorm.authored_chinese`), never
-ui_language; kana, code and English stay unchanged. The configured voice language remains
-independent, including Japanese rendering on a Japanese interface.
+R-AG-LANG-01: Authored speech follows an explicit language preference in the speaker's persona or the owner's
+instructions or saved profile, then the owner's latest message, then the named UI locale (R-LANG-01 and R-LANG-02).
+Greetings, the tour and their question cards use the explicit preference or the interface fallback. A member saves
+lasting changes through `member_update`. The fixed reply kinds (`REPLY_KINDS`) still render as localized prefixes.
+Localized context such as a weather result or a memory mark follows the conversation's words. Dictation language
+is configured separately.
 
-R-LANG-05: the notes a CLI brain writes between its tool calls (progress lines, thinking, and the update owed after two minutes) are shown only in the owner's language, read from their own words (`AgentService._words_language`, never the interface's); a note in another script is dropped and the step keeps its label, the answer is never held back. The CLI is told once that every text it writes is in that language (`language_rule`). Not a `look` matter (no screen changes); `core/tests/agent/test_interim_language.py`. Not proved: a real model obeying the sentence (the filter is the guarantee), and an API-brain turn (`NarratedLoop`), which this did not touch.
+R-LANG-05: the notes a CLI brain writes between its tool calls (progress lines, thinking, and the update owed after two minutes) are shown only in the owner's language, read from their own words (`AgentService._words_language`, never the interface's); a note in another script is dropped and the step keeps its label, the answer is never held back. The CLI is told once that its notes use that language unless the speaker or owner specifies another (`language_rule`). Not a `look` matter (no screen changes); `core/tests/agent/test_interim_language.py`. Not proved: a real model obeying the sentence (the filter is the guarantee), and an API-brain turn (`NarratedLoop`), which this did not touch.
 
 Offline coverage: core/tests/test_pairing_language.py, test_chat_setup_share.py,
 brain/test_db.py, agent/test_persona.py, agent/test_answers.py,

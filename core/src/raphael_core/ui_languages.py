@@ -1,7 +1,7 @@
 """Canonical interface locales and English fallback for unknown locale codes.
 
-The interface language picks the words the app draws and goes to no model; the language a
-conversation is in is read from its own words (`conversation_language`)."""
+The interface language picks fixed app copy and supplies the fallback for authored speech
+when there is no language preference or owner message to follow."""
 
 LANGUAGE_NAMES = {
     "zh-TW": "Traditional Chinese as written in Taiwan (never Simplified characters)",
@@ -27,4 +27,10 @@ def normalize_language(value: str) -> str:
 def fixed_language(value: str) -> str:
     """Preserve supported locales and use English only for an unknown locale."""
     return normalize_language(value)
+
+
+def interface_language_name(value: str) -> str:
+    """Name the normalized interface locale and its code in a model instruction."""
+    code = normalize_language(value)
+    return f"{LANGUAGE_NAMES[code].split(' as written', 1)[0]} ({code})"
 

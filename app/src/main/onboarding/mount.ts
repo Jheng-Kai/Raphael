@@ -29,7 +29,7 @@ import { cleanName, isMemberNameTaken, primaryIdOf } from "../members";
 import { pickSlime } from "../slime";
 import { selectSlimeTab, slimeKeys } from "../slime-tabs";
 import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
-import { actionRow, closeMenu, esc, backButton, iconButton, openMenuOnArrow, toaster } from "../ui";
+import { actionRow, closeMenu, esc, backButton, iconButton, openMenuOnArrow, swapHTML, toaster } from "../ui";
 import { SERVICES_WAIT_MS, mergeServices, within } from "./helpers";
 import { type FlowState, initialState, isLast, reduce } from "./flow";
 import {
@@ -100,6 +100,8 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   // the services
   let services: StoreService[] | "loading" | "failed" = "loading";
   let servicesLoaded = false;
+  /** A read of the store is under way (one that began on the first page is not begun again when the step opens). */
+  let servicesReading = false;
   let servicesRead = 0;
   let waitingService: string | null = null;
   let connectFailed: string | null = null;
@@ -184,9 +186,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       case "services":
         return servicesHTML(servicesView());
       case "abilities":
-        return abilitiesHTML(abilityRowsHTML(abilities.view(), modelPickerHTML(visionLook()), brain));
+        return abilitiesHTML(abilitiesInnerHTML());
     }
   }
+
+  /** What the abilities step holds under its title: the same rows and dialog as Settings › 工具. */
+  const abilitiesInnerHTML = (): string => abilityRowsHTML(abilities.view(), modelPickerHTML(visionLook()), brain);
 
   /** What stopped the last ChatGPT sign-in, in the owner's words (the account controller keeps it). */
   const accountsError = (): string => accounts.view().chatgptError;
@@ -288,7 +293,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     const typed = Array.from(col.querySelectorAll<HTMLInputElement>("input")).map((input) => [input.id, input.value] as const);
     const focus = focusSelector(col);
     closeMenu();
-    col.innerHTML = bodyHTML();
+    // The abilities' dialog opens and closes over a page that stays as it is: only what the abilities hold is drawn again, by
+    // the swap that Settings uses (a list already shown does not come in again, a switch slides), never the title, the slimes
+    // and the rest, which redrawn whole made the page flash at the open and the close.
+    const abilitiesHost = flow.step === "abilities" ? col.querySelector<HTMLElement>("[data-ob-abilities]") : null;
+    if (abilitiesHost) swapHTML(abilitiesHost, abilitiesInnerHTML());
+    else col.innerHTML = bodyHTML();
     bindEditors();
     for (const [id, value] of typed) {
       const input = id ? col.querySelector<HTMLInputElement>(`#${CSS.escape(id)}`) : null;
@@ -316,7 +326,8 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
         void providers.load();
         break;
       case "services":
-        if (!servicesLoaded || services === "failed") void loadServices();
+        // The read began with the guide, so the apps are usually there already; it starts here only when none is under way.
+        if (services === "failed" || (!servicesLoaded && !servicesReading)) void loadServices();
         break;
       case "abilities":
         void loadAbilities();
@@ -474,8 +485,13 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   async function loadServices(): Promise<void> {
     // A 重試 starts a new read; an older one that answers late changes nothing.
     const mine = ++servicesRead;
-    services = "loading";
-    if (flow.step === "services") repaintBody();
+    servicesReading = true;
+    // The apps already known stay on screen while they are read again (a saved Composio key adds its own); only a step with
+    // nothing yet to show waits behind the spinner.
+    if (!Array.isArray(services)) {
+      services = "loading";
+      if (flow.step === "services") repaintBody();
+    }
     try {
       const [builtin, status] = await Promise.allSettled([within(api.integrationsCatalog(), SERVICES_WAIT_MS), within(api.connectorsStatus(), SERVICES_WAIT_MS)]);
       if (destroyed || mine !== servicesRead) return;
@@ -495,8 +511,9 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       servicesLoaded = true;
     } catch {
       if (mine !== servicesRead) return;
-      services = "failed";
+      if (!Array.isArray(services)) services = "failed";
     }
+    servicesReading = false;
     if (!destroyed && flow.step === "services") repaintBody();
   }
 
@@ -713,6 +730,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     }
   }, { signal });
 
+  // A slime of the guide that is not a choice (the one being made, the ones floating by a title) is pressed to be squished
+  // and nothing more: the press leaves the focus where it is, a name being typed included (slime.css plays the squish).
+  root.addEventListener("mousedown", (e) => {
+    if (!destroyed && (e.target as Element | null)?.closest?.(".ob-fl, .ob-first-face")) e.preventDefault();
+  }, { signal });
+
   // The key is sent by Enter or 貼上 only, never by leaving the field (see keyfield.ts).
   root.addEventListener("keydown", (e) => {
     if (destroyed) return;
@@ -728,9 +751,13 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     }
     openMenuOnArrow(e);
   }, { signal });
+  root.addEventListener("change", (e) => {
+    if (!destroyed && flow.step === "tools" && e.target instanceof Element) void providers.change(e.target);
+  }, { signal });
   root.addEventListener("input", (e) => {
-    if (destroyed || !(e.target instanceof HTMLInputElement)) return;
+    if (destroyed || !(e.target instanceof Element)) return;
     if (flow.step === "tools") providers.input(e.target);
+    if (!(e.target instanceof HTMLInputElement)) return;
     if (flow.step === "slime" && e.target.id === "ob-first-name") {
       const ready = !!cleanName(firstName);
       firstName = e.target.value;
@@ -769,5 +796,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     if (focus) root.querySelector<HTMLElement>(focus)?.focus({ preventScroll: true });
   });
 
+  // What the services step needs is read in the background from the first page, so that it is there when the owner arrives.
+  void loadServices();
   render();
 }

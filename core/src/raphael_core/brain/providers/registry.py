@@ -17,9 +17,10 @@ import httpx
 
 from ... import keychain
 from ...protocol import INTERNAL_ERROR, INVALID_PARAMS, RpcError
-from ..catalog import CatalogEntry, ModelPrice
+from ..catalog import ROLE_OF_SETTING, CatalogEntry, ModelPrice, refusal
 from ..model_ref import split_api_ref
 from ..openrouter import OpenRouterError
+from ..pricing import builtin_catalog
 from ..secrets import KeyStore
 from .. import first_models
 from ..settings import SettingsStore, api_model
@@ -57,9 +58,11 @@ class OpenRouterProvider:
 class ProviderRegistry:
     def __init__(self, conn, openrouter, keys: KeyStore, *,
                  credential: Callable[[str], KeyStore] | None = None,
+                 openrouter_catalog: Callable[[], list[CatalogEntry] | None] | None = None,
                  http: httpx.AsyncClient | None = None, transport=None):
         self._conn, self.openrouter, self.keys = conn, openrouter, keys
         self._credential = credential or (lambda pid: ProviderCredentialStore(f"provider:{pid}"))
+        self._openrouter_catalog = openrouter_catalog
         self._own_http = httpx.AsyncClient(transport=transport) if transport is not None else None
         self._http = http if http is not None else self._own_http
         self._clients: dict[str, ModelProvider] = {}
@@ -112,6 +115,40 @@ class ProviderRegistry:
     def ids(self):
         chatgpt = ["chatgpt"] if self.chatgpt.auth._state().get("accounts") else []
         return ["openrouter", *chatgpt, *(pid for pid in self._configs if pid not in ("openrouter", "chatgpt"))]
+
+    def starting_answer_model(self) -> str:
+        """Choose a connected answer model using local connection state and cached catalogues."""
+        from ...agent.cli.discovery import brain_ref
+
+        saved = self.settings.get("agent_model")
+        cli = brain_ref(saved)
+        if cli:
+            if self.cli_brains and self.cli_brains.available(cli[0]):
+                return saved
+        elif saved and self.available(split_api_ref(saved)[0]):
+            return saved
+
+        for pid in self.ids():
+            if not self.available(f"@{pid}:catalog"):
+                continue
+            rows = self._chatgpt_rows() if pid == "chatgpt" else self._models.get(pid, [])
+            if pid == "openrouter":
+                # A general catalogue refresh keeps only media rows in the provider cache.
+                answer = self._openrouter_answer_model(rows)
+                if answer:
+                    return answer
+            elif answer := first_models.recommendations(rows).get("answer"):
+                return f"@{pid}:{answer}"
+        return self.cli_brains.starting_answer_model() if self.cli_brains else ""
+
+    def _openrouter_answer_model(self, rows) -> str:
+        discovered = first_models.recommendations([row for row in rows if row.get("text_eligible")])
+        if discovered.get("answer"):
+            return discovered["answer"]
+        cached = self._openrouter_catalog() if self._openrouter_catalog is not None else None
+        entries = builtin_catalog() if cached is None else cached
+        role = ROLE_OF_SETTING["agent_model"]
+        return next((entry.id for entry in entries if not entry.id.startswith("@") and refusal(entry, role) is None), "")
 
     def configured_fallbacks(self, purpose):
         """None preserves legacy defaults; an explicitly saved empty array disables them."""
@@ -385,7 +422,7 @@ class ProviderRegistry:
         if self._revisions.get(pid, 0) != revision:
             raise OpenRouterError(0, "error", "Provider changed during discovery")
         if pid == "openrouter":
-            from ..catalog import parse_catalog, refusal, ROLE_OF_SETTING
+            from ..catalog import parse_catalog
             entries = {entry.id: entry for entry in parse_catalog(rows)}
             metadata = [model_info(row, kind="openrouter") for row in rows]
             for row in metadata:
@@ -404,6 +441,8 @@ class ProviderRegistry:
         return rows
 
     async def test(self, params):
+        if set(params) - {"id"}:
+            return await self._test_draft(params)
         pid = _text(params["id"])
         self.config(pid)
         try:
@@ -417,6 +456,59 @@ class ProviderRegistry:
             kind = "auth" if kind == "auth" else "offline" if kind in ("offline", "network", "timeout") else "error"
             self._status[pid] = kind if kind != "error" else "unknown"
             return {"ok": False, "kind": kind, "models": 0}
+
+    def _draft_credential(self, config, params, pid):
+        """The credential a draft is tested with: what was typed, else (for a saved provider) the stored one. Never stored."""
+        kind = config["kind"]
+        fields = {"bedrock": ("key_id", "secret"), "vertex": ("service_account",)}.get(kind, ("key",))
+        typed = {field: params[field] for field in fields if params.get(field)}
+        stored = self._secret(pid).get() if pid and len(typed) < len(fields) else None
+        if kind == "bedrock":
+            credentials = json.loads(stored) if stored else {}
+            credentials.update(typed)
+            return json.dumps(credentials) if any(credentials.values()) else ""
+        return typed.get(fields[0]) or stored or ""
+
+    async def _test_draft(self, params):
+        """Test the fields of a form that is not saved: the typed values over the saved ones, nothing kept.
+
+        No setting, model list, status or secret is written, so a refused key leaves the provider as it was
+        and a key typed here is read once, held by the client that asks, and dropped.
+        """
+        params = dict(params)
+        pid = params.pop("id", None)
+        old = None
+        if pid is not None:
+            pid = _text(pid)
+            if pid == "chatgpt":
+                raise ValueError("Use ChatGPT sign-in RPCs")
+            old = self.config(pid)
+        config = self._checked(params, old)
+        try:
+            credential = self._draft_credential(config, params, pid)
+        except Exception:
+            return {"ok": False, "kind": "auth", "models": 0}
+        client = None
+        try:
+            if config["kind"] == "openrouter":
+                # Its list is public: only the key says whether the account answers.
+                await asyncio.wait_for(self.openrouter.key_info(credential), 6)
+                rows = [model_info(row, kind="openrouter") for row in await asyncio.wait_for(self.openrouter.models(timeout_s=5), 6)]
+            else:
+                cls = {"anthropic": AnthropicProvider, "vertex": VertexProvider,
+                       "bedrock": BedrockProvider}.get(config["kind"], CompatibleProvider)
+                client = cls(config["kind"], config["base_url"], lambda: credential or None,
+                    api_version=config.get("api_version", ""), http=self._http,
+                    **({"region": config["region"]} if config["kind"] == "bedrock" else {}))
+                rows = await asyncio.wait_for(client.models(timeout_s=5), 6)
+        except (OpenRouterError, TimeoutError) as error:
+            kind = getattr(error, "kind", "timeout")
+            return {"ok": False, "kind": "auth" if kind == "auth" else "offline" if kind in ("offline", "network", "timeout") else "error", "models": 0}
+        finally:
+            if client is not None:
+                await client.aclose()
+        found = [{**row, "context_warning": False} for row in rows if not row.get("generation_only")]
+        return {"ok": True, "models": len(rows), "found": found}
 
     async def models(self, params):
         pid = _text(params["id"])

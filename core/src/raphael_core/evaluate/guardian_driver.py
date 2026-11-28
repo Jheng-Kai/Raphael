@@ -222,10 +222,12 @@ class RpcDriver:
             isolated = SimpleNamespace(home=Path(directory), environ=dict(brains.environ),
                                        settings=settings, command=brains.command,
                                        logged_in=brains.logged_in, available=brains.available,
+                                       starting_answer_model=getattr(brains, "starting_answer_model", lambda: ""),
                                        with_effort=brains.with_effort, aclose=self.transport._noop)
             # The production driver retains only subscription auth discovery; workspaces
             # and session DBs remain private to this cell.
             isolated.environ.setdefault("CODEX_HOME", str(brains.home / ".codex"))
+            self.app.providers.cli_brains = isolated
             self.app.agent._cli_brains = isolated
             self.app.background.use_cli(isolated, self.app.agent.quotas.record)
 

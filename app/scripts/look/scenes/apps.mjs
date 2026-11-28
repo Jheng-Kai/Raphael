@@ -108,10 +108,10 @@ export default [
   scene("accounts-dated", "Two accounts with no address and no name: each row says when it was made, and the newest says so", [
     ...accountsPage, check("accounts-dated"),
   ], { managedConnectors: [keyAccounts()] }),
-  scene("accounts-menu", "The ⋯ of an account row opens 重新命名 and then 移除 in red", [
+  scene("accounts-menu", "The ⋯ of an account row opens 重新命名 and then 移除", [
     ...accountsPage, click('[data-conn="account-menu"][data-account="ca_wait"]'), wait("#app-popover"), check("accounts-menu"),
   ], { managedConnectors: [gmailAccounts()] }),
-  scene("accounts-remove-ask", "Removing a connected account asks the app's one delete question: 「移除「name」？」, a sentence, 取消 and a red 移除", [
+  scene("accounts-remove-ask", "Removing a connected account asks the app's one delete question: 「移除「name」？」, a sentence, 取消 and 移除", [
     ...accountsPage, click('[data-conn="account-menu"][data-account="ca_me"]'), click('#app-popover [data-conn="account-remove"]'), wait(".mb-delete"), check("accounts-remove-ask"),
   ], { managedConnectors: [gmailAccounts({ second: true })] }),
   scene("accounts-remove-yes", "Answering 移除 removes the connected account at the core and the row goes", [
@@ -121,7 +121,7 @@ export default [
   scene("accounts-remove-waiting", "A sign-in that is still waiting is removed at once, with no question", [
     ...accountsPage, click('[data-conn="account-menu"][data-account="ca_wait"]'), click('#app-popover [data-conn="account-remove"]'), waitGone('[data-account="ca_wait"]'), check("accounts-removed-waiting"),
   ], { managedConnectors: [gmailAccounts()] }),
-  scene("accounts-remove-last", "The last connected account is the app: removing it asks the app's own disconnect question in the red dialog", [
+  scene("accounts-remove-last", "The last connected account is the app: removing it asks the app's own disconnect question in the quiet dialog", [
     ...accountsPage, click('[data-conn="account-menu"][data-account="ca_main"]'), click('#app-popover [data-conn="account-remove"]'), wait(".mb-delete"), check("accounts-remove-last"),
   ], { managedConnectors: [gmailAccounts()] }),
   // A sign-in that waits holds no other app back and can be cancelled.
@@ -157,7 +157,7 @@ export default [
     ...open, wait(".cs-card"), click('[data-conn="join"][data-id="slack"]'), wait('[data-conn="cancel-login"]'), click('[data-conn="cancel-login"]'),
     wait('[data-conn="join"][data-id="slack"]'), check("sign-in-cancelled"),
   ], { composioConfigured: true, pluginsConnecting: true }),
-  scene("connector-uninstalled", "Uninstalling an app asks in the red dialog first; its red button removes it from the list, and the chip's count goes down with the connected list", [
+  scene("connector-uninstalled", "Uninstalling an app asks in the quiet dialog first; confirmation removes it from the list, and the chip's count goes down with the connected list", [
     ...open, click('[data-conn="connected"]'), click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="server-menu"][data-id="composio:notion"]'),
     click('.menu [data-conn="disconnect"]'), wait(".mb-delete"), check("connector-uninstall-ask"), click('.mb-delete [data-dlg="delete"]'), waitGone('[data-k="cs-open:composio:notion"]'), check("apps-count"),
   ], {

@@ -13,7 +13,7 @@ import { providerMark } from "./provider-marks";
 import type { ChatGptStatus, Status } from "./types";
 import { btn, esc, patchHTML, toaster } from "./ui";
 import type { CliAllowanceWindow, CliAllowances } from "./usage-analytics-types";
-import { chatgptSignedIn, openRouterBlock, PERIODS, subscriptionName, windowState } from "./usage-blocks";
+import { chatgptSignedIn, creditsText, drawsCredits, openRouterBlock, PERIODS, spent, subscriptionName, windowState } from "./usage-blocks";
 
 export type { CliAllowances } from "./usage-analytics-types";
 // What each provider's reading means is decided once, in usage-blocks.ts, for this card and the account menu alike.
@@ -59,10 +59,12 @@ const meterHTML = (o: { name: string; when: string; left: string; percent: numbe
   (o.notes ?? []).map((note) => `<small>${esc(note)}</small>`).join("") + `</div>`;
 
 /** One window of a subscription: when it resets and what it has left, or that it has reset, with no stale number or bar. */
-function windowHTML(name: string, source: string | undefined, w: CliAllowanceWindow, now: number): string {
+function windowHTML(name: string, source: string | undefined, w: CliAllowanceWindow, now: number, credits = false): string {
   const state = windowState(source, w, now), over = state.kind === "reset";
   const remaining = Math.min(100, Math.max(0, Math.round(w.remaining_percent ?? 0)));
-  const status = w.status && !over ? t(w.status === "allowed" ? "runs.allowanceAllowed" : w.status === "allowed_warning" ? "runs.allowanceWarning" : "runs.exhausted") : "";
+  // A spent window with credits to draw runs on them: it says so, never 額度已用完 (R-QUOTA-02).
+  const status = credits && !over && spent(state) ? t("usage.onCredits") :
+    w.status && !over ? t(w.status === "allowed" ? "runs.allowanceAllowed" : w.status === "allowed_warning" ? "runs.allowanceWarning" : "runs.exhausted") : "";
   return meterHTML({
     name: t(WINDOW_NAMES[w.period]),
     when: over ? t("runs.allowanceExpired") : w.resets_at ? t("usage.resetsIn", { p0: untilText(w.resets_at * 1000 - now) }) : t("runs.resetUnknown"),
@@ -81,7 +83,8 @@ export function allowanceCardsHTML(allowance: CliAllowances, now = Date.now()): 
     const quota = allowance.quotas?.find((q) => q.provider === brain.id);
     return `<article class="run-subscription" data-allowance="${esc(brain.id)}">${head(cli?.mark ?? brain.id, name, t("brains.subscription"))}` +
       (quota ? `<p class="run-quota"><strong>${t("runs.exhausted")}</strong><small>${quota.reset_at_ms ? `${t("runs.resets")} ${esc(time(quota.reset_at_ms))}` : t("runs.resetUnknown")}</small></p>` : "") +
-      (!brain.windows.length ? `<p class="run-allowance-unavailable">${t("missing.allowanceUnknown")}</p>` : brain.windows.map((w) => windowHTML(name, brain.source, w, now)).join("")) +
+      (!brain.windows.length ? `<p class="run-allowance-unavailable">${t("missing.allowanceUnknown")}</p>` : brain.windows.map((w) => windowHTML(name, brain.source, w, now, drawsCredits(brain.credits))).join("")) +
+      (creditsText(brain.credits) ? `<p class="run-credits">${esc(creditsText(brain.credits))}</p>` : "") +
       `</article>`;
   }).join("");
 }

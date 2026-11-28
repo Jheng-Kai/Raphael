@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { expect, test, vi } from "vitest";
 import { messagePlainText, parseMessageBlocks, replyContentHTML } from "./message-content";
-import { parseAnswerForm } from "../shared/answer-forms";
+import { formsPlainText, parseAnswerForm } from "../shared/answer-forms";
 import { getLocale } from "./i18n";
 import { skyOf } from "./message-forms";
 
@@ -45,6 +45,29 @@ for (const [kind, example] of Object.entries(examples)) {
     expect(root.textContent).toContain(attack);
   });
 }
+test.each(Object.entries(examples))("a saved %s fence with one trailing colon renders and copies like the standard fence", (kind, example) => {
+  const standard = fence(kind, example);
+  for (const name of [kind, kind.toUpperCase()]) {
+    const saved = fence(`${name}:`, example);
+    expect(replyContentHTML(saved)).toBe(replyContentHTML(standard));
+    expect(messagePlainText(saved, true)).toBe(messagePlainText(standard, true));
+  }
+});
+
+test("formsPlainText reads the values from a saved chart fence with a trailing colon", () => {
+  expect(formsPlainText(fence("chart:", examples.chart))).toBe("Visitors\nMon: Visits 3 people\nTue: Visits -2 people");
+});
+
+test.each(["chart::", "chartx", "chart;", "chart :", `chart ${JSON.stringify(examples.chart)}`, `chart: ${JSON.stringify(examples.chart)}`])(
+  "extra text on a chart fence opener stays ordinary code (%s)", opener => {
+    const text = fence(opener, examples.chart);
+    const html = replyContentHTML(text);
+    expect(html).toContain("<pre>");
+    expect(html).not.toContain("message-chart");
+    expect(formsPlainText(text)).toBe(text);
+  },
+);
+
 test("all schema counts and numeric geometry are bounded", () => {
   const invalid = [
     ["forecast", { ...examples.forecast, days: Array(8).fill(examples.forecast.days[0]) }],

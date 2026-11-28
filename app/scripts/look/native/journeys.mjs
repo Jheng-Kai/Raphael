@@ -13,8 +13,8 @@ export const journeys = [
   { name: "appearance", description: "Real Appearance dropdown, theme persistence and narrow rows at three native sizes" },
   { name: "owner-face", description: "A window that may load before the core still hears it: a saved owner photo reaches the sidebar" },
   { name: "sidebar-foot", description: "Inspect the resizable sidebar, in-place search, the foot (the face and the Connections pill) and the account menu in the real WebView" },
-  { name: "rich-content", description: "Persisted rich reply renders tables, highlighted code and SVG; remote images require consent" },
-  { name: "conversation-and-learned-pill", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
+  { name: "rich-content", description: "Persisted rich reply renders tables, highlighted code, diagrams and a saved chart; remote images require consent" },
+  { name: "conversation-and-learned-pill", description: "Native learned batch Undo, five-second expiry under the pointer, passive window and stable conversation controls" },
   { name: "hidden-window", description: "Close to tray and minimize suspend page timers; returning catches up a fake reply completed while hidden" },
   { name: "hidden-window-refused", description: "The same returns while WebView2 refuses the normal-memory step (0x8007139F): the page still shows and runs" },
   { name: "startup-rooms", description: "Ten normal and ten slow-core owner-path launches keep seeded group chats in the sidebar, without a page reload" },
@@ -363,9 +363,13 @@ export async function drive(name, context) {
     return;
   }
   if (name === "rich-content") {
-    await chat(page);
+    await perform(page, { action: "member", id: 0 });
     result.richContent = [];
     const code = '.message-code:not(.message-diagram)', diagram = '.message-diagram[data-diagram-state="rendered"]';
+    await wait(page, '.message-chart');
+    await perform(page, { action: "scroll", selector: '.message-chart' });
+    result.richContent.push(await page.evaluate(checkRendered, "form-chart-bar"));
+    await capture("chart-fence");
     await wait(page, '.message-table');
     await perform(page, { action: "scroll", selector: code });
     await wait(page, '.message-code[data-highlighted="true"]');
@@ -1708,7 +1712,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     const detail = await page.$eval(".au-pop-detail", node => node.textContent);
     if (!detail.includes("NativeSecretary") || !detail.includes("From the member")) throw new Error(`The detail does not say who added it: ${detail}`);
     await inspectPage("member-event-detail", ["calendar-detail-own"]);
-    // The ⋯ asks in the red dialog, then the event is gone from the store and the page.
+    // The ⋯ asks in the quiet dialog, then the event is gone from the store and the page.
     await click(page, '.au-pop-detail [data-pop="more"]');
     await click(page, "#app-popover [data-pick]");
     await click(page, '.mb-delete [data-dlg="delete"]');
@@ -1846,7 +1850,8 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     result.batch = await context.rpc("dictionary.correct",{edits});
     if (JSON.stringify([...result.batch.learned].sort()) !== JSON.stringify(["Alice","Claude"])) throw new Error(`Native Tracker did not learn the complete batch: ${JSON.stringify(result.batch)}`);
     await learned.waitForSelector('#learned-pill:not([hidden])',{visible:true});
-    // The shell watches the real desktop cursor, including over the click-through caption.
+    // The pill is up five seconds from its reveal, wherever the real desktop pointer is (R-UI-51); Undo is pressed
+    // within them.
     const learnedWindow = windows => windows.windows.find(window => window.rounded && window.title === "");
     for (let i = 0; i < 20; i++) {
       result.focusDuring = await context.windows();
@@ -1858,9 +1863,10 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     const [left, top, right, bottom] = pillWindow.rect, work = result.focusBefore.workArea;
     const originalCursor = await context.cursor();
     try {
-      await context.cursor(left + Math.floor((right - left) / 4), Math.floor((top + bottom) / 2));
-      await pause(12_500);
-      if (!await learned.$('#learned-pill:not([hidden])')) throw new Error("Hover did not retain the native learned pill");
+      const overPill = [left + Math.floor((right - left) / 4), Math.floor((top + bottom) / 2)];
+      await context.cursor(...overPill);
+      await pause(300);
+      if (!await learned.$('#learned-pill:not([hidden])')) throw new Error("The native learned pill left before its five seconds");
       result.focusDuring = await context.windows();
       const hoveredWindow = learnedWindow(result.focusDuring);
       if (!hoveredWindow?.visible || !(hoveredWindow.style & 0x08000000) || !(hoveredWindow.style & 0x20)) {
@@ -1882,10 +1888,14 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
       if (learnedWindow(result.focusAfter)?.visible) throw new Error("Undo left the learned window on the screen");
       if (!Number.isInteger(learnedWindow(result.focusAfter).frame) || learnedWindow(result.focusAfter).frame & 0x00C80000) throw new Error("Undo left a title bar in the learned window's style");
 
-      await context.cursor(work[0] + 1, work[1] + 1);
+      // The pointer resting where the pill appears never holds it: it goes five seconds after its reveal.
+      await context.cursor(...overPill);
       result.expiringBatch = await context.rpc("dictionary.correct",{edits});
       await learned.waitForSelector('#learned-pill:not([hidden])',{visible:true});
-      await learned.waitForSelector('#learned-pill[hidden]',{timeout:16000});
+      const shownAt = Date.now();
+      await learned.waitForSelector('#learned-pill[hidden]',{timeout:9000});
+      result.expiryMs = Date.now() - shownAt;
+      if (result.expiryMs < 4000 || result.expiryMs > 7000) throw new Error(`The learned pill under the pointer stayed ${result.expiryMs} ms instead of about five seconds`);
       for (let waited = 0; waited < 20; waited++) { result.afterExpiry = await context.windows(); if (!learnedWindow(result.afterExpiry)?.visible) break; await pause(100); }
       if (learnedWindow(result.afterExpiry)?.visible) throw new Error("Expiry left the learned window on the screen");
       if (!(learnedWindow(result.afterExpiry).style & 0x20)) throw new Error("Expired learned window is not click-through");

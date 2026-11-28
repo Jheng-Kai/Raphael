@@ -188,8 +188,10 @@ npm run look -- room-handoff-running room-handoff-result room-handoff-failed roo
 npm run look -- room-routing-fallback room-role-assignment room-round-typing room-mention-after-hop-limit room-mention-after-turn-limit room-mention-blocked room-wrapup-after-replies compact-rooms --theme both --width 1120,720,1920x1080
 npm run look -- new-room room-group-menu room-draft room-menu room-replies room-discussion room-wrapup new-room-responder --theme both --width 1120,720,1920x1080
 npm run look -- room-required-chief room-generated-name room-private-isolation room-reply-owner room-reply-peer room-reply-source-missing room-reply-send room-thinking --theme both --width 1120,720,1920x1080
-npm run look -- room-stop room-row-menu room-rename room-members room-delete room-hover esc-room-armed room-long-reply-wheel --theme both --width 1120,720,1920x1080
+npm run look -- room-stop room-stop-after-reply room-row-menu room-rename room-members room-delete room-hover esc-room-armed room-long-reply-wheel --theme both --width 1120,720,1920x1080
 ```
+
+`room-stop-after-reply` (R-CHAT-STOP-02) is `room-stop` after a member had already replied: `room-stop-before` records the thread's messages, then Escape twice; `room-stop-quiet` asserts one `rooms.stop`, no `.au-room-wrapup` and no `.room-intent-blocked` line, no 已停止, 已取消 or 未能回覆 word in the thread, every message that stood still as it was, and no toast. The look mock settles `rooms.stop` as the core does: with a member message shown there is no wrap-up and the replies that never began leave no mark; with none shown it still writes the wrap-up (`room-stop`'s old behavior).
 
 The following retained room and sidebar journeys cover their shared consumers:
 

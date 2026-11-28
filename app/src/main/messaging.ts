@@ -401,8 +401,8 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind, ops: C
         return true;
       }
       case "disconnect":
-        // The red dialog asks (R-UI-56); the bot is disconnected only by its red button.
-        void confirmDelete(title(kind), { words: { title: t("confirm.disconnectTitle", { p0: title(kind) }), hint: words("msg.tg.disconnectHint", kind), action: t("msg.tg.disconnect") } })
+        // Ask for confirmation before disconnecting the bot (R-UI-56).
+        void confirmDelete(title(kind), { quiet: true, words: { title: t("confirm.disconnectTitle", { p0: title(kind) }), hint: words("msg.tg.disconnectHint", kind), action: t("msg.tg.disconnect") } })
           .then(yes => { if (yes) void act(() => ops.disconnect()); });
         return true;
     }

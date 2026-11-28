@@ -68,13 +68,20 @@ def files_below(folder, *, skip=(), keep=None):
     return sorted(found), True
 
 
-def listing(folder, files, whole, *, binary=True):
+def listing(folder, files, whole, *, binary=True, limit=LISTED):
     lines = []
-    for relative, size in files[:LISTED]:
+    for relative, size in files[:limit]:
         note = ", binary" if binary and is_binary(Path(folder) / relative) else ""
         lines.append(f"- {relative} ({size_of(size)}{note})")
-    if len(files) > LISTED or not whole:
-        lines.append(f"- and more: {'over ' if not whole else ''}{len(files)} files in all; list a folder with a command to see them")
+    if len(files) > limit or not whole:
+        # What is not named is told by its folders, so that the model knows where to look: a folder is read by its path.
+        rest = {}
+        for relative, _ in files[limit:]:
+            top = relative.split("/")[0] + "/" if "/" in relative else "."
+            rest[top] = rest.get(top, 0) + 1
+        where = ", ".join(f"{count} in {top}" for top, count in sorted(rest.items(), key=lambda item: -item[1])[:6])
+        lines.append(f"- and more: {'over ' if not whole else ''}{len(files)} files in all{f' ({where})' if where else ''}; "
+                     "the rest are the files the document names")
     return lines
 
 
@@ -84,21 +91,27 @@ def skill_files(folder, inlined):
     return listing(folder, files, whole)
 
 
-def plugin_entry_points(root):
+def plugin_entry_points(root, document=""):
     """The lines naming a plugin's entry points: its commands, agents, hooks, scripts and programs by file, and what else it holds by
-    folder. The skills' own files are listed with each skill."""
+    folder. The skills' own files are listed with each skill. A folder the skill's `document` points to (its actions, say) is named
+    by file too, as the document sends the model to read them."""
+    from .skill_references import mentions
+
     files, whole = files_below(Path(root))
     lines, rest = [], {}
     for relative, size in files:
         top = relative.split("/")[0] if "/" in relative else "."
         if top not in ENTRY_POINTS and top != "skills":
             rest.setdefault(top, []).append(size)
-    for name in ENTRY_POINTS:
+    pointed = [name for name in sorted(rest) if name != "." and document and mentions(document, name)]
+    for name in (*ENTRY_POINTS, *pointed):
         group = [(relative, size) for relative, size in files if relative.split("/")[0] == name and "/" in relative]
         if group:
             lines.append(f"{name}:")
             lines += ["  " + line for line in listing(root, group, True)]
     for name, sizes in sorted(rest.items(), key=lambda item: (item[0] == ".", item[0])):
+        if name in pointed:
+            continue
         lines.append(f"{'files at the top' if name == '.' else name + '/'}: {len(sizes)} file{'s' if len(sizes) != 1 else ''}, {size_of(sum(sizes))}")
     if not whole:
         lines.append("and more files: the plugin holds too many to list")

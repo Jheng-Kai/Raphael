@@ -56,7 +56,7 @@ Run the existing isolated fake-brain journeys, with one heavy job at a time:
 npm.cmd run native -- hidden-window hidden-window-refused conversation-and-learned-pill voice-conversation voice-keys locale-sweep delete-conversation
 ```
 
-conversation-and-learned-pill covers learned hover/expiry, mouse pass-through, foreground
+conversation-and-learned-pill covers the learned pill's five-second expiry under the pointer, mouse pass-through, foreground
 continuity, monitor positioning and Undo. voice-conversation and voice-keys cover
 worker/controller input, release, cancellation and dictation timing; debug native
 journeys omit registration on the owner's global keyboard, so a separately

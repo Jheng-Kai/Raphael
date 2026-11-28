@@ -1,4 +1,4 @@
-import { onLocaleChange, t } from "./i18n";
+import { getLocale, onLocaleChange, t } from "./i18n";
 import * as api from "./api";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { PageArgument, PageId } from "./types";
@@ -145,9 +145,15 @@ export function noticeHTML(requirement: string, repair: string | null = null, re
 export function bindMissing(root: Document | HTMLElement, go: (page: PageId, arg?: PageArgument) => void): () => void {
   const click = (event: Event): void => {
     const pane = (event.target as Element).closest<HTMLButtonElement>("[data-missing-pane]");
-    // A pane is only opened. Accessibility's entry is never cleared: cleared while macOS's own question was up, the app was
-    // missing from the list that question opened. The note says how to add it there with + (missing.accessibility).
-    if (pane && Object.values(SYSTEM_PANES).includes(pane.dataset.missingPane ?? "")) { void api.openLink(pane.dataset.missingPane!); return; }
+    // A pane is opened, Accessibility's with the card under System Settings that drags the app into its list (R-PRIV-AX-02);
+    // if that fails, the pane alone. Accessibility's entry is never cleared: cleared while macOS's own question was up, the
+    // app was missing from the list that question opened. The note says how to add it there with + (missing.accessibility).
+    const link = pane?.dataset.missingPane ?? "";
+    if (pane && link === SYSTEM_PANES.accessibility) {
+      void api.permissionGuideOpen("accessibility", getLocale()).catch(() => api.openLink(link).catch(() => {}));
+      return;
+    }
+    if (pane && Object.values(SYSTEM_PANES).includes(link)) { void api.openLink(link); return; }
     const button = (event.target as Element).closest<HTMLButtonElement>("[data-missing-repair]");
     if (!button || button.disabled || !repairs.has(button.dataset.missingRepair ?? "")) return;
     button.closest(".toast")?.remove();

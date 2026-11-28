@@ -360,20 +360,32 @@ test("an open page runs under the composer: the view says how tall the composer'
   expect(stage.style.getPropertyValue("--pgv-say")).toBe("");
 });
 
-test("the page runs to the window's foot under a floating composer: the dock is no band and takes no pointer, and the page's frame ends above it, the page's own background behind it", () => {
+test("the page runs to the window's foot under a floating composer: the dock is no band and takes no pointer, and the page's frame runs to the foot with nothing painted behind it", () => {
   const css = readFileSync(join(__dirname, "page-view.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   expect(css).toContain(".ra-stage.is-page > .pgv { grid-area: 1 / 1 / 3 / 2; }");
   expect(css).toMatch(/\.ra-stage\.is-page > \.ra-dock \{[^}]*z-index: 2;[^}]*background: none;[^}]*pointer-events: none;/);
   expect(css).toContain(".ra-stage.is-page > .ra-dock > * { pointer-events: auto; }");
   // The thread hidden under the page keeps its own row beside the composer, so its place does not move.
   expect(css).toContain(".ra-stage.is-page > .ra-scroll { grid-area: 1 / 1; visibility: hidden; }");
-  // The frame is the page's own window (R-PAGE-10): it fills the area from under the header's band to just above the composer's row, and
+  // The frame is the page's own window (R-PAGE-10): it fills the area from under the header's band to the window's foot (R-PAGE-11), and
   // the page scrolls in it, so the area has no scroll, no growth from the page's height and no room after the frame.
-  expect(css).toMatch(/\.pgv-page \{[^}]*overflow: hidden;[^}]*padding: var\(--row-lead\) 0 var\(--pgv-under, 0px\);/);
+  expect(css).toMatch(/\.pgv-page \{[^}]*overflow: hidden;[^}]*padding: 0;/);
+  expect(css).not.toMatch(/\.pgv-page \{[^}]*padding:[^;}]*(--pgv-under|--row-lead)/);
   expect(css).toContain(".pgv-frame-box { position: relative; width: 100%; height: 100%; }");
   expect(css).not.toMatch(/--pgv-h\b|pgv-frame-box::after/);
-  // Behind the composer's row the area shows the page's own background, below the header's band; the area's own without one.
-  expect(css).toMatch(/\.pgv-page::before \{[^}]*inset: var\(--row-lead\) 0 0;[^}]*background: var\(--pgv-bg, var\(--content\)\);/);
+  // Nothing is painted behind the page: no strip of the window's own colour under the frame, whatever the page's background is. What the
+  // composer covers is only measured (`.pgv-foot`, told to the page), and a page that says its background is not painted over it.
+  expect(css).not.toMatch(/\.pgv-page::(before|after)|--pgv-bg/);
+  expect(css).toMatch(/\.pgv-head, \.pgv-foot \{[^}]*position: absolute;[^}]*visibility: hidden;[^}]*pointer-events: none;/);
+  expect(css).toMatch(/\.pgv-foot \{[^}]*height: var\(--pgv-under, 0px\);/);
+  expect(css).toMatch(/\.pgv-head \{[^}]*top: 0;[^}]*height: var\(--row-lead\);/);
+  // The window's own buttons stand over the page's head with no plate, in the ink the page's tone asks for, and a soft fill only under the pointer;
+  // a page of no one tone (a gradient or a picture) keeps the pill's surface for them (R-PAGE-17).
+  expect(css).toMatch(/:root\[data-page-tone="light"\] \.window-chrome \.window-button \{ color: var\(--caption-ink-on-light\); \}/);
+  expect(css).toMatch(/:root\[data-page-tone="dark"\] \.window-chrome \.window-button \{ color: var\(--caption-ink-on-dark\); \}/);
+  expect(css).toMatch(/\.window-button:not\(\.window-close\):hover[^{]*\{ background: color-mix\(in srgb, currentColor 14%, transparent\); \}/);
+  expect(css).toMatch(/\[data-page-tone="mixed"\] \.window-chrome\[data-conversation-caption\] \.window-controls \{[^}]*background: var\(--surface-2\);/);
+  expect(css).not.toMatch(/has\(\.mb-chat\[data-conversation-page\]\) \.window-chrome/);
   expect(css).toMatch(/\.ra-stage\.is-page \.rp-scroll \{[^}]*padding-bottom: var\(--pgv-under\);/);
   // The answer line floats just over the composer, on its own surface, and takes no pointer from the page.
   expect(css).toMatch(/\.pgv-status \{[^}]*position: absolute;[^}]*bottom: calc\(var\(--pgv-dock, 0px\) \+ var\(--sp-1\)\);[^}]*pointer-events: none;/);
@@ -479,26 +491,88 @@ test("where the owner read is kept from the page's own scroll messages: it is pu
   back().click();
 });
 
-test("a page says what its background is: only a plain rgb() or rgba() colour is painted behind the composer's row, and it is gone with the page", async () => {
+/** A ResizeObserver the test drives: the callback runs when the test says the measured box changed. */
+class Watching {
+  static all: Watching[] = [];
+  constructor(readonly callback: () => void) { Watching.all.push(this); }
+  observe(): void { /* the test says when */ }
+  disconnect(): void { Watching.all = Watching.all.filter(item => item !== this); }
+}
+
+test("the page is told how much of its foot the composer and of its head the header covers, as they change, and is told they are its own again when it is put away (R-PAGE-11, R-PAGE-16)", async () => {
+  vi.stubGlobal("ResizeObserver", Watching);
+  try {
+    const { thread, frame, stage } = mount();
+    await flush();
+    loaded(frame);
+    const posted = vi.mocked(frame.contentWindow!.postMessage);
+    // The rooms over the page are measured on boxes of their own in the area: at the foot the composer's dock, the gap and the answer line
+    // over it, at the head the row the header's buttons stand in.
+    const probe = (foot: number, head: number): void => {
+      Object.defineProperty(stage.querySelector<HTMLElement>(".pgv-foot")!, "offsetHeight", { value: foot, configurable: true });
+      Object.defineProperty(stage.querySelector<HTMLElement>(".pgv-head")!, "offsetHeight", { value: head, configurable: true });
+      for (const watch of Watching.all) watch.callback();
+    };
+    const said = (): unknown[] => posted.mock.calls.map(([message]) => message);
+    thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+    // Nothing covers the page yet: it is told nothing.
+    expect(posted).not.toHaveBeenCalled();
+    probe(96, 60);
+    expect(said()).toEqual([{ raphaelPage: 1, type: "foot", y: 96 }, { raphaelPage: 1, type: "head", y: 60 }]);
+    // The same rooms again say nothing; a taller foot (the answer line came) says both again.
+    probe(96, 60);
+    expect(posted).toHaveBeenCalledTimes(2);
+    probe(140, 60);
+    expect(said().slice(-2)).toEqual([{ raphaelPage: 1, type: "foot", y: 140 }, { raphaelPage: 1, type: "head", y: 60 }]);
+    // A page that loads again in the whole area is told again.
+    frame.dispatchEvent(new Event("load"));
+    expect(said().slice(-2)).toEqual([{ raphaelPage: 1, type: "foot", y: 140 }, { raphaelPage: 1, type: "head", y: 60 }]);
+    // No room is told past what the helper takes.
+    probe(99999, 99999);
+    expect(said().slice(-2)).toEqual([{ raphaelPage: 1, type: "foot", y: 2000 }, { raphaelPage: 1, type: "head", y: 2000 }]);
+    probe(96, 60);
+    // Put away: the page is told both are its own again, then its frame goes back to the card.
+    back().click();
+    expect(said()).toContainEqual({ raphaelPage: 1, type: "foot", y: 0 });
+    expect(said()).toContainEqual({ raphaelPage: 1, type: "head", y: 0 });
+    expect(Watching.all).toHaveLength(0);
+    const told = posted.mock.calls.length;
+    frame.dispatchEvent(new Event("load"));
+    expect(posted.mock.calls).toHaveLength(told);
+  } finally {
+    vi.unstubAllGlobals();
+    Watching.all = [];
+  }
+});
+
+test("the window's buttons take the ink of the tone the page says: set while the page stands, cleared with it, never from a card or from anything else (R-PAGE-17)", async () => {
+  const { thread, frame, stage } = mount();
+  await flush();
+  loaded(frame);
+  const tone = (): string | undefined => document.documentElement.dataset.pageTone;
+  // A page still in its card is no tone of the window's.
+  fromFrame(frame, { raphaelPage: 1, type: "tone", tone: "dark" });
+  expect(tone()).toBeUndefined();
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  for (const good of ["light", "dark", "mixed"]) { fromFrame(frame, { raphaelPage: 1, type: "tone", tone: good }); expect(tone()).toBe(good); }
+  // Nothing else gets into the root's attributes: not a colour, a name, a number or nothing.
+  fromFrame(frame, { raphaelPage: 1, type: "tone", tone: "light" });
+  for (const bad of ["red", "rgb(0, 0, 0)", "light; x", 3, null, { tone: "dark" }]) { fromFrame(frame, { raphaelPage: 1, type: "tone", tone: bad }); expect(tone()).toBe("light"); }
+  // It goes with the page: put away, the window's buttons are the app's own again.
+  back().click();
+  expect(tone()).toBeUndefined();
+  expect(stage.classList.contains("is-page")).toBe(false);
+});
+
+test("what a page says its background is changes nothing in the window: no colour of the page's is painted behind it, so no band of another colour can stand beside it (R-PAGE-10)", async () => {
   const { thread, frame, stage } = mount();
   await flush();
   loaded(frame);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
   const area = stage.querySelector<HTMLElement>(".pgv-page")!;
-  const say = (color: unknown): string => { fromFrame(frame, { raphaelPage: 1, type: "background", color }); return area.style.getPropertyValue("--pgv-bg"); };
+  for (const color of ["rgb(247, 241, 227)", "rgba(10, 10, 10, 0.5)", "red", null]) fromFrame(frame, { raphaelPage: 1, type: "background", color });
+  expect(area.getAttribute("style")).toBeNull();
   expect(area.style.getPropertyValue("--pgv-bg")).toBe("");
-  expect(say("rgb(247, 241, 227)")).toBe("rgb(247, 241, 227)");
-  expect(say("rgba(10, 10, 10, 0.5)")).toBe("rgba(10, 10, 10, 0.5)");
-  // Nothing else gets into the app's style: not a name, a gradient, a url, a var(), a declaration or a second property.
-  for (const bad of ["red", "#fff", "url(http://x/y.png)", "var(--text)", "rgb(1, 2, 3); background: url(x)", "rgb(1, 2, 3) url(x)", "rgb(0 0 0 / 50%)", "rgba(1, 2, 3, 2)", "rgb(1, 2, 3, )", "linear-gradient(red, blue)", "rgb(1, 2, 3)}body{x:y", "rgb(1,2,3)\n", 5, null, { color: "rgb(1, 2, 3)" }]) expect(say(bad)).toBe("");
-  expect(say("rgb(1,2,3)")).toBe("rgb(1,2,3)");
-  // The page that says none (a transparent one) leaves the area its own.
-  expect(say(null)).toBe("");
-  // What the page said stays with it: open again, the area is painted at once.
-  say("rgb(20, 30, 40)");
-  back().click();
-  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
-  expect(stage.querySelector<HTMLElement>(".pgv-page")!.style.getPropertyValue("--pgv-bg")).toBe("rgb(20, 30, 40)");
   back().click();
 });
 
@@ -507,10 +581,7 @@ test("a page changed while it stands in the whole area loads beside it, takes it
   await flush();
   loaded(frame);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
-  const area = stage.querySelector<HTMLElement>(".pgv-page")!;
   fromFrame(frame, { raphaelPage: 1, type: "scroll", y: 420 });
-  fromFrame(frame, { raphaelPage: 1, type: "background", color: "rgb(1, 2, 3)" });
-  expect(area.style.getPropertyValue("--pgv-bg")).toBe("rgb(1, 2, 3)");
   vi.mocked(api.pagesOpen).mockResolvedValueOnce({ ...opened, url: "http://127.0.0.1:9/p/changed?theme=light", rev: 1 });
   thread.querySelector<HTMLElement>(".pg-card")!.dataset.pageRev = "1";
   pages.sync();
@@ -524,11 +595,9 @@ test("a page changed while it stands in the whole area loads beside it, takes it
   expect(next.style.visibility).toBe("hidden");
   expect(next.hasAttribute("inert")).toBe(false);
   Object.defineProperty(next, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
-  // It says how tall it is (for its card) and what its background is while it loads; the area keeps the old page's until it takes its place.
+  // It says how tall it is (for its card) while it loads.
   fromFrame(next, { raphaelPage: 1, type: "height", height: 1500 });
-  fromFrame(next, { raphaelPage: 1, type: "background", color: "rgb(9, 8, 7)" });
   fromFrame(next, { raphaelPage: 1, type: "scroll", y: 3 });
-  expect(area.style.getPropertyValue("--pgv-bg")).toBe("rgb(1, 2, 3)");
   expect(next.contentWindow!.postMessage).not.toHaveBeenCalled();
   // Once loaded it is scrolled to where the owner was reading, before it shows.
   next.dispatchEvent(new Event("load"));
@@ -537,7 +606,6 @@ test("a page changed while it stands in the whole area loads beside it, takes it
   await new Promise(resolve => setTimeout(resolve, 300));
   expect([...stage.querySelectorAll(".pgv iframe")]).toEqual([next]);
   expect(next.style.visibility).toBe("");
-  expect(area.style.getPropertyValue("--pgv-bg")).toBe("rgb(9, 8, 7)");
   // Where the owner reads is still the page's own word, and the card follows the changed page's height once it is back.
   fromFrame(next, { raphaelPage: 1, type: "scroll", y: 430 });
   expect(thread.querySelector<HTMLElement>(".pg-card")!.style.getPropertyValue("--pg-h")).toBe("400px");
@@ -571,7 +639,7 @@ test("a changed page that cannot be read stays as it was, and one that never say
 });
 
 // Share (R-PAGE-08): one button at the header's right on every page; the core builds the file of the page it keeps.
-test("an HTML page has Share at the header's right: it saves the page by its id, with no text of the window's, and says where it went", async () => {
+test("an HTML page has Share at the header's right: it saves the page by its id, with no text of the window's, and shows no toast", async () => {
   const { thread, frame } = mount();
   await flush();
   loaded(frame);
@@ -584,7 +652,8 @@ test("an HTML page has Share at the header's right: it saves the page by its id,
   share.click();
   expect(api.pageSave).toHaveBeenCalledExactlyOnceWith("p1");
   await flush();
-  expect(document.querySelector(".toast")?.textContent).toContain(t("page.report.downloads"));
+  // The file is shown selected in its folder: no toast says where it went (R-TOAST-01).
+  expect(document.querySelector(".toast")).toBeNull();
   back().click();
   // It left with the page: no button of Share's stands in the header of the thread.
   expect(document.querySelector(".mb-head .ra-tools > [data-page-act]")).toBeNull();

@@ -7,7 +7,7 @@
 // Every state comes from the core (`agent.drafts`). What the owner types lives in the fields only until it is
 // saved as a version (`mail-actions.ts`); a card drawn again takes it from the old field to the new one (`carryMail`).
 
-import { cardDisclosureHTML, cardHTML, cardPromptText, waitingCloseHTML } from "./card";
+import { cardDisclosureHTML, cardHTML, cardPromptText, stoppedTurn, waitingCloseHTML } from "./card";
 import { noticeHTML } from "./missing";
 import { NAME, eventLineHTML } from "./event-line";
 import { appLogo } from "./app-logos";
@@ -104,8 +104,11 @@ function editableHTML(draft: MailDraftCard): string {
 }
 
 /** A draft that is over, in one quiet line: what it was about and what became of it. */
-function settledHTML(draft: MailDraftCard): string {
+function settledHTML(draft: MailDraftCard, stopped = false): string {
   const sent = draft.state === "sent";
+  // A draft the owner's Stop discarded is its title alone: nothing of the stop is said (R-CHAT-STOP-02).
+  if (stopped && !sent) return cardHTML({ title: draft.kind === "slack" ? t("slack.title") : draft.subject || plain("mail.title"), mark: senderMarkHTML(draft.from.name), status: "ready", hideStatus: true,
+    cls: "mail-done", attrs: ` data-mail-card="${esc(draft.id)}" data-mail-state="${esc(draft.state)}"` });
   return cardHTML({ title: draft.kind === "slack" ? t("slack.title") : draft.subject || plain("mail.title"), mark: senderMarkHTML(draft.from.name), status: sent ? "done" : "ready",
     statusText: sent ? t("cards.done") : t("mail.discardedShort"),
     content: cardDisclosureHTML(draft.id, `<div class="card-well"><p class="card-body">${esc(sent ? t("mail.sent", { p0: recipientsLine(draft.to) }) : draft.kind === "slack" ? t("slack.discarded") : plain("mail.discarded"))}</p><p class="card-body">${linkedText(draft.subject)}</p><p class="card-body">${linkedText(draft.body)}</p></div>`),
@@ -124,9 +127,9 @@ function offerHTML(draft: MailDraftCard, _look: MailLook): string {
   });
 }
 
-export function mailCardHTML(draft: MailDraftCard, look: MailLook = {}): string {
+export function mailCardHTML(draft: MailDraftCard, look: MailLook = {}, stopped = false): string {
   const over = draft.state === "sent" || draft.state === "discarded";
-  return (over ? settledHTML(draft) : editableHTML(draft)) + offerHTML(draft, look);
+  return (over ? settledHTML(draft, stopped) : editableHTML(draft)) + offerHTML(draft, look);
 }
 
 /** The centred line the first chat of a draft handed to a colleague keeps: 「已轉交給 ◎ 焦媽媽」. */
@@ -137,7 +140,7 @@ export function mailHandedLineHTML(draft: MailDraftHanded, face: string): string
 
 /** The cards a turn shows, below what it said (a draft handed on has none here: its line is outside the reply). */
 export function mailCardsHTML(turn: AgentTurn, look: MailLook = {}): string {
-  return (turn.drafts ?? []).filter(draft => turn.scope !== "room" || draft.mode !== "card" || draft.kind !== "slack").map((draft: MailDraft) => (draft.mode === "card" ? mailCardHTML(draft, look) : "")).join("");
+  return (turn.drafts ?? []).filter(draft => turn.scope !== "room" || draft.mode !== "card" || draft.kind !== "slack").map((draft: MailDraft) => (draft.mode === "card" ? mailCardHTML(draft, look, stoppedTurn(turn)) : "")).join("");
 }
 
 /** The centred lines of the drafts this turn handed on, between the question and the reply. */

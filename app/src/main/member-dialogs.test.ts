@@ -33,7 +33,7 @@ test("a member's deletion asks one sentence, Cancel and Delete, and nothing abou
 test("the delete question is a small box: no ×, Cancel holds the focus, Escape and a press beside it cancel", async () => {
   const escape = confirmDelete("小晴", { member: true });
   const dialog = document.querySelector<HTMLElement>(".mb-dialog")!;
-  expect(dialog.classList.contains("mb-delete")).toBe(true);
+  expect(dialog.matches(".mb-delete:not(.is-quiet)")).toBe(true);
   expect(dialog.querySelector('[data-dlg="close"], .btn.icon')).toBeNull();
   expect(document.activeElement).toBe(dialog.querySelector('[data-dlg="cancel"]'));
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -42,7 +42,7 @@ test("the delete question is a small box: no ×, Cancel holds the focus, Escape 
   // The new look is the destructive question's own: the small 新增角色 style dialogs keep the shared shell and their ×.
   const css = readFileSync(join(__dirname, "members.css"), "utf8");
   expect(css).toContain(".mb-dialog.mb-confirm.mb-delete { width: min(320px, 100%);");
-  expect(css).toMatch(/\.mb-confirm\.mb-delete \.mb-dlg-act \.btn\.pri \{[^}]*background: var\(--close\)[^}]*color: var\(--on-close\)/);
+  expect(css).toMatch(/\.mb-confirm\.mb-delete:not\(\.is-quiet\) \.mb-dlg-act \.btn\.pri \{[^}]*background: var\(--close\)[^}]*color: var\(--on-close\)/);
   expect(readFileSync(join(__dirname, "member-creator.ts"), "utf8")).not.toContain("mb-delete");
 });
 

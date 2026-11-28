@@ -45,14 +45,14 @@ test("subscription cards show readiness and only their applicable action; login 
   expect(api.openExternalUrl).toHaveBeenCalledWith("https://antigravity.google/download");
 });
 
-test("the unplug asks in the red dialog, disconnects once on its red button, and the card connects again", async () => {
+test("the unplug asks in the quiet dialog, disconnects once on confirmation, and the card connects again", async () => {
   api.brainsCli.mockResolvedValue({ clis: CLIS });
   const root = document.createElement("div"); document.body.append(root);
   const controller = createCliBrains({ visible: () => true, redraw: () => { root.innerHTML = cliBrainsHTML(controller.view()); } });
   await controller.load();
   // 取消 disconnects nothing.
   let pressed = controller.click(root.querySelector('[data-cli-disconnect="claude"]')!);
-  const dialog = document.querySelector<HTMLElement>(".mb-dialog.mb-delete")!;
+  const dialog = document.querySelector<HTMLElement>(".mb-dialog.mb-delete.is-quiet")!;
   expect(dialog.querySelector("h2")!.textContent).toBe("中斷連線 Claude Code？");
   expect(dialog.querySelector(".mb-dlg-body")!.textContent).toBe("之後要再用 Claude Code，需要重新登入。");
   expect(dialog.querySelector('[data-dlg="delete"]')!.textContent).toBe("中斷連線");
@@ -60,7 +60,7 @@ test("the unplug asks in the red dialog, disconnects once on its red button, and
   await pressed;
   expect(api.brainsCliDisconnect).not.toHaveBeenCalled();
   expect(document.querySelector("#app-popover")).toBeNull();
-  // Its red button disconnects, once.
+  // Confirming disconnects once.
   api.brainsCli.mockResolvedValue({ clis: CLIS.map(c => c.id === "claude" ? { ...c, available: false, disconnected: true, models: [] } : c) });
   pressed = controller.click(root.querySelector('[data-cli-disconnect="claude"]')!);
   document.querySelector<HTMLElement>('.mb-delete [data-dlg="delete"]')!.click();

@@ -1,4 +1,4 @@
-import { scene, click, hover, type, wait, waitGone, codexArrives, page, settings, scroll, key, navKey, check, member, rightClick, sideButton } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitGone, codexArrives, page, settings, scroll, key, navKey, check, member, rightClick, sideButton, waitCall } from "./steps.mjs";
 
 const connections = settings("connections");
 // A long 關於我: eight sentences, more than the four lines the field shows at rest.
@@ -29,6 +29,10 @@ const pasteRecorded = [...keysDialog, click('.kd-dialog [data-field="paste_last_
 // The first slime (the guide's step 1): the owner names it and dresses it in the red horned slime; its way on waits for the name.
 const pickFirstSlime = [click('.ob-first-picker [data-slime-tab="red"]'), click('.ob-first-picker [data-slime-character="horns-red"]')];
 const named = [click('[data-ob="next"]'), wait('#ob-first-name'), type('#ob-first-name', '小藍'), ...pickFirstSlime, click('[data-ob="next"]')];
+// The same narrow dialog opens on setup from the directory and on models for saved connections.
+const providerEditor = kind => [...settings("models"), click('[data-pv="directory"]'), wait('#pv-dialog'), click(`[data-pv="add"][data-id="${kind}"]`), wait('#pv-dialog[data-pv-view="setup"]')];
+const savedProviderEditor = id => [...settings("models"), wait(`[data-pv="open"][data-id="${id}"]`), click(`[data-pv="open"][data-id="${id}"]`), wait('#pv-dialog .pv-test-status.is-ok'), wait('#pv-dialog .pv-model-list li')];
+const guideEditor = [...named, wait('[data-ob-tools]'), type('#ob-tools-find', 'LM Studio'), wait('[data-ob-tools] [data-pv="add"][data-id="lmstudio"]'), click('[data-ob-tools] [data-pv="add"][data-id="lmstudio"]'), wait('#pv-dialog[data-pv-view="setup"]')];
 export default [
   scene("nav-layer-settings", "Back closes Settings from Usage analysis and Forward restores analysis", [
     ...analysis, navKey("back"), check("nav-settings-closed"),
@@ -60,6 +64,13 @@ export default [
   scene("settings-mic-denied", "A Mac whose microphone was refused: 聽寫 says where to allow it, its button opens that pane, and the meter stays closed", [...settings("dictation"), wait('.modal-scrim .missing-note [data-missing-pane]'), check("settings-mic-denied")], { microphone: "denied", mac: true }),
   // R-PRIV-AX-01: on a Mac without Accessibility no global key is heard, so no paste or tidy fails to say so; 聽寫 says it instead.
   scene("settings-accessibility-off", "A Mac without Accessibility: 聽寫 says so above the shortcuts, and its one button opens the pane", [...settings("dictation"), wait('.modal-scrim .missing-note [data-missing-pane]'), check("settings-accessibility-off")], { accessibility: false }),
+  {
+    // The card the note's button puts under System Settings (R-PRIV-AX-02), drawn by its own page as the passive window shows it.
+    ...scene("permission-guide-card", "The card under System Settings says to drag Raphael into the list above and turn it on, with the app's tile to drag it from", [check("permission-guide-card")], {
+      permissionGuide: [{ revision: 1, name: "Raphael", language: "zh-TW" }],
+    }),
+    entry: "permission-guide.html", ready: "#permission-guide:not([hidden])",
+  },
 
   scene("local-command-settings-gone", "Safety has no local commands row and no 電腦操作 section: only the vault and the rules are left", [...settings("safety"), scroll(".modal-scrim .modal-body .sgroup:last-of-type"), check("local-command-setting-gone")]),
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),
@@ -91,10 +102,16 @@ export default [
   // 連接其他來源 from speech to text: only the services that turn speech into text, and no subscription (R-DEFAULT-05).
   scene("settings-provider-directory-stt", "Connecting another source from speech to text lists only the services that can do it, says why, and keeps its x in view", [...settings("models"), click('.modal-scrim [data-model-picker="stt"] .mp-trigger'), wait('.model-chooser [data-dlg="sources"]'), click('.model-chooser [data-dlg="sources"]'), wait("#pv-dialog .pv-for"), check("provider-directory-stt")]),
   scene("settings-provider-directory", "新增供應商 lists every way to connect, subscriptions first, each kind saying what it means and what it costs", [...settings("models"), click('[data-pv="directory"]'), wait('#pv-dialog'), check("provider-directory")]),
+  scene("settings-provider-editor", "OpenAI setup offers its key page beside the key and one Connect button", [...providerEditor("openai"), type('#pv-openai-key', 'look-synthetic-key'), wait('[data-pv="connect"]:enabled'), check("provider-editor")], { moreProviders: true }),
+  scene("settings-provider-editor-refused", "A refused key leaves setup open with one error line below the field", [...providerEditor("openai"), type('#pv-openai-key', 'look-refused-key'), click('[data-pv="connect"]'), wait('.pv-test-status.is-error'), check("provider-editor")], { moreProviders: true }),
+  scene("settings-provider-editor-local", "LM Studio setup has a name and address, and can connect without credentials", [...providerEditor("lmstudio"), wait('[data-pv="connect"]:enabled'), check("provider-editor")], { moreProviders: true }),
+  scene("settings-provider-editor-saved", "A saved server tests on open and shows its searchable models and a framed button to add another", [...savedProviderEditor("p-lmstudio"), check("provider-editor")], { moreProviders: true, lmstudioSaved: true }),
+  scene("settings-provider-editor-settings", "The gear opens OpenRouter settings, with a configured key, Back, trash and no Save until a value changes", [...savedProviderEditor("openrouter"), click('#pv-dialog .cs-dlg-head [data-pv="settings"]'), wait('#pv-dialog[data-pv-view="settings"]'), check("provider-editor")]),
+  scene("onboarding-provider-editor", "The AI tools step connects LM Studio through the same editor and shows the tested models", [...guideEditor, check("provider-editor"), click('[data-pv="connect"]'), waitCall("providers.add"), wait('#pv-dialog .pv-test-status.is-ok'), wait('#pv-dialog .pv-model-list li'), check("provider-editor")], { onboarding: true, moreProviders: true }),
   scene("settings-local-stt", "Speech to text on this PC reads SenseVoice · 本機 with no mark of the cloud model kept for later", [...settings("models"), wait('.modal-scrim [data-model-picker="stt"] .mp-trigger'), check("settings-local-stt")], { localSpeech: true }),
   scene("model-choices-local", "Local speech choices keep subtle borders, spacing and readable metadata", [...localChooser, scroll('.lm-row:last-child'), check("model-choice-scroll"), scroll('.lm-row:first-child'), check("model-choice-layout")]),
   scene("model-choices-local-selected", "Preview a local model without downloading and keep keyboard focus visible", [...localChooser, click('.lm-main[data-name="qwen3-asr"]'), key("Tab"), { action: "focus", selector: '.lm-main[data-name="qwen3-asr"]' }, check("model-choice-selection"), check("model-choice-layout")]),
-  scene("model-choices-local-menu", "Deleting a downloaded local model waits in its row's ⋯ and asks in the red dialog", [...localChooser, click('[data-act="local-menu"][data-name="sensevoice"]'), wait('#app-popover [data-pick="delete"]'), check("local-model-menu"), click('#app-popover [data-pick="delete"]'), wait('.mb-delete'), check("local-model-asks")], { localModels: downloaded }),
+  scene("model-choices-local-menu", "Deleting a downloaded local model waits in its row's ⋯ and asks in the quiet dialog", [...localChooser, click('[data-act="local-menu"][data-name="sensevoice"]'), wait('#app-popover [data-pick="delete"]'), check("local-model-menu"), click('#app-popover [data-pick="delete"]'), wait('.mb-delete'), check("local-model-asks")], { localModels: downloaded }),
   scene("context-menu-local-model", "A right click on a downloaded local model's row opens the menu of its ⋯", [...localChooser, rightClick('.lm-row[data-name="sensevoice"]'), wait('#app-popover'), check("context-menu"), rightClick('.lm-row[data-name="sensevoice"]'), wait('#app-popover')], { localModels: downloaded }),
   scene("chatgpt-signed-out", "ChatGPT sign-in is the first subscription account", [...settings("models"), scroll(".cli-accounts"), wait('[data-chatgpt="sign-in"]')]),
   scene("chooser-chatgpt-signed-out", "ChatGPT signed out while it holds the choice is still listed, says what signing in means and has the button for it", [...settings("models"), click('.modal-scrim [data-model-picker="answer"] .mp-trigger'), wait('.model-chooser [data-source="chatgpt"]'), click('.model-chooser [data-source="chatgpt"]'), wait('.mc-signin'), check("chooser-chatgpt")], { quickChatgpt: true }),
@@ -111,11 +128,11 @@ export default [
     member(3), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now'), click('.cb-pick'),
     click('.cb-menu [data-cb-source="cli:claude"]'), wait('.cb-menu [data-model="cli:claude:claude-haiku-5-5"]'), check("composer-claude-alias-row"), check("composer-claude-alias")], { claudeAlias: true }),
   scene("chatgpt-signed-in", "A signed-in ChatGPT account shows its email and its unplug", [...settings("models"), scroll(".cli-accounts"), click('[data-chatgpt="sign-in"]'), wait("[data-chatgpt-disconnect]")]),
-  scene("cli-account-disconnect-ask", "A connected CLI's card has the unplugged plug, no ⋯: it asks in the red dialog before it disconnects", [...cliAsk, check("cli-account-disconnect-ask")]),
+  scene("cli-account-disconnect-ask", "A connected CLI's card has the unplugged plug, no ⋯: it asks in the quiet dialog before it disconnects", [...cliAsk, check("cli-account-disconnect-ask")]),
   // Settings has no right click: a CLI's card in 模型 opens its menu only from its ⋯.
-  // Settings has no ⋯: a rule's row has its pencil and its trash, and the trash asks in the red dialog (no 復原 toast).
+  // Settings has no ⋯: a rule's row has its pencil and its trash, and the trash asks in the quiet dialog (no 復原 toast).
   scene("safety-rules-icons", "Each safety rule has a pencil and a trash on its row, never a ⋯", [...settings("safety"), wait(".rules-row"), scroll(".rules"), check("safety-rules-icons")], { safetyRules: true }),
-  scene("safety-rule-delete-dialog", "A rule's trash asks in the red dialog naming the rule; Settings stays open and nothing is deleted yet", [...settings("safety"), wait(".rules-row"), scroll(".rules"), click('.rules-row [data-rule="delete"][data-id="2"]'), wait(".mb-dialog.mb-delete"), check("safety-rule-delete-dialog")], { safetyRules: true }),
+  scene("safety-rule-delete-dialog", "A rule's trash asks in the quiet dialog naming the rule; Settings stays open and nothing is deleted yet", [...settings("safety"), wait(".rules-row"), scroll(".rules"), click('.rules-row [data-rule="delete"][data-id="2"]'), wait(".mb-dialog.mb-delete"), check("safety-rule-delete-dialog")], { safetyRules: true }),
   scene("settings-cli-no-right-click", "A right click on a CLI's card in 模型 opens no menu: 中斷連線 is its unplug", [...settings("models"), scroll(".cli-accounts"), rightClick('.cli-card:has([data-cli-disconnect="codex"]) .nm'), check("no-menu-open")]),
   scene("cli-account-disconnected", "Disconnect only in Raphael and offer reconnection", [...cliDisconnected, check("cli-account-disconnected")]),
   scene("cli-account-reconnected", "Reconnect a signed-in CLI without starting login", [...cliDisconnected, click('[data-cli="codex"]'), wait('[data-cli-disconnect="codex"]'), check("cli-account-reconnected")]),
@@ -205,7 +222,7 @@ export default [
   scene("connections-test", "MCP test result", [...custom, type("#conn-name", "專案筆記"), type("#conn-command", "npx"), type("#conn-args", "-y\nnotes-server\nC:/Work/Team notes"), click('[data-conn="test-draft"]'), scroll(".add-grid [role=status]")]),
   scene("connections-url", "HTTP MCP form", [...custom, click('[data-k="conn-type"]'), click('.menu [data-value="http"]')]),
   scene("connections-edit", "Edit MCP server", [...serverDetail, click('[data-conn="server-menu"][data-id="notes"]'), click('[data-conn="edit-server"]')]),
-  scene("connections-delete", "Custom MCP deletion waits in the overflow menu and asks in the red dialog", [...serverDetail, click('[data-conn="server-menu"][data-id="notes"]'), click('[data-conn="disconnect"]'), wait('.mb-delete'), check("connections-delete-ask")]),
+  scene("connections-delete", "Custom MCP deletion waits in the overflow menu and asks in the quiet dialog", [...serverDetail, click('[data-conn="server-menu"][data-id="notes"]'), click('[data-conn="disconnect"]'), wait('.mb-delete'), check("connections-delete-ask")]),
   scene("connections-paste", "Paste MCP JSON", [...add, click('.menu [data-value="paste"]')]),
   scene("connections-paste-preview", "Preview MCP JSON", [...add, click('.menu [data-value="paste"]'), type("[data-mcp-json]", '{"mcpServers":{"專案筆記":{"command":"npx","args":["notes-server"]}}}'), click('[data-dlg="preview"]')]),
   scene("connections-discover", "Discover local MCP definitions", [...add, click('.menu [data-value="import"]')]),
@@ -215,6 +232,7 @@ export default [
   scene("usage-allowances-chatgpt", "ChatGPT sits with the other subscriptions, with the button to its own usage page", [...usage, wait('[data-allowance="chatgpt"]'), scroll('[data-allowance="chatgpt"]'), check("usage-plain")], { chatgptSignedIn: true }),
   scene("usage-owner", "The owner's own mix: Codex live, Claude whose window has reset (已重置, no stale number or bar), the ChatGPT sign-in and OpenRouter's own spend, one card each as the account menu's blocks", [...usage, wait('[data-allowance="openrouter"]'), check("usage-plain"), check("usage-owner-cards")], { usageOwner: true }),
   scene("usage-empty", "With no subscription signed in, the rows of what was spent stand alone", [...usage, check("usage-plain")], { usageEmpty: true }),
+  scene("usage-credits", "Codex's card: the spent five-hour window says 改用點數, and the credits left stand under its windows", [...usage, wait('[data-allowance="codex"] .run-credits'), scroll('[data-allowance="codex"]'), check("usage-plain"), check("usage-credits-card")], { allowanceCredits: true }),
   scene("settings-usage-overview", "Usage › 概覽: 這個月's card with the limit and its gear, then 方案額度, one card per subscription with each window's reset and what is left", [...usage, wait(".run-subscription"), check("usage-plain"), check("usage-overview")]),
   scene("settings-usage-cap", "The gear of 這個月 opens the monthly limit: 設上限 with an amount, stored at once, the card's bar follows; 不設上限 takes it away", [
     ...usage, click('[data-act="usage-cap"]'), wait("#app-popover.usage-cap"), check("usage-cap-open"),
@@ -258,7 +276,7 @@ export default [
   scene("onboarding-tools", "First-run step 2: the AI tools as a store of one-row tiles, a search box, 熱門 the same for everyone, then each kind by name",[...named, wait('[data-ob-tools] [data-item="claude"].on .ob-tick'), check("onboarding-tools")], { onboarding: true }),
   scene("onboarding-back-hover", "First-run step 2: the round way back of the foot's pair takes a lighter surface under the pointer", [...named, wait('.ob-foot [data-ob="back"]'), hover('.ob-foot [data-ob="back"]'), check("onboarding-back-hover")], { onboarding: true }),
   scene("onboarding-back-focus", "First-run step 2: Shift+Tab from the primary lands on the round way back, with the app's focus ring", [...named, wait('.ob-foot [data-ob="back"]'), { action: "focus", selector: '.ob-foot [data-ob="next"]' }, { ...key("Tab"), shift: true }, check("onboarding-back-focus")], { onboarding: true }),
-  scene("onboarding-services", "First-run step 3: a search box and the popular services of the store as tiles, one sign-in each", [...named, click('[data-ob="next"]'), wait('[data-ob-services] .ob-tile'), click('[data-item="gmail"][data-ob="conn-login"]'), wait('[data-item="gmail"].on .ob-tick'), check("onboarding-services")], { onboarding: true }),
+  scene("onboarding-services", "First-run step 3: a search box and the popular services of the store as tiles, one sign-in each", [...named, click('[data-ob="next"]'), check("onboarding-services-ready"), wait('[data-ob-services] .ob-tile'), click('[data-item="gmail"][data-ob="conn-login"]'), wait('[data-item="gmail"].on .ob-tick'), check("onboarding-services")], { onboarding: true }),
   scene("onboarding-services-composio", "First-run step 3 without Composio: its card first, then the apps that need none", [...named, click('[data-ob="next"]'), wait('.ob-composio [data-ob="composio-open"]'), check("onboarding-services"), check("onboarding-composio")], { onboarding: true, composioConfigured: false }),
   scene("onboarding-composio-key", "Composio's key is typed in its card; a consumer key is refused beside its field", [...named, click('[data-ob="next"]'), wait('.ob-composio [data-ob="composio-open"]'), click('[data-ob="composio-open"]'), wait('#ob-composio-input'), type('#ob-composio-input', 'ck_look-0123'), click('[data-ob="composio-paste"]'), wait('.ob-composio [role="alert"]'), check("onboarding-services"), check("onboarding-composio")], { onboarding: true, composioConfigured: false }),
   scene("onboarding-composio-saved", "A saved Composio key adds its apps to the step and the card goes", [...named, click('[data-ob="next"]'), wait('.ob-composio [data-ob="composio-open"]'), click('[data-ob="composio-open"]'), wait('#ob-composio-input'), type('#ob-composio-input', 'ak_look-0123'), click('[data-ob="composio-paste"]'), waitGone('.ob-composio'), wait('[data-ob-services] .ob-tile'), check("onboarding-services")], { onboarding: true, composioConfigured: false }),
@@ -266,6 +284,25 @@ export default [
   scene("onboarding-service-waiting", "A tile waiting for its sign-in keeps its words inside it in every language", [...named, click('[data-ob="next"]'), wait('[data-ob-services] .ob-tile'), click('[data-item="linear"][data-ob="conn-login"]'), wait('[data-item="linear"] [data-ob="conn-cancel"]'), check("onboarding-services")], { onboarding: true, pluginsConnecting: true }),
   scene("onboarding-abilities", "First-run step 4: the abilities as Settings › 工具's rows, each saying what it uses, with its switch", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-svc="toggle"][data-id="read"]'), wait('[data-svc="toggle"][data-id="read"][aria-checked="false"]'), check("onboarding-abilities")], { onboarding: true }),
   scene("onboarding-abilities-choice", "First-run step 4: an ability opens its choice of service in the card, as in Settings", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-svc="open"][data-id="search"]'), wait('.ob-card #svc-dialog .svc-srv')], { onboarding: true }),
+  // Every slime of the guide answers a real press with the sidebar's squish: down under the button, back when it is let go (slime-press).
+  { ...scene("onboarding-slime-press", "First-run: every slime of the guide is pushed down by a press and springs back: the one being made, a slime of the picker, and the three floating by the title of every later step; with reduced motion none squishes", [
+    click('[data-ob="next"]'), wait('#ob-first-name'), click('.ob-first-picker [data-slime-tab="red"]'), wait('.ob-first-picker [data-slime-character="horns-red"]'),
+    { action: "slime-press", selectors: ['.ob-first-face .av', '.ob-first-picker [data-slime-character="horns-red"]'] },
+    { action: "slime-press", still: true, selectors: ['.ob-first-face .av'] },
+    type('#ob-first-name', '小藍'), wait('.ob-foot [data-ob="next"]:not([disabled])'), click('[data-ob="next"]'), wait('[data-ob-tools] .ob-tile'),
+    { action: "slime-press", selectors: [1, 2, 3].map(n => `.ob-floaters .ob-fl:nth-child(${n})`) },
+    click('[data-ob="next"]'), wait('#ob-conn'),
+    { action: "slime-press", selectors: [1, 2, 3].map(n => `.ob-floaters .ob-fl:nth-child(${n})`) },
+    click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'),
+    { action: "slime-press", selectors: [1, 2, 3].map(n => `.ob-floaters .ob-fl:nth-child(${n})`) },
+  ], { onboarding: true }), motion: true },
+  // Opening an ability's dialog and closing it (× , Esc and the dimmed part) leaves the page as still as it was.
+  { ...scene("onboarding-abilities-still", "First-run step 4: an ability's dialog opens and closes (×, then Esc) over a page that does not move, flash or draw again", [
+    ...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), { action: "wait-still" }, check("onboarding-abilities-still-before"),
+    click('[data-svc="open"][data-id="vision"]'), wait('.ob-card #svc-dialog'), check("onboarding-abilities-still-open"),
+    click('#svc-dialog [data-svc="close"]'), waitGone('.cs-scrim'), check("onboarding-abilities-still-closed"),
+    click('[data-svc="open"][data-id="vision"]'), wait('.ob-card #svc-dialog'), { action: "wait-still" }, key("Escape"), waitGone('.cs-scrim'), check("onboarding-abilities-still-closed"),
+  ], { onboarding: true }), motion: true },
   scene("onboarding-slime-crown", "First-run step 1: the first slime in a brown headband slime wears one crown on its head, large", [click('[data-ob="next"]'), wait('#ob-first-name'), type('#ob-first-name', '小藍'), click('.ob-first-picker [data-slime-tab="brown"]'), click('.ob-first-picker [data-slime-character="headband-brown"]'), wait('.ob-first-face .slime-surface[style*="#8E7254"]'), check('chief-crown')], { onboarding: true }),
-  scene("after-onboarding", "Finishing the guide opens the conversation of the slime the owner named, the app's start", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-ob="next"]'), wait(".page-agent:not([hidden]) .conversation-trigger"), wait('.mb-col .mb-chief[aria-current="true"]'), check("sidebar-shell"), check("first-slime-named")], { onboarding: true }),
+  scene("after-onboarding", "Finishing the guide opens the conversation of the slime the owner named, the app's start", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-ob="next"]'), wait(".page-agent:not([hidden]) .conversation-trigger"), wait('.mb-col .mb-chief[aria-current="true"]'), check("sidebar-shell"), check("first-slime-named"), check("guide-window-kept"), check("page-unshifted")], { onboarding: true }),
 ];

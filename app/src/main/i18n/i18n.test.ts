@@ -33,6 +33,17 @@ test("the calendar's Google notice button names the sidebar's own entry, never a
   }
 });
 
+test("no word on the screen calls the user by a title, in any language (R-RAPHAEL-07)", () => {
+  // The user is called by the name they gave or simply "you": never 主人, マスター or Master.
+  for (const [locale, catalog] of Object.entries(catalogs)) {
+    for (const [key, text] of Object.entries(catalog as Record<string, string>)) {
+      for (const title of ["主人", "主子", "ご主人", "マスター", "Master"]) expect(text.includes(title), `${locale} ${key}: ${text}`).toBe(false);
+    }
+  }
+  expect(catalogs["zh-TW"]["skills.owner"]).toBe("你提供");
+  expect(catalogs["zh-TW"]["agent.reason.interrupted"]).toBe("由你中斷");
+});
+
 test("the all-day toggle labels and month overflow count are in every language",()=>{
   expect(Object.keys(catalogs)).toHaveLength(15);
   for (const [locale, catalog] of Object.entries(catalogs)) {
@@ -44,6 +55,16 @@ test("the all-day toggle labels and month overflow count are in every language",
   expect(catalogs["zh-TW"]["overview.moreEvents"]).toBe("還有 {p0} 個");
   expect(catalogs["zh-TW"]["cal.showAllDay"]).toBe("展開全天事項");
   expect(catalogs["zh-TW"]["common.showLess"]).toBe("收合");
+});
+
+test("the floating card's collapse action has its own label in all fifteen locales", () => {
+  expect(Object.keys(catalogs)).toHaveLength(15);
+  for (const [locale, catalog] of Object.entries(catalogs)) {
+    const messages = catalog as Record<string, string>;
+    expect(messages["cardFloat.collapse"]?.trim(), locale).toBeTruthy();
+    expect(messages["cardFloat.collapse"], locale).not.toBe(messages["common.cancel"]);
+  }
+  expect((catalogs["zh-TW"] as Record<string, string>)["cardFloat.collapse"]).toBe("收起");
 });
 
 const CJK = /[\u3400-\u9fff\u3040-\u30ff]/;

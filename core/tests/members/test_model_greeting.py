@@ -130,7 +130,7 @@ async def test_creation_returns_while_its_own_brain_writes_hidden_greeting(setup
     call = client.chat_calls[0]
     prompt = json.dumps(call['messages'], ensure_ascii=False)
     assert call['model'] == 'test/member-model' and not call['fallbacks'] and call['tools'] == []
-    for text in ('The interface language never selects', 'Filia', 'gardening', 'Manage appointments', 'Gmail', 'call ask_owner once'):
+    for text in ('explicit saved preference', 'Filia', 'gardening', 'Manage appointments', 'Gmail', 'call ask_owner once'):
         assert text in prompt
     instruction = call['messages'][0]['content']
     assert '- Owner enjoys gardening\n' in instruction
@@ -149,6 +149,21 @@ async def test_creation_returns_while_its_own_brain_writes_hidden_greeting(setup
     await typed(rig, 'Help me with a goal', new['id'])
     assert 'call ask_owner once' not in client.chat_calls[-1]['messages'][-1]['content']
     assert saved.text in json.dumps(client.chat_calls[-1]['messages'], ensure_ascii=False)
+
+
+async def test_a_numeric_name_greeting_uses_the_named_interface_language(setup, client):
+    rig, _ = setup
+    rig.settings.set("languages", ["zh-CN"])
+    client.chats = [live_said("嗨，我是 123。軟體和資料都能幫你整理。")]
+    new = (await rig.call("members.create", {"name": "123", "greet": True, "ui_language": "zh-TW"}))["member"]
+    [turn] = await rig.turns(member_id=new["id"])
+    await until(lambda: rig.history.get(turn["id"]).status == "done")
+    system, user = (message["content"] for message in client.chat_calls[0]["messages"][:2])
+    for prompt in (system, user):
+        assert "greeting and its question card" in prompt
+        assert "Otherwise use Traditional Chinese (zh-TW)." in prompt
+        assert "language of your name" not in prompt and "language of your role" not in prompt
+    assert rig.history.get(turn["id"]).text == "嗨，我是 123。軟體和資料都能幫你整理。"
 
 
 @pytest.mark.parametrize(('shared', 'own'), [('', ''), ('Shared fact\nSecond fact', ''),
@@ -228,7 +243,7 @@ async def test_cli_greeting_has_no_tools_native_permission_or_persisted_instruct
     assert len(captured) == 1 and client.chat_calls == []
     assert rig.history.get(turn['id']).text == '私はミアです。何をお手伝いしましょうか。'
     assert 'Always speak Japanese.' in captured[0]['system']
-    assert 'The interface language never selects' in captured[0]['system']
+    assert "Otherwise use Traditional Chinese (zh-TW)." in captured[0]["system"]
     assert not rig.conn.execute('SELECT 1 FROM agent_conversation_cli_sessions WHERE conversation_id=?', (turn['conversation_id'],)).fetchone()
 
 

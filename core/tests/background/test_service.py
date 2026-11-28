@@ -82,7 +82,7 @@ async def test_the_model_is_given_the_task_the_tools_of_the_snapshot_and_the_res
     assert "no deadline" in system["content"]
     assert user["role"] == "user" and f"<task>\n{TASK_TEXT}\n</task>" in user["content"]
     assert "2026-10-21 14:05" in user["content"]
-    assert "The interface language never selects your speaking language" in user["content"]
+    assert "Without one, use the interface language." in user["content"]
     assert "English only." not in user["content"]
     # The fixed list, sorted by name: the connection's tool is found and called through use_tool.
     assert [t["function"]["name"] for t in first["tools"]] == BARE
@@ -180,7 +180,7 @@ async def test_retracting_a_running_turn_cannot_write_its_late_report_into_a_reu
     assert history.messages([new]) == {}
 
 
-async def test_the_report_language_follows_the_owner_request_not_the_interface(make_rig):
+async def test_a_background_report_without_an_owner_message_gets_the_interface_fallback(make_rig):
     rig = make_rig()
     await look_twice_then_report(rig)
     rig.client.replies[-1] = report("已整理完畢。", prefix="Notice")
@@ -189,6 +189,7 @@ async def test_the_report_language_follows_the_owner_request_not_the_interface(m
     assert (done["prefix"], done["text"]) == ("Notice", "已整理完畢。")
     system, user = rig.client.chat_calls[0]["messages"][:2]
     assert "請整理這段內容。" in user["content"]
+    assert "The interface language is English (en)." in user["content"]
     assert "Otherwise answer in the language of the owner's latest message, not a lesson's" in system["content"]
     assert "Reply ONLY in" not in system["content"]
 

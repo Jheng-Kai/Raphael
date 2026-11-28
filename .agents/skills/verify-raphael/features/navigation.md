@@ -38,13 +38,13 @@ pill; dictation and the calendar sit beside it in the account menu, and the pill
 
 ## How to get to it (user POV)
 
-Open the app: the chief of staff's conversation (Raphael's when there is no slime). Press the round face at the bottom left (the bottom of the rail): 用量, 聽寫, 行事曆, Raphael, 設定. The
+Open the app: the chief of staff's conversation (Raphael's when there is no slime). Press the round face at the bottom left (the bottom of the rail): 用量, 聽寫, 行事曆, Raphael (its own conversation; the guided tour presses 聽寫, 行事曆 and this row in turn, onboarding.md), 設定. The
 pill beside it is 連結應用程式.
 
 ## Driving it with look
 
 ```powershell
-npm run look -- start-conversation start-startup-order foot-rest foot-starter-apps foot-apps-one foot-apps-one-starter foot-apps-two foot-apps-three foot-account-menu foot-usage-submenu foot-usage-two foot-usage-default foot-usage-owner foot-usage-none foot-usage-manage foot-account-keys foot-usage-keys foot-account-outside foot-account-dictation foot-account-calendar foot-account-settings foot-pill-hover foot-pill-reduced foot-pill-narrow daily-footer-away sidebar-air sidebar-air-foot sidebar-rail opener-toggle-settings opener-toggle-account-menu after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- start-conversation start-startup-order foot-rest foot-starter-apps foot-apps-one foot-apps-one-starter foot-apps-two foot-apps-three foot-account-menu foot-usage-submenu foot-usage-two foot-usage-credits foot-usage-default foot-usage-owner foot-usage-none foot-usage-manage foot-account-keys foot-usage-keys foot-account-outside foot-account-dictation foot-account-calendar foot-account-settings foot-pill-hover foot-pill-reduced foot-pill-narrow daily-footer-away sidebar-air sidebar-air-foot sidebar-rail opener-toggle-settings opener-toggle-account-menu after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 The Connections pill always shows three marks beside its words, read by `foot-pill-marks-<ids>` in the order the scene's apps must give: the connected
@@ -54,7 +54,7 @@ starter stands once), foot-apps-two has Slack and GitHub (github, slack, gmail) 
 there are no marks.
 start-conversation and foot-rest measure the foot at rest in both shapes (the list's one row: face 32px, pill 36px and round on
 `--surface-2`, 8px between, the pill to the foot's right edge, one row of two, words whole; the rail's column with the 36px icon button
-and the face) and fail on any Home, house, microphone or page button; foot-account-menu measures the menu (five rows with distinct Lucide
+and the face) and fail on any Home, house, microphone or page button; foot-account-menu measures the menu (six rows with distinct Lucide
 icons, Raphael's own slime on its row, a hairline each side of Raphael, placement above the face or right of it on the rail, inside the window, the chevron at the
 right and no number, menu tokens); foot-usage-submenu and foot-usage-two the submenu (its place at the menu's edge and level with its row, one block per
 provider of the mock (the subscriptions in its order, the ChatGPT sign-in when signed in, OpenRouter with a key), in a stable order, each with name and its words (a number with no reset line, 已重置, 無法讀取 or OpenRouter's spend), then a hairline and 管理用量; the first with Claude, Codex and Antigravity (the fixture's Gemini CLI) and OpenRouter, the second with the two the owner has connected and OpenRouter;

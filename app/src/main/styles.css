@@ -95,6 +95,8 @@
   --composer-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
   /* the window's close button under the pointer, and the delete question's button: Windows' red nudged to keep 3:1 on the floating surface, the same in both themes */
   --close: #c9301f; --on-close: #ffffff;
+  /* The window's own buttons over an open page are drawn in the ink the page's own ground asks for, whatever the app's theme is (page-view.css, R-PAGE-17). */
+  --caption-ink-on-light: #0a0a0a; --caption-ink-on-dark: #f5f5f5;
   /* What is drawn on a slime's colour: white, as its eyes are, in both themes. */
   --on-slime: #ffffff;
   /* Activity levels are one hue, the accent, from the empty day up: more reads as stronger. */
@@ -371,8 +373,10 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .btn.icon.pri:active:not(:disabled) { background: transparent; border-color: transparent; color: color-mix(in srgb, var(--accent-icon) 85%, transparent); }
 /* The small one on a row: copy, delete, close, previous month. */
 .btn.icon.row { width: var(--h-ctl-sm); min-height: var(--h-ctl-sm); padding: 0; }
-/* Scope interaction tokens so menu, icon and page-specific controls retain destructive intent. */
+/* Scope warning colors to controls explicitly marked for high-impact actions. */
 .danger { --hover: var(--danger-hover); --pressed: var(--danger-pressed); --hover-edge: var(--err); --btn-edge: var(--err); --text: var(--err); --text-2: var(--err); --text-3: var(--err); --accent-text: var(--err); color: var(--err); }
+.btn.pri.danger { border-color: var(--close); background: var(--close); color: var(--on-close); }
+.btn.pri.danger:hover:not(:disabled), .btn.pri.danger:active:not(:disabled) { border-color: var(--close); background: var(--close); filter: brightness(0.9); }
 /* Form actions share their visual and keyboard order, including narrow, wrapped rows. */
 .action-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--sp-2); min-width: 0; }
 .action-destructive { display: flex; margin-inline-end: auto; }
@@ -854,7 +858,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 /* The team's characters float by a step's title, each where screens.ts puts it: they take no room, and a narrow card
    drops them. */
 .ob-floaters { position: relative; height: 0; pointer-events: none; }
-.ob-fl { position: absolute; display: block; }
+.ob-fl { position: absolute; display: block; pointer-events: auto; }
 /* Every choice is a store of tiles, three to a row where they fit, each one row as
    a store's app is:
    the mark in a soft square, the name over one quiet line that ends in … rather than wrapping, and on the right the

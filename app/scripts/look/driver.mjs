@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { assertStableClick, stableSnapshot, stableControls } from "./stable-click.mjs";
 import { checkFrame, checkRendered } from "./checks.mjs";
+import { pageBand, pageCovered } from "./page-band.mjs";
 import { idleCost, paintedSlime, slimeBoard, slimeParts, slimePointer, slimeSharp } from "./slime-board.mjs";
 import { eventStorm } from "./event-storm.mjs";
 import { placesProblems, slimePlaces } from "./slime-places.mjs";
@@ -539,6 +540,11 @@ export async function perform(page, step, evidenceDirectory) {
     }
     // What the frame itself shows, which the app cannot read: a check of checks.mjs `checkFrame` runs inside it (a page's own style, R-PAGE-06).
     case "frame-check": return (await waitForPageFrame(page)).evaluate(checkFrame, step.name);
+    // What the screen shows around a page's content (R-PAGE-10, R-PAGE-11): no band of the window's own colour above it (`where: "top"`) or below it
+    // (`"end"`, the page read to its end), the page's last line clear of the composer, and the page's colour down to the window's foot.
+    case "page-band": return pageBand(page, await waitForPageFrame(page), step.where, checkFrame, step.side);
+    // Nothing the page offers to press stands under the composer or the header's buttons (R-PAGE-16), read in the frame against their places.
+    case "page-covered": return pageCovered(page, await waitForPageFrame(page), step.where, checkFrame);
     case "frame-expect": {
       const deadline = Date.now() + 8000;
       for (;;) {
@@ -585,6 +591,54 @@ export async function perform(page, step, evidenceDirectory) {
         } finally { await element.dispose(); }
       }
       return { check: "press-feedback", evidence };
+    }
+    // A slime of the guide pressed with the real mouse: its surface is pushed down while the button is held and springs back when it
+    // is let go (slime.css, the sidebar's own squish), and the press reaches it (nothing lies over it). With `still` the window
+    // asks for reduced motion and the slime stays as it was. The page stays on the step it was on.
+    case "slime-press": {
+      const evidence = [];
+      const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+      if (step.still) await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+      try {
+        for (const selector of step.selectors) {
+          const element = await visible(selector);
+          try {
+            const box = await element.boundingBox(), x = box.x + box.width / 2, y = box.y + box.height / 2;
+            const read = () => element.evaluate((node, x, y) => {
+              const surface = node.matches(".slime-surface") ? node : node.querySelector(".slime-surface");
+              const style = getComputedStyle(surface), at = document.elementFromPoint(x, y);
+              const [wide, high = wide] = style.scale.split(" ").map(value => (value === "none" ? 1 : Number(value)));
+              return { wide, high, step: document.querySelector("#ob")?.dataset.step, reached: !!at && (node === at || node.contains(at)), surface: surface.hasAttribute("data-slime-still") };
+            }, x, y);
+            await page.mouse.move(x, y);
+            await sleep(120);
+            const rest = await read();
+            await page.mouse.down();
+            let pressed;
+            try { await sleep(260); pressed = await read(); } finally { await page.mouse.up(); }
+            await sleep(900);
+            const after = await read();
+            if (!pressed.reached) throw new Error(`The press does not reach the slime: ${selector}`);
+            if (step.still) {
+              if (Math.abs(pressed.wide - rest.wide) > 0.01 || Math.abs(pressed.high - rest.high) > 0.01) throw new Error(`A slime squishes under reduced motion: ${selector} ${JSON.stringify(pressed)}`);
+            } else {
+              if (Math.abs(rest.wide - 1) > 0.01 || Math.abs(rest.high - 1) > 0.01) throw new Error(`A slime is not at rest before the press: ${selector} ${JSON.stringify(rest)}`);
+              if (!(pressed.wide > 1.08 && pressed.high < 0.88)) throw new Error(`A slime does not squish under the press: ${selector} ${JSON.stringify(pressed)}`);
+              if (Math.abs(after.wide - 1) > 0.01 || Math.abs(after.high - 1) > 0.01) throw new Error(`A slime does not spring back after the press: ${selector} ${JSON.stringify(after)}`);
+            }
+            if (!step.picks && after.step !== rest.step) throw new Error(`A press on a slime moved the guide from ${rest.step} to ${after.step}: ${selector}`);
+            evidence.push({ selector, rest, pressed, after });
+          } finally { await element.dispose(); }
+        }
+      } finally {
+        if (step.still) await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
+      }
+      return { check: "slime-press", evidence };
+    }
+    // Waits until nothing that has an end is still moving (a row coming in, a dialog growing), so that what follows is the page at rest.
+    case "wait-still": {
+      await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running" || animation.effect?.getComputedTiming().iterations === Infinity), { timeout: 6000 });
+      break;
     }
     case "composer-measure-start": {
       await page.evaluate(() => {
@@ -786,7 +840,6 @@ export async function perform(page, step, evidenceDirectory) {
     case "send-probe": return await sendProbe(page, step);
     case "typing-probe": return await typingProbe(page);
     case "drag-probe": return await dragProbe(page, step, evidenceDirectory);
-    case "tmp-dump": { const html = await page.evaluate(sel => [...document.querySelectorAll(sel)].slice(0,3).map(n=>n.outerHTML.slice(0,1500)).join(String.fromCharCode(10)+"---"+String.fromCharCode(10)), step.selector); await writeFile("tmp-dump.txt", html); return { check: "tmp-dump" }; }
     case "resize-probe": return await resizeProbe(page, step, evidenceDirectory);
     case "follow-probe": return await followProbe(page, step);
     case "advance-time":
@@ -1119,9 +1172,10 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "wait": { const element = await visible(step.selector, step.timeout); await element.dispose(); break; }
     // A call the window makes on its own, after a debounce or from a frame (a page's state): waited for, never slept for.
+    // `method` is a core method (`members.list`) or a native command (`device_settings_set`).
     case "wait-call":
       try {
-        await page.waitForFunction(({ method, holding }) => window.__look.calls.some(call => call.method === method && (!holding || JSON.stringify(call.params).includes(holding))),
+        await page.waitForFunction(({ method, holding }) => window.__look.calls.some(call => (call.method === method || call.command === method) && (!holding || JSON.stringify(call.params ?? call.patch ?? null).includes(holding))),
           { timeout: 6000 }, { method: step.method, holding: step.holding ?? "" });
       } catch (error) { throw new Error(`The window never called ${step.method}${step.holding ? ` with ${step.holding}` : ""}`, { cause: error }); }
       break;
@@ -1154,7 +1208,9 @@ export async function perform(page, step, evidenceDirectory) {
       const primary = step.ctrl ? await primaryKey(page) : null;
       if (primary) await page.keyboard.down(primary);
       if (step.shift) await page.keyboard.down("Shift");
+      if (step.altRight) await page.keyboard.down("AltRight");
       try { await page.keyboard.press(step.key); } finally {
+        if (step.altRight) await page.keyboard.up("AltRight");
         if (step.shift) await page.keyboard.up("Shift");
         if (primary) await page.keyboard.up(primary);
       }

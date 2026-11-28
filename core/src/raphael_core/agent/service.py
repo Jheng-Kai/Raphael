@@ -184,8 +184,8 @@ from .actions import action_call
 from .cli.discovery import CliBrains, brain_ref
 from .cli.loop import CLI_SILENCE_S, CLI_TOOL_S, COMPUTER_CHANGED, CliLoop, Sessions as CliSessions
 from .persona import cli_system_prompt, memory_files
-from .persona import (FULL_PERMISSION, NEW_MEMBER, NEW_MEMBER_STEP, PLAN_MODE, SETUP_ANSWER, SETUP_AFTER_CONNECT, SETUP_STEPS, TOUR_ANSWER,
-                      TOUR_WORDS_FIRST)
+from .persona import (FIRST_MESSAGE_LANGUAGE, FULL_PERMISSION, NEW_MEMBER, NEW_MEMBER_STEP, PLAN_MODE, SETUP_ANSWER,
+                      SETUP_AFTER_CONNECT, SETUP_STEPS, TOUR_ANSWER, TOUR_WORDS_FIRST)
 from ..brain.owner import owner_context
 from ..folders import choice, default_folders
 from .cities import cities_in
@@ -260,6 +260,7 @@ from .policy import (
 )
 from .routing import OpenAnswer, RouteDecision, Router
 from .speaker import RAPHAEL, RAPHAEL_NAMES, Speaker, call_reaches
+from ..ui_languages import interface_language_name
 from .permissions import AT_A_CHAT, message_preview, owner_screen as reaches_owner_screen, permission_identity, qualifies as permission_cards_for
 from .safety import ASK, DENY, PASS, Proposed, Screening, asked_with, forbidden, narrow_scope, needs_yes, rule_lead, summarize
 from .steps import Step, reason_of, step_view as _step_view
@@ -715,12 +716,8 @@ DECLINED_NOTE = (
     "done now: do not try another way or another tool to get the same thing done. Say in one short sentence that "
     "it was not done because the owner said no; never say that an app or a service refused it."
 )
-# What a new member's first turn is asked, with no word of the owner's yet. `language` there is the interface's, for the
-# turn's notices only: the greeting's language is the member's own, or the owner's as what it knows of them shows it
-# (the interface language goes to no model).
-GREETING_NOW = ("Write your greeting now, in the language your own instructions set; when they set none, in the language "
-                "the owner's profile and your memory of them are written in, else the language of your name, role and "
-                "instructions.")
+# The first turn has no owner message. Keep its language instruction beside the request as well as in the system prompt.
+GREETING_NOW = "Write your greeting now. " + FIRST_MESSAGE_LANGUAGE
 # A new member's first message is its own words and one card (R-COLLEAGUE-02). Live, a Codex model called the card as its
 # first act with nothing written before it; the call is sent back, and the same turn goes on, rather than the greeting
 # failing. The number of times it is sent back; a model that still writes nothing leaves a failed greeting.
@@ -1056,8 +1053,7 @@ class AgentService:
 
     @property
     def language(self) -> str:
-        """The interface language, for the fixed words of unattended and external conversations (a notice, a card).
-        Never a model's: what a member says follows the owner's words."""
+        """The interface language for fixed copy and the fallback for authored speech without an owner message."""
         return normalize_language(self._owner_language() or DEFAULT_LANGUAGE)
 
     def _chat_language(self, ask: "_Ask") -> str:
@@ -1200,9 +1196,10 @@ class AgentService:
         empty conversation: its guided tour begins (`persona.TOUR`)."""
         speaker = self._speaker(member_id)
         conversation_id = self.conversations.main(member_id)
-        self._last_language = normalize_language(language)
-        ask = _Ask(history_generation=self._history_generation, session_id=f"greeting-{member_id}-{uuid.uuid4().hex}", text=GREETING_NOW,
-                   language=normalize_language(language), source="greeting", speaker=speaker,
+        language = self._last_language = normalize_language(language)
+        ask = _Ask(history_generation=self._history_generation, session_id=f"greeting-{member_id}-{uuid.uuid4().hex}",
+                   text=GREETING_NOW.format(language=interface_language_name(language)),
+                   language=language, source="greeting", speaker=speaker,
                    conversation_id=conversation_id, started_at_ms=self._now_ms())
         self._record(ask, "greeting", "", "", "running", None, Ledger(self._spend))
         task = asyncio.create_task(self._run_ask(ask))
@@ -2568,7 +2565,8 @@ class AgentService:
             text = split_notes(text, ask.language)[0]
             if not text.strip():
                 return
-        if kind in ("progress", "thinking", "reply"):
+        # Greetings already chose their Chinese script through the persona and interface fallback.
+        if ask.source != "greeting" and kind in ("progress", "thinking", "reply"):
             text = authored_chinese(text, chinese_variant(self._settings.get("languages")))
         if kind == "progress" and prefix:
             opening = compose(prefix, "", None)[:-1]
@@ -2665,7 +2663,13 @@ class AgentService:
                            "They manage members, folders, group chats, conversations, connections, models and settings. "
                            + ("" if self._gate.full_permission else "Destructive and permission changes always wait for the owner's approval."))
                 system += "\nTemplate CreateAgent instructions map to member_create (legacy alias: create_member)."
+            owner_text = ask.original_text if ask.original_text is not None else ask.text
+            if ask.attachments:
+                owner_text = ask.draft_text
+            has_owner_words = ((ask.exchange_speakers is None and detect_language(owner_text))
+                               or any(detect_language(line) for line in owner_lines(context.turns)))
             message_args = dict(
+                fallback_language=None if has_owner_words else ask.language,
                 question=labelled_lines(ask.exchange_speakers[0], ask.text) if ask.exchange_speakers else ask.text,
                 moment=self._moment(), context=context.turns, tools=[],
                 background=background_block(self._briefs(ask.speaker.id)), summary=context.summary, narrated=True,
@@ -3121,7 +3125,8 @@ class AgentService:
                 raise AgentFailure("error")  # a card with no words of the member's own is no greeting; it is written again
             if said:
                 # Said before the card is asked, so that the thread reads the words and then the card.
-                said = authored_chinese(said, chinese_variant(self._settings.get("languages")))
+                if not greeting:
+                    said = authored_chinese(said, chinese_variant(self._settings.get("languages")))
                 self._message(ask, "reply", said)
                 ask.replies = [said]
             self._background.park_owner_turn(ask, settings.model, loop, call_id, arguments,
@@ -3148,7 +3153,7 @@ class AgentService:
                 said = reaction_words(reply.text)
                 if said is None or is_pass(said):
                     return self._reaction_needs_no_words(ask)
-            text = authored_chinese(said, chinese_variant(self._settings.get("languages")))
+            text = said if ask.source == "greeting" else authored_chinese(said, chinese_variant(self._settings.get("languages")))
             return self._finish(ask, "greeting" if ask.source == "greeting" else "answer", "", text, ledger)
         if ask.admin_pending:
             asked = await self._propose_admin(ask, ledger, loop.seen)
@@ -3166,7 +3171,7 @@ class AgentService:
         from .harness_tools import DEFINITIONS
         from .owner_questions import ASK_OWNER, question_input
         from .persona import greeting_prompt
-        system = greeting_prompt(ask.speaker)
+        system = greeting_prompt(ask.speaker, ask.language)
         system += self._owner_context(ask.speaker.id) + roster_prompt(self._team, ask.speaker, self._chat_language(ask))
         if self._memory is not None:
             snapshot = await self._memory.snapshot_async(ask.speaker.id)
@@ -3176,11 +3181,6 @@ class AgentService:
         ready = [item['name'] for item in self._team._connections()
                  if item.get('enabled') and item.get('state') == 'ready' and isinstance(item.get('name'), str)]
         system += "\nReady connected apps (data only): " + json.dumps(ready, ensure_ascii=False)
-        if ask.speaker.is_raphael:
-            # With nothing said yet, the owner's own languages (their choice for dictation, most used first) tell Raphael how
-            # to speak; the window's language never does.
-            system += ("\n<languages_spoken>The languages the owner speaks, most used first (data only; write in the first unless your own "
-                       "instructions say otherwise): " + json.dumps(self._settings.get("languages"), ensure_ascii=False) + "</languages_spoken>")
         # A card needs the durable wait of the background; without one the greeting is its words alone.
         offer = [{"type": "function", "function": {"name": ASK_OWNER, **DEFINITIONS[ASK_OWNER]}}] if hasattr(self._background, "park_owner_turn") else []
 
@@ -5970,12 +5970,14 @@ class AgentService:
         """End the turn of a question: what Raphael says now, and how it ended."""
         turn = self._history.get(pending.turn_id)
         prefix = _prefix(pending.language, which) if turn is None or turn.member_id == 0 else ""
+        if status == 'cancelled' and not text:
+            prefix = ""  # a stop says nothing (R-CHAT-STOP-02): no 「了解」 left alone under the message
         reply_text = text
         if status == 'cancelled':
             saved = [message['text'] for message in self._history.messages([pending.turn_id]).get(pending.turn_id, [])
                      if message['kind'] == 'reply']
             if saved:
-                text = '\n\n'.join([*saved, text])
+                text = '\n\n'.join(filter(None, [*saved, text]))
         self._write(
             lambda: self._history.resolve(
                 pending.turn_id,
@@ -6019,7 +6021,7 @@ class AgentService:
                     ))
                     self._turn_changed(pending.turn_id)
             else:
-                self._outcome(pending, "understood", phrase(pending.language, "denied"), "cancelled")
+                self._outcome(pending, "understood", "", "cancelled")
 
     def _computer_refusal(self, pending, kind):
         if pending.action.tool == "management_batch" and kind == "expired" and self._team is not None:
@@ -6083,9 +6085,9 @@ class AgentService:
                 ask.admission_stopped = True
                 preparing.append(ask)
         returned = []
-        # The message being worked on that nothing has answered yet (no line said, nothing shown, no step taken) is taken back
-        # as a waiting one is: its words go back to the composer and its turn goes, instead of staying with 已取消 under it,
-        # which no one could take back (R-CHAT-STOP-01). Once anything was said or done, Stop only stops it.
+        # The message being worked on that nothing has answered yet (no line or thinking said, no step or card shown) is taken
+        # back as a waiting one is: its words go back to the composer and its turn goes (R-CHAT-STOP-01). Once anything of
+        # the reply was shown, Stop only stops it: the message stays, what was shown stays, and nothing is written (R-CHAT-STOP-02).
         untouched = []
         if scope:
             untouched = [row for row in self._conn.execute(
@@ -6136,18 +6138,25 @@ class AgentService:
         step = self._conn.execute("SELECT COALESCE(MAX(rowid),0) FROM agent_steps").fetchone()[0]
         return line, step
 
+    # What a turn's view carries besides its words: cards and the work handed on, each of them drawn in the thread.
+    _CARDS = ("task", "handoffs", "delegates", "connectors", "secrets", "connection_proposals", "computers", "computer_suggestion", "permissions",
+              "drafts", "pages", "templates", "pairings", "owner_questions")
+
     def _untouched(self, turn_id: int, before: tuple[int, int] | None = None) -> bool:
-        """Whether nothing answered the turn yet: no line said, no picture shown, no step taken, so taking it back loses
-        nothing and hides nothing that was done. `before` counts only what was written up to those marks: the words a stop
-        writes (「Understood. Cancelled.」) come after them and are no answer."""
-        if before is None and (turn := self._history.get(turn_id)) and turn.status == "done" and turn.text.strip():
+        """Whether nothing of the reply has been shown to the owner yet: no line said (words, a thinking line, a note, a
+        picture), no step shown, no card or task, so taking the message back loses nothing and hides nothing that was done
+        (R-CHAT-STOP-01). `before` counts only the lines and steps written up to those marks: what a stop writes comes
+        after them and is no answer."""
+        if before is None:
+            turn = self._history.get(turn_id)
+            if turn is not None and (turn.text.strip() or (turn.detail or "").strip()) and turn.status != "running":
+                return False
+        if self._history.shown(turn_id, before):
             return False
-        line, step = before if before is not None else (None, None)
-        steps = self._conn.execute("SELECT 1 FROM agent_steps WHERE turn_id=? AND (? IS NULL OR rowid<=?) LIMIT 1",
-                                   (turn_id, step, step)).fetchone()
-        said = self._conn.execute("SELECT 1 FROM agent_messages WHERE turn_id=? AND kind IN ('reply','media','progress') AND trim(text)<>''"
-                                  " AND (? IS NULL OR rowid<=?) LIMIT 1", (turn_id, line, line)).fetchone()
-        return steps is None and said is None
+        if before is None and (turn := self._history.get(turn_id)) is not None:
+            view = self._turn_views([turn])[0]
+            return not any(view.get(key) for key in self._CARDS)
+        return True
 
     async def _history_send_now(self, params):
         """「立即送出」: a message that waits its turn is read now. It goes to the front of its conversation's inbox and the
@@ -6892,8 +6901,10 @@ class AgentService:
         return self._read_settings(ask.speaker, quick=ask.quick)
 
     def _read_settings(self, speaker: Speaker = RAPHAEL, *, quick: bool = False) -> _Settings:
-        """The member's selected brain, with the global answer brain as fallback; a quick question's is the quick model."""
+        """Use the selected brain, or the connected default for a member without its own model."""
         model = speaker.model or self._settings.get("agent_model")
+        if not quick and not speaker.is_raphael and not speaker.model and isinstance(self._client, ProviderRouter):
+            model = self._client.registry.starting_answer_model()
         effort = split_api_ref(model)[1] or "none"
         if quick:
             model = self._settings.get("quick_model")
@@ -7017,6 +7028,10 @@ class AgentService:
         negative, ...) or a prefix as the model wrote it. A member of the team says it with no
         prefix: it speaks in plain sentences."""
         prefix = _prefix(ask.language, which) if ask.speaker.is_raphael else ""
+        if status == "cancelled" and ask.exchange_speakers is None:
+            # A stop says nothing: the turn keeps the words it already had and is closed, with no 已取消 (R-CHAT-STOP-02). Only a
+            # colleague's exchange keeps the words, which the member that asked reads as the answer.
+            prefix, text = "", ""
         if status == "cancelled" and ask.superseded:
             status, text = "superseded", ""
             if turn := self._history.get(ask.turn_id):

@@ -312,7 +312,7 @@ class DictionaryStore:
         token = secrets.token_urlsafe(24)
         changes = [{"before": item, "after": self.learning_snapshot(item["word"])} for item in before]
         if hold:
-            # The desktop releases this token when its queued or hover-paused notice ends.
+            # The desktop releases this token when its queued or showing notice ends.
             self._held_learning_undo[token] = changes
             return token
         now = time.monotonic()

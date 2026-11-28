@@ -2,6 +2,11 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  // What a server on this computer lists (LM Studio in the provider editor's scenes).
+  const LOOK_LOCAL_MODELS = [
+    { id: "qwen3-8b", name: "Qwen3 8B", context: 40960, vision: false, tools: true, audio_in: false, price_in: null, price_out: null },
+    { id: "gemma-3-12b", name: "Gemma 3 12B", context: 131072, vision: true, tools: true, audio_in: false, price_in: null, price_out: null },
+  ];
   if (variant.computerSuggestion) {
     const turn = data.turns.find(turn => turn.id === 2);
     const toHost = variant.computerSuggestion === "this-pc";
@@ -104,6 +109,16 @@ export function installMock(fixture, config = {}, target = window) {
     // R-UI-163: the member is still thinking about the owner's message and has sent no bubble for it, so 編輯 takes it into the composer.
     if (variant.ownerSkillLinks) turn.messages.push({ seq: 1, kind: "event", at_ms: data.now, text: JSON.stringify({ type: "skill_unavailable", name: "code-review", reason: "archive" }) });
     if (variant.ownerThinking) Object.assign(turn, { status: 'running', prefix: '', text: '', messages: [], reactions: {} });
+    // What the member has shown of its reply when the owner presses Stop (R-CHAT-STOP-02): nothing (the message is taken back), a thinking line,
+    // words, a progress line or a step (the message stays, as it is).
+    if (variant.stopShown) {
+      Object.assign(turn, { steps: [], drafts: [], permissions: [], owner_questions: [], task: null });
+      const said = { thinking: [{ seq: 1, kind: 'thinking', text: '先把摘要的來源、日期和不確定的地方分開，再挑出三個重點。' }],
+        words: [{ seq: 1, kind: 'reply', text: '好，我先看一下這份範例研究摘要。' }], progress: [{ seq: 1, kind: 'progress', text: '正在讀範例摘要' }] }[variant.stopShown];
+      if (said) turn.messages = said.map(message => ({ ...message, at_ms: data.now }));
+      if (variant.stopShown === 'card') Object.assign(turn, { status: 'confirm', permissions: structuredClone(data.permissionTurns.local.turn.permissions) });
+      if (variant.stopShown === 'step') turn.steps = [{ kind: 'tool', tool: 'web_search', server: 'Raphael', outcome: 'ok', ms: 640, reason: null, at_ms: data.now }];
+    }
     // The owner's message was edited after its member answered it: the history's turn is its second version, the first is kept
     // beside it for `agent.history.version` (the core's `agent_turn_versions`).
     if (variant.ownerVersions) {
@@ -112,6 +127,9 @@ export function installMock(fixture, config = {}, target = window) {
       data.turnVersions = { [turn.id]: [first] };
     }
     data.turns = data.turns.filter(item=>item.member_id!==1).concat(turn);
+    // An earlier exchange stands before the message: taking the message back leaves a conversation that is not empty (an empty one greets, R-UI-183).
+    if (variant.stopShown) data.turns.unshift({ ...structuredClone(base), id: 8200, session_id: 'look-earlier', question: '早安，今天可以先看哪些事？', text: '早安，先從範例研究摘要開始。', status: 'done',
+      created_at_ms: data.now - 3_600_000, messages: [{ seq: 1, kind: 'reply', text: '早安，先從範例研究摘要開始。', at_ms: data.now - 3_600_000 }], steps: [], drafts: [], permissions: [], owner_questions: [], reactions: {}, attachments: [] });
     // Something the owner sent after that message, answered: the earlier one is no longer their last, and offers no 編輯.
     if (variant.ownerLater) data.turns.push({ ...structuredClone(turn), id: 8205, session_id: 'look-later', question: '再幫我把時程表也加進去。', text: '好，時程表也加進去了。', created_at_ms: data.now + 60_000, reactions: {} });
     if (variant.ownerEdit === 'placed') {
@@ -138,6 +156,26 @@ export function installMock(fixture, config = {}, target = window) {
       const at = base.created_at_ms - (count - i) * 60000;
       return { ...structuredClone(base), id: 9300 + i, session_id: `long-${i}`, created_at_ms: at, question: `第 ${i + 1} 個問題`, text: `${i + 1}. ${words}`,
         messages: [{ seq: 1, kind: "reply", text: `${i + 1}. ${words}`, at_ms: at }], steps: [], attachments: [] };
+    }));
+  }
+  // A long conversation as it is really written, for the drags of the panes' edges (R-PERF-27): turns of every length, so each one wraps
+  // again at its own width and the lines change all the way down; owner messages long enough to reach the clip of their preview (eight
+  // lines) at the widths a drag goes through; lists, a code block and figures among the Chinese.
+  if (variant.dragThread) {
+    const base = data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11);
+    const count = typeof variant.dragThread === "number" ? variant.dragThread : 120;
+    const said = "這一段接著往下談，欄寬一變，每一行落在哪裡就跟著換，讀的那一行要留在原處。";
+    const figures = "2026/11/27 的進度是 3.5 小時，預計 14:45 前完成 12 項，剩下 8 項排在 2026/12/04 之後，合計 40% 左右。";
+    data.turns = data.turns.concat(Array.from({ length: count }, (_, i) => {
+      const at = base.created_at_ms - (count - i) * 60000;
+      const paragraphs = Array.from({ length: 2 + (i * 7) % 4 }, (_, k) => k % 3 === 2 ? figures.slice(0, 20 + (i * 13 + k * 29) % 50) : said.repeat(1 + (i + k) % 3).slice(0, 18 + (i * 11 + k * 17) % 60));
+      const list = i % 3 === 0 ? `\n\n- ${said.slice(0, 12 + i % 9)}\n- ${figures.slice(0, 24 + i % 30)}\n- ${said.slice(4, 20 + (i * 3) % 14)}` : "";
+      const code = i % 7 === 4 ? `\n\n\`\`\`python\nresult = ${i}\n\`\`\`` : "";
+      const text = `${i + 1}. ${paragraphs.join("\n\n")}${list}${code}`;
+      // Every fourth question is a long one that fills the clip of its preview at a narrow pane and not at a wide one.
+      const question = i % 4 === 1 ? Array.from({ length: 4 + i % 7 }, (_, k) => said.slice(0, 14 + (i * 5 + k * 9) % 40)).join("\n") : `第 ${i + 1} 個問題：${said.slice(0, 8 + (i * 5) % 30)}`;
+      return { ...structuredClone(base), id: 9300 + i, session_id: `drag-${i}`, created_at_ms: at, question, text,
+        messages: [{ seq: 1, kind: "reply", text, at_ms: at }], steps: [], attachments: [] };
     }));
   }
   if (variant.calmThread) {
@@ -241,6 +279,11 @@ export function installMock(fixture, config = {}, target = window) {
   }
   // The owner turned OpenRouter off: the models chosen on it stay chosen, and say so.
   if (variant.openrouterOff) data.providers = data.providers.map(provider => provider.id === "openrouter" ? { ...provider, enabled: false } : provider);
+  // Settings › 模型's editor for a provider: the kinds that carry a key's page and a server on this computer, and one such server saved.
+  if (variant.moreProviders) data.providerKinds.push(
+    { kind: "openai", name: "OpenAI", group: "official", fields: ["key"], default_base_url: "https://api.openai.com/v1", docs_url: "https://platform.openai.com/api-keys", available: true, features: ["text", "stt", "image"] },
+    { kind: "lmstudio", name: "LM Studio", group: "local", fields: ["base_url", "key"], default_base_url: "http://localhost:1234/v1", docs_url: "https://lmstudio.ai/docs/developer/openai-compat", available: true, local_context_hint: true, features: ["text"] });
+  if (variant.lmstudioSaved) data.providers.push({ id: "p-lmstudio", kind: "lmstudio", name: "LM Studio", base_url: "http://localhost:1234/v1", has_key: false, enabled: true, status: "ok", models: 2 });
   // The quick questions chosen on the ChatGPT plan: signed out, ChatGPT stays listed to sign in again (R-DEFAULT-05).
   if (variant.quickChatgpt) data.settings.quick_model = "@chatgpt:gpt-6-sol";
   if (variant.routineEmpty) data.routines = [];
@@ -416,7 +459,7 @@ export function installMock(fixture, config = {}, target = window) {
     }
     data.pluginCatalog.push(data.pluginCatalog[6]);
   }
-  Object.assign(data.device, { appearance: config.theme ?? "light", ui_language: config.locale ?? "zh-TW", onboarded: !variant.onboarding });
+  Object.assign(data.device, { appearance: config.theme ?? "light", ui_language: config.locale ?? "zh-TW", onboarded: !variant.onboarding, tour_offered: !variant.tourUnanswered });
   // The composer's row at its fullest (R-UI-160): a permission mode with a long word (`mode`, in `language` when one is named)
   // and the scene's `model`, with a depth beside it.
   if (variant.composerLongRow) {
@@ -727,8 +770,10 @@ export function installMock(fixture, config = {}, target = window) {
   }
   // A key a member asked for, for a program in its computer (`request_secret` with `key`): the secure card names the variable and its purpose.
   if (variant.keyCard) {
+    const member = variant.keyCardMember ?? 1;
+    const conversation = data.conversations.find(item => item.member_id === member && item.is_default);
     const turn = structuredClone(data.secretTurns.notion);
-    Object.assign(turn, {id: 133, session_id: "look-computer-key", member_id: 1, conversation_id: 11, question: "幫我用 OpenRouter 跑價格腳本。", text: "請在安全卡片貼上金鑰，儲存後我會接著執行。", steps: [], messages: []});
+    Object.assign(turn, {id: 133, session_id: "look-computer-key", member_id: member, conversation_id: conversation.id, question: "幫我用 OpenRouter 跑價格腳本。", text: "請在安全卡片貼上金鑰，儲存後我會接著執行。", steps: [], messages: []});
     turn.secrets = [{...turn.secrets[0], id: "card-key", name: "OPENROUTER_API_KEY", secret: "OPENROUTER_API_KEY", key: true, purpose: "價格腳本要呼叫模型"}];
     data.turns.push(turn);
   }
@@ -1089,6 +1134,13 @@ export function installMock(fixture, config = {}, target = window) {
     claude.windows = [{ period: "weekly", remaining_percent: 3, resets_at: Math.round(data.now / 1000) + 3 * 86400, updated_at_ms: data.now - 20 * 60000 }, ...claude.windows.filter(window => window.period !== "weekly")];
   }
   if (variant.allowanceTwo) data.allowances.brains = data.allowances.brains.filter(brain => brain.id === "claude" || brain.id === "codex");
+  // The owner's Codex on 11/28 (R-QUOTA-02): its five-hour window spent, the weekly one at 84% left, and 20,636 credits it ran on.
+  if (variant.allowanceCredits) {
+    const codex = data.allowances.brains.find(brain => brain.id === "codex"), now = Math.round(data.now / 1000);
+    codex.source = "live";
+    codex.windows = [{ period: "fiveHour", remaining_percent: 0, resets_at: now + 3600, status: "rejected" }, { period: "weekly", remaining_percent: 84, resets_at: now + 6 * 86400, status: "allowed" }];
+    codex.credits = { has_credits: true, unlimited: false, balance: 20636.3 };
+  }
   // A mix of every source (R-SIDE-02): Codex read live at 65% used with five days to go; Claude's last report named a window whose reset has since passed
   // (allowed, no percentage); the ChatGPT sign-in, whose plan has no number to read; and an OpenRouter key with its own monthly usage and a limit.
   if (variant.usageOwner) {
@@ -1186,6 +1238,8 @@ export function installMock(fixture, config = {}, target = window) {
     for (const turn of data.turns) if ((turn.pages ?? []).some(page => page.id === id)) notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
     notify("RoomsChanged", { room_id: 1 });
   };
+  // The import of Team skills that is held (`skillImportPending`) reaches a step: the core's `skills.import_progress`, as the shell passes it on.
+  state.importStep = (step, done, total) => state.emit({ type: "SkillImportProgress", import_id: state.pendingImport, step, done: done ?? null, total: total ?? null });
   // The member has made up its mind about the reaction it is analysing (`reactionAsk`): it asks what was wrong, or decides that no
   // words are needed and the turn is taken out of the thread, as the core does. The window is told as the core tells it.
   state.reactionEnds = () => {
@@ -1471,7 +1525,13 @@ export function installMock(fixture, config = {}, target = window) {
     // Settings reads the hidden list as it opens, before the list's section is drawn; the sidebar keeps the roster it already read.
     switch (method) {
       // Team skills (skill-library.ts, members/service.py skills.library.*).
-      case "skills.library.list": return { packages: data.skillLibrary, members: data.members.filter(m => m.id !== 0).map(m => ({ id: m.id, name: m.name })) };
+      case "skills.library.list": {
+        const team = data.members.filter(m => m.id !== 0).map(m => ({ id: m.id, name: m.name }));
+        // `skillMembers`: a team of this many characters (the access menu stays short however many there are).
+        const names = ["小晴", "小森", "小葵", "阿宏", "小米", "老周", "Mia", "Noah", "Ava", "小月", "阿德", "Leo"];
+        for (let at = team.length; at < (variant.skillMembers ?? 0); at++) team.push({ id: 100 + at, name: `${names[at % names.length]}${Math.floor(at / names.length) + 1}` });
+        return { packages: data.skillLibrary, members: team };
+      }
       case "skills.library.update": {
         const pack = data.skillLibrary.find(item => item.key === p.key);
         if (!pack) throw new Error("Invalid params: unknown package");
@@ -1482,20 +1542,33 @@ export function installMock(fixture, config = {}, target = window) {
         if (p.rename) pack.skills.find(skill => skill.id === p.rename.id).name = p.rename.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
         return { package: pack };
       }
+      case "skills.library.cancel_import": {
+        // The core ends the held import and keeps nothing; the import itself then answers `cancelled`.
+        if (!state.rejectImport || p.import_id !== state.pendingImport) return { cancelled: false };
+        const reject = state.rejectImport;
+        state.rejectImport = null;
+        reject(new Error("[-32602] Invalid params: cancelled: the import was stopped"));
+        return { cancelled: true };
+      }
       case "skills.library.import": {
+        const importId = p.import_id;
         // The one box sends a pasted link as text; the core says what it is (members/skill_intake.py `kind_of`).
         const typed = typeof p.text === "string" ? p.text.trim() : "";
         const asked = p.source ?? (typed && !/\s/.test(typed) ? typed : undefined);
         // What is no skill is handed over (`skillHandoff`: what the box was given, and the facts the core answers with), never made into one here.
         const handed = (variant.skillHandoff ?? []).find(item => [p.source, typed, p.file?.name, p.files?.[0]?.path].includes(item.match));
         if (handed) return { handoff: handed.handoff };
+        // Pasted text of a skill that sends the model to other files cannot bring them (members/service.py `_text_alone_is_a_skill`).
+        if (variant.needsFiles && typeof p.text === "string" && /actions\//.test(p.text) && !p.alone) {
+          throw new Error(`[-32602] Invalid params: source: this text names other files that pasted text cannot bring: choose the skill's folder instead [[${JSON.stringify({ reason: "needs_files", file: "actions/how.md", files: ["actions/how.md"] })}]]`);
+        }
         p = asked !== undefined && p.source === undefined ? { source: asked } : p;
         if (p.source === "nothing/here") throw new Error("[-32602] Invalid params: not_found: no SKILL.md found");
         // A cause the core names (members/skill_errors.py): its kind leads the message and its detail rides at the end. The
         // scene's fixture holds the refusal of each source it fails.
         const refusal = variant.importRefusal?.[p.source];
         if (refusal) throw new Error(`[-32602] Invalid params: ${refusal[0]}: the core's own words [[${JSON.stringify({ reason: refusal[1], ...refusal[2] })}]]`);
-        if (variant.skillImportPending) return new Promise(() => {});
+        if (variant.skillImportPending) return new Promise((resolve, reject) => { state.pendingImport = importId; state.rejectImport = reject; });
         if (variant.importMade?.[p.source]) {
           // What the import makes (a plugin of skills that share a name prefix, or a package that left some out), by source.
           const made = variant.importMade[p.source];
@@ -1540,9 +1613,10 @@ export function installMock(fixture, config = {}, target = window) {
         // made by the core itself for each theme before the run (runner.mjs `pageBaseDocuments`).
         // `pageWindow`: a page laid out as a screen, a side column one window tall plus its padding (R-PAGE-12).
         // `pageRail`: a sticky rail one window tall with its buttons at its foot beside a long article (R-PAGE-10).
+        // `pageReading`: a tall reading page that paints its own root and has a light theme of its own (R-PAGE-10, R-PAGE-11).
         // A checklist as the core serves it: with nothing left on it, or with what the owner left on it (R-PAGE-14).
         if (p.id === "page-state") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageStateDocs[variant.pageState === "saved" ? "saved" : "fresh"][p.theme === "dark" ? "dark" : "light"])}`, title: "出發前清單", rev: 1, height: 420, source: "html", server: null };
-        if (p.id === "page-base") return { url: `data:text/html;charset=utf-8,${encodeURIComponent((variant.pageRail ? data.pageRailDocs : variant.pageWindow ? data.pageWindowDocs : data.pageBaseDocs)[p.theme === "dark" ? "dark" : "light"])}`, title: "東京行程候選清單", rev: 1, height: 900, source: "html", server: null };
+        if (p.id === "page-base") return { url: `data:text/html;charset=utf-8,${encodeURIComponent((variant.pageReading ? data.pageReadingDocs : variant.pageRail ? data.pageRailDocs : variant.pageWindow ? data.pageWindowDocs : data.pageBaseDocs)[p.theme === "dark" ? "dark" : "light"])}`, title: "東京行程候選清單", rev: 1, height: 900, source: "html", server: null };
         // Not a file of the dev server, which would write its own client into the page.
         // A page its member changed (`state.updatePage`) is another page: the news page's last heading, the product's price.
         if (p.id === "page-news") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageNewsHtml.replace("__THEME__", p.theme === "dark" ? "dark" : "").replace("練習問題", (state.pageRevs[p.id] ?? 1) > 1 ? "練習問題（已更新）" : "練習問題"))}`, title: "每日新聞日文學習 2026-11-11", rev: state.pageRevs[p.id] ?? 1, height: 900, source: "html", server: null };
@@ -2025,11 +2099,24 @@ export function installMock(fixture, config = {}, target = window) {
         const queued = origin ? data.turns.filter(turn => turn.member_id === origin.member_id && turn.conversation_id === origin.conversation_id && turn.status === "queued") : [];
         const returned = queued.map(turn => ({session_id:turn.session_id,text:turn.question,attachments:turn.attachments,quote:turn.quote}));
         data.turns = data.turns.filter(turn => !queued.includes(turn));
-        // As the core settles a stopped request: denied, with no answer, keeping its public steps.
+        // As the core settles a stopped request (R-CHAT-STOP-01, R-CHAT-STOP-02): a message nothing of whose reply was shown (no words, no
+        // thinking line, no step, no card) is taken back and its words returned; one that showed anything stays as it is, closed, with no words added.
+        const cards = ["drafts", "permissions", "owner_questions", "connectors", "secrets", "pages", "computers", "handoffs", "delegates", "templates", "pairings"];
+        const answered = turn => !!(turn.text?.trim() || turn.detail?.trim() || turn.messages?.some(message => message.text?.trim())
+          || (turn.steps ?? []).some(step => !(step.kind === "model" && step.outcome === "ok") && step.outcome !== "cancelled")
+          || cards.some(key => turn[key]?.length) || turn.task);
+        const taken = [];
         for (const turn of data.turns.filter(item => item.session_id === p.session_id && item.member_id === (p.member_id ?? 0) && ["running", "confirm"].includes(item.status))) {
-          Object.assign(turn, { status: "denied", prefix: "了", text: "已取消。", messages: turn.messages.filter(message => message.kind !== "reply") });
+          if (!answered(turn)) {
+            data.turns = data.turns.filter(item => item !== turn);
+            taken.push({session_id:turn.session_id,text:turn.question,attachments:turn.attachments,quote:turn.quote});
+          } else {
+            for (const card of turn.permissions ?? []) if (card.state === "pending") card.state = "cancelled";
+            Object.assign(turn, { status: "cancelled", prefix: "", text: turn.messages.filter(message => message.kind === "reply").map(message => message.text).join("\n\n") });
+          }
           notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         }
+        returned.unshift(...taken);
         return { stopped: true, ...(returned.length ? {returned} : {}) };
       }
       // Send Now ends the current work with its public output intact and starts the queued message.
@@ -2237,7 +2324,20 @@ export function installMock(fixture, config = {}, target = window) {
         return { room };
       }
       case "rooms.delete": data.rooms = data.rooms.filter(item => item.id !== p.room_id); return { deleted: true };
-      case "rooms.stop": { for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id && ["running", "queued"].includes(item.state))) exchange.stop_requested = 1; for(const exchange of data.roomExchanges.filter(item=>item.room_id===p.room_id)){exchange.state="stopped";exchange.active_turn=null;}for(const message of data.messages.filter(item=>item.room_id===p.room_id&&item.status==="running")){message.status="error";message.text="已停止工作。";}for(const task of data.roomHandoffs.filter(item=>["queued","running","waiting"].includes(item.state)))task.state="cancelled";data.messages.push({...data.roomWrapupMessage,id:nextId(data.messages),reply_to:null,reply_to_member:null,text:"### 結論\n已停止本次工作，已完成的動作保留。\n\n### 待決定\n尚未完成的工作已取消。\n\n### 下一步\n等待你的新指示。"});notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true }; }
+      case "rooms.stop": {
+        const spoke = data.messages.some(item => item.room_id === p.room_id && item.member_id !== null && item.kind !== "wrapup" && item.status !== "running" && (item.text ?? "").trim());
+        for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id && ["running", "queued"].includes(item.state))) {
+          exchange.stop_requested = 1; exchange.reason = "owner";
+          for (const intent of exchange.reply_intents ?? []) if (["queued", "running"].includes(intent.state)) Object.assign(intent, { state: "blocked", reason: "owner" });
+        }
+        if (spoke) {
+          // A member had already shown something: Stop only stops. No wrap-up, and the replies that never began leave no mark.
+          for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id)) { exchange.state = "stopped"; exchange.active_turn = null; exchange.wrapup_sent = 1; }
+          data.messages = data.messages.filter(item => !(item.room_id === p.room_id && item.status === "running" && !(item.text ?? "").trim()));
+          for (const task of data.roomHandoffs.filter(item => ["queued", "running", "waiting"].includes(item.state))) task.state = "cancelled";
+          notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true };
+        }
+        for(const exchange of data.roomExchanges.filter(item=>item.room_id===p.room_id)){exchange.state="stopped";exchange.active_turn=null;}for(const message of data.messages.filter(item=>item.room_id===p.room_id&&item.status==="running")){message.status="error";message.text="已停止工作。";}for(const task of data.roomHandoffs.filter(item=>["queued","running","waiting"].includes(item.state)))task.state="cancelled";data.messages.push({...data.roomWrapupMessage,id:nextId(data.messages),reply_to:null,reply_to_member:null,text:"### 結論\n已停止本次工作，已完成的動作保留。\n\n### 待決定\n尚未完成的工作已取消。\n\n### 下一步\n等待你的新指示。"});notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true }; }
       case "rooms.send": { if (variant.ownerQuestion) for (const turn of data.turns) for (const item of turn.owner_questions ?? []) if (item.state === "asked" && item.kind === "ask_owner") { item.state = "cancelled"; item.result = { state: "cancelled", by: "message", said: p.text }; turn.task = { ...turn.task, state: "done", waiting_owner: 0 }; } const message = { thread_id:p.thread_id ?? 1, id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message", attachments: (p.attachments ?? []).map((file, index) => { const id = `${"f".repeat(30)}${String(index).padStart(2, "0")}.png`; (data.keptFiles ??= {})[id] = { mime: file.mime, data: file.data }; return { id, name: file.name, mime: file.mime }; }) }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
       case "brains.cli":
         // As the core does: a CLI's models come after the first read, in the background. With `codexLate` they come when the scene's
@@ -2279,7 +2379,23 @@ export function installMock(fixture, config = {}, target = window) {
       case "models.local": return { models: data.localModels };
       case "providers.list": return { providers: data.providers };
       case "providers.kinds": return { kinds: data.providerKinds };
-      case "providers.models": return { models: data.catalog.llm.map(model => ({ id: model.id, name: model.name, context: model.context_length, vision: true, tools: true, audio_in: false, price_in: model.input_per_mtok, price_out: model.output_per_mtok })) };
+      case "providers.test": {
+        if (p.key === "look-refused-key") return { ok: false, kind: "auth", models: 0 };
+        if (Object.keys(p).length === 1 && p.id) {
+          return { ok: true, models: p.id === "p-lmstudio" ? LOOK_LOCAL_MODELS.length : data.catalog.llm.length };
+        }
+        const found = LOOK_LOCAL_MODELS.map(model => ({ ...model, context_warning: false }));
+        return { ok: true, models: found.length, found };
+      }
+      case "providers.add": {
+        const kind = data.providerKinds.find(item => item.kind === p.kind);
+        const provider = { id: `p-${p.kind}`, kind: p.kind, name: p.name ?? kind.name,
+          base_url: p.base_url ?? kind.default_base_url, has_key: !!p.key, enabled: true, status: "ok", models: LOOK_LOCAL_MODELS.length };
+        data.providers.push(provider);
+        notify("ProvidersChanged");
+        return { provider };
+      }
+      case "providers.models": if (p.id === "p-lmstudio") return { models: LOOK_LOCAL_MODELS }; return { models: data.catalog.llm.map(model => ({ id: model.id, name: model.name, context: model.context_length, vision: true, tools: true, audio_in: false, price_in: model.input_per_mtok, price_out: model.output_per_mtok })) };
       case "languages.list": return { groups: data.languages };
       case "audio.devices": return data.audioDevices;
       case "audio.monitor": return {};
@@ -2623,6 +2739,11 @@ export function installMock(fixture, config = {}, target = window) {
         return;
       }
       if (command === "learned_layout" || command === "learned_finish") return;
+      if (command === "permission_guide_subscribe") {
+        for (const shown of variant.permissionGuide ?? []) args.channel.onmessage({ ...copy(shown), theme: config.theme ?? "light" });
+        return;
+      }
+      if (command === "permission_guide_layout" || command === "permission_guide_close") return;
       if (command === "floating_controls") return;
       if (command === "overlay_log") return;
       // The page answering the native frame probe (recovery.rs); the check overlay-frame-ack reads it from the calls.
@@ -2638,6 +2759,13 @@ export function installMock(fixture, config = {}, target = window) {
       }
       if (command === "main_events") { state.channel = args.channel; return; }
       if (command === "main_window_forward") return;
+      if (command === "window_hotkey" && variant.tourQuickAsk && args.memberId === undefined) {
+        if (args.kind === "agent_down" || args.kind === "agent_up") {
+          notify("Dictation", { phase: args.kind === "agent_down" ? "listening" : "processing", agent: true });
+          return;
+        }
+        if (args.kind === "dictation_prefix_down" || args.kind === "dictation_prefix_up" || args.kind === "dictation_blur") return;
+      }
       if (command === "window_hotkey" && variant.ownerVoice && ["agent_down", "agent_up"].includes(args.kind)) {
         const member = args.memberId ?? 0;
         if (!data.conversations.some(c => c.id === args.conversationId && c.member_id === member)) throw new Error("Composer voice must name its own conversation");
@@ -2676,6 +2804,15 @@ export function installMock(fixture, config = {}, target = window) {
         return null;
       }
       if (command === "agent_ask_text") {
+        if (variant.tourUnanswered) {
+          const id = nextId(data.turns);
+          const member = args.memberId ?? 0;
+          const conversation = args.conversationId ?? data.conversations.find(c => c.member_id === member && c.is_default)?.id;
+          data.turns.push({ id, member_id: member, conversation_id: conversation, session_id: args.requestId, question: args.text,
+            source: "app", route: "answer", status: "done", text: "", messages: [], steps: [], attachments: [], created_at_ms: data.now + 1 });
+          notify("AgentTurn", { turn_id: id, member_id: args.memberId ?? 0 });
+          return null;
+        }
         if (variant.cardSendFailure && !variant.cardSendRetried) { variant.cardSendRetried = true; throw new Error("Synthetic send unavailable"); }
         if (variant.ownerAddition || variant.queuedOwner) {
           const active = data.turns.find(turn => turn.status === "running" && turn.member_id === args.memberId);
@@ -2903,6 +3040,8 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "open_library_file") { state.openedLibraryFile = { member_id: args.memberId, id: args.id }; return; }
       // A report saved as a file (report_save, which the core writes): in Downloads when the work folder cannot be used.
       if (command === "report_save") return { place: "downloads", folder: "Downloads" };
+      // The one panel of 選擇檔案 gives the path the owner chose (`pickedSource`), or none when they cancel.
+      if (command === "pick_import_source") return variant.pickedSource ?? null;
       if (command === "pick_output_folder") return variant.folderCancel ? null : data.colleagueSample.path;
       if (command === "member_template_file") {
         // `templateFile`: what the owner's file holds ("broken": cut short, "other": no template at all, "bom": saved by Notepad).
@@ -2912,7 +3051,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       if (command === "member_template_pending") return null;
       if (command === "save_usage_csv") { state.exported = args.csv; return true; }
-      if (["agent_page_shown", "hotkeys_pause", "hotkeys_practice", "plugin:event|unlisten", "plugin:window|set_focus", "plugin:window|minimize", "plugin:window|close", "plugin:window|start_dragging", "plugin:webview|set_webview_zoom"].includes(command)) return;
+      if (["agent_page_shown", "hotkeys_pause", "hotkeys_practice", "overlay_rehearse", "avatar_save", "device_computer_app_remove", "permission_guide_open", "copy_attachment", "plugin:event|unlisten", "plugin:window|set_focus", "plugin:window|minimize", "plugin:window|close", "plugin:window|start_dragging", "plugin:webview|set_webview_zoom"].includes(command)) return;
       return unsupported(command);
     },
   };

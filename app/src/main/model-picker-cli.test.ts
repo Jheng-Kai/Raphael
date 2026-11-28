@@ -150,7 +150,7 @@ test("a dialog handed to a replacement settings row keeps its draft and returns 
   expect(document.activeElement).toBe(picker.button);
 });
 
-test("local speech selection waits for confirmation, including downloads; delete asks in the red dialog first", async () => {
+test("local speech selection waits for confirmation, including downloads; delete asks in the quiet dialog first", async () => {
   const slot = document.createElement("div"); document.body.append(slot);
   const use = vi.fn(), remove = vi.fn(), cancel = vi.fn();
   picker = mountModelPicker(slot, { role: "stt", current: "cloud/speech", catalog: null, label: "Speech", onChoose: vi.fn(),
@@ -163,9 +163,9 @@ test("local speech selection waits for confirmation, including downloads; delete
   click('[data-dlg="use"]'); expect(use).toHaveBeenCalledWith("qwen3-asr");
   click('[data-act="local-menu"][data-name="sensevoice"]'); expect(document.querySelector('#app-popover [data-pick="delete"]')?.textContent).toContain("SenseVoice");
   const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve));
-  // The menu closes and the red dialog asks; Cancel does nothing, and only its red button deletes.
+  // The menu closes and the quiet dialog asks; Cancel does nothing, and only its confirmation button deletes.
   click('#app-popover [data-pick="delete"]'); expect(document.getElementById("app-popover")).toBeNull();
-  expect(document.querySelector(".mb-dialog.mb-delete h2")?.textContent).toContain("SenseVoice");
+  expect(document.querySelector(".mb-dialog.mb-delete.is-quiet h2")?.textContent).toContain("SenseVoice");
   expect(document.querySelector(".lm-confirm")).toBeNull();
   click('.mb-delete [data-dlg="cancel"]'); await settle();
   expect(remove).not.toHaveBeenCalled(); expect(document.querySelector(".mb-delete")).toBeNull();

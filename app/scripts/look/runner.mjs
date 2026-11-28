@@ -25,6 +25,8 @@ export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Google", "Gm
 LATIN_NAMES.push("1Password");
 // A project's branches are Git's, named as Git names itself (the branch card's notices).
 LATIN_NAMES.push("Git");
+// A local model of the provider editor's scenes is named as its maker names it.
+LATIN_NAMES.push("Gemma");
 // The shell a host repair is pasted into on Windows is named as Windows names it.
 LATIN_NAMES.push("PowerShell");
 // The app's own slash commands (app-commands.ts) are typed as they are in every language, as Claude Code's are.
@@ -144,6 +146,8 @@ export async function run(options) {
     if (options.selected.some(scene => scene.fixture?.pageWindow)) fixture.pageWindowDocs = await pageBaseDocuments(fixture.pageWindowHtml);
     // A two-column page whose rail is one window tall and sticky, its buttons at the rail's foot (R-PAGE-10).
     if (options.selected.some(scene => scene.fixture?.pageRail)) fixture.pageRailDocs = await pageBaseDocuments(fixture.pageRailHtml);
+    // A tall reading page with a light theme of its own, painted on its root: the page R-PAGE-10 and R-PAGE-11 are checked with (no band of the window's own colour).
+    if (options.selected.some(scene => scene.fixture?.pageReading)) fixture.pageReadingDocs = await pageBaseDocuments(fixture.pageReadingHtml);
     // A checklist page as the core serves it, with nothing left on it and with what the owner left on it (R-PAGE-14).
     if (options.selected.some(scene => scene.fixture?.pageState)) {
       const { html, saved } = JSON.parse(await readFile(join(import.meta.dirname, "fixtures/page-state.json"), "utf8"));
@@ -410,6 +414,19 @@ export async function run(options) {
         const image = `${scene.name}-${theme}-${width}.png`;
         await page.screenshot({ path: join(directory, image), type: "png" });
         result.image = image;
+        if (scene.afterCapture && !result.runtimeErrors?.some(error => error.kind === "scene")) {
+          try {
+            for (const step of scene.afterCapture) {
+              const assertion = await perform(page, step, directory);
+              if (assertion?.check) (result.assertions ??= []).push(assertion);
+            }
+          } catch (value) {
+            if (value.assertion) (result.assertions ??= []).push(value.assertion);
+            error("scene", value.message);
+          }
+          const errors = await page.evaluate(() => window.__look.errors);
+          for (const message of errors.slice(mockErrors.length)) error("ipc", message);
+        }
         if (scene.captureColumn) {
           const height = await page.evaluate(() => Math.min(6000, Math.ceil(document.querySelector('.thread')?.scrollHeight ?? document.querySelector('.ra-body')?.closest('.thread')?.scrollHeight ?? document.querySelector('.mb-chat')?.scrollHeight ?? 4000) + 300));
           await page.setViewport({width, height: Math.max(height, 4000)});

@@ -10,6 +10,7 @@ import { getLocale, setLocale, t } from "./i18n";
 import { setAvatar } from './avatar';
 import { stepOpenLayer } from "./dismissals";
 import { installNavInput } from "./nav-input";
+import { memberColor } from "./owner-bubble";
 
 test('an avatar repaint uses the loaded room and roster without IPC reads', async () => {
   const section=createRoomsSection();document.body.append(section);await flush();
@@ -25,6 +26,35 @@ let event:(e:any)=>void;
 let app:AppContext;
 const pane=async()=>{const view=createRoomPane(app,vi.fn());document.body.append(view.el);await view.open(1);return view;};
 const draft=(text:string)=>{const input=document.querySelector<HTMLTextAreaElement>("#room-message")!;input.value=text;input.dispatchEvent(new Event("input"));return input;};
+
+test.each([
+  ["owner question", 2, { owner_questions: [{ id: "date", member_id: 2, kind: "ask_owner", state: "asked", question: "Choose a date", options: [], free_text: true }] }],
+  ["pairing", 2, { pairings: [{ id: "pair", member_id: 2, platform: "telegram", code: "12345", who: "Alex", state: "pending" }] }],
+  ["key request", 1, { secrets: [{ id: "room-key", name: "Notes", secret: "NOTES_KEY", state: "pending" }] }],
+])("a room pill uses the card's speaker or asking member for a %s", async (_kind, memberId, turn) => {
+  type Intersection = (entries: Pick<IntersectionObserverEntry, "target" | "isIntersecting">[]) => void;
+  const callbacks = new Map<Element, Intersection>();
+  vi.stubGlobal("IntersectionObserver", class {
+    constructor(private callback: Intersection) {}
+    observe(target: Element) { callbacks.set(target, this.callback); }
+    unobserve(target: Element) { callbacks.delete(target); }
+    disconnect() {}
+  });
+  let view: Awaited<ReturnType<typeof pane>> | undefined;
+  try {
+    api.roomMessages.mockResolvedValue({ messages: [{ id: 22, member_id: 1, text: "Question", created: 1, status: "done", turn }] });
+    view = await pane();
+    const card = view.el.querySelector<HTMLElement>(".conversation-card")!;
+    const pill = view.el.querySelector<HTMLElement>(".card-float")!;
+    await vi.waitFor(() => expect(callbacks.has(card)).toBe(true));
+    callbacks.get(card)!([{ target: card, isIntersecting: false }]);
+    const { members } = await api.membersList();
+    expect(pill.style.getPropertyValue("--card-float-fill")).toBe(memberColor(members.find((m: Member) => m.id === memberId)));
+  } finally {
+    view?.close();
+    vi.unstubAllGlobals();
+  }
+});
 
 test("a room page appends to its composer and waits for the owner's send", async () => {
   const page = { id: "room-page-draft", title: "Sample page", rev: 0, height: 320, source: "html", server: null };
@@ -412,7 +442,9 @@ test("room rows expose rename, membership and confirmed deletion through more",a
  const more=section.querySelector<HTMLButtonElement>('[data-room-more="1"]')!;
  expect(more.getAttribute('aria-haspopup')).toBe('menu');more.click();
  expect([...document.querySelectorAll('#app-popover [data-pick]')].map(el=>(el as HTMLElement).dataset.pick)).toEqual(['pin','hide','rename','members','roles','delete']);
+ expect(document.querySelector('#app-popover .danger')?.getAttribute('data-pick')).toBe('delete');
  document.querySelector<HTMLElement>('[data-pick="delete"]')!.click();await flush();
+ expect(document.querySelector('.mb-delete:not(.is-quiet)')).not.toBeNull();
  expect(api.roomsDelete).not.toHaveBeenCalled();
  document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();await flush();
  expect(api.roomsDelete).not.toHaveBeenCalled();
@@ -501,6 +533,17 @@ test("a blocked reply is a line of the thread after its exchange, with its reaso
  const rows=[...document.querySelectorAll('.au-room-thread > li')].map(row=>row.matches('.room-intent-blocked')?row.textContent:(row as HTMLElement).dataset.roomMessage);
  expect(rows).toEqual(['1','2',"Alice couldn't reply: Rate limited for too many requests",'3',"Alice couldn't reply: Subscription quota used up","Alice couldn't reply: Something went wrong"]);
  expect(document.querySelector('.au-room-controls')!.textContent).toBe('');
+});
+
+test("the owner's Stop after a member spoke leaves no line for the members that had not (R-CHAT-STOP-02), before anyone spoke it does",async()=>{
+ const intent=(id:number,origin:number,reason:string)=>({id,origin_message_id:origin,source_message_id:origin,recipient_id:1,recipient_name:'Alice',state:'blocked',reason});
+ api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:null,text:'@Alice @Bob check',created:1,status:'done'},{id:2,member_id:0,text:'On it.',created:2,status:'done',origin_message_id:1},
+   {id:3,member_id:null,text:'@Alice again',created:3,status:'done'}],exchange:{state:'stopped',stop_requested:1,reply_intents:[intent(7,1,'owner'),intent(8,3,'owner'),intent(9,1,'cli_quota')]}});
+ await pane();
+ const rows=[...document.querySelectorAll('.au-room-thread > li')].map(row=>row.matches('.room-intent-blocked')?row.textContent:(row as HTMLElement).dataset.roomMessage);
+ // Message 1 was answered: no line says Alice was stopped (another reason still says why). Message 3 had no answer yet: its line stays.
+ expect(rows).toEqual(['1','2',"Alice couldn't reply: Subscription quota used up",'3',expect.stringContaining("Alice couldn't reply")]);
+ expect(rows.filter(row=>String(row).includes('Alice'))).toHaveLength(2);
 });
 
 test("a named member that passed, a stalled reply and an API brain's limits each say so, not that something went wrong",async()=>{

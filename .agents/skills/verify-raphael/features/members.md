@@ -55,7 +55,7 @@ messaging) is not here. The kinds are the same for every member and for Raphael,
 (memory is not among them, see [No memory on screen](#no-memory-on-screen)): 工具 (each
 connected app with its own mark and a switch over the member's `tools` list, then the drafts switch under them),
 技能與指令 (skills as names with switches, a press opens the skill's own view, a plus adds one from a link, delete
-waits in a ⋯ and asks in the red dialog; commands), 個性與指示 (personality and instructions, R-PANEL-07: two quiet rows of
+waits in a ⋯ and asks in the quiet dialog; commands), 個性與指示 (personality and instructions, R-PANEL-07: two quiet rows of
 their words, whole, each with a pencil; a press opens a field in the row's place that is as tall as its words, Enter on
 one line, Ctrl+Enter or leaving it saves without a word (a spinner for the pencil meanwhile), Escape restores; nothing written is one quiet line of
 what could stand there; Raphael's too), 通知 (one switch, R-NOTIFY-01). The model is chosen at the composer
@@ -217,16 +217,16 @@ The owner's primary contact (P15b-1, the last section) takes the top display slo
 
 The fixed sidebar is present on every page. Its chief uses the same compact row as colleagues. Folders preserve their collapsed state; drag members between folders or reorder folders. Below 860px the list is not hidden behind a menu button or a drawer: it is the 88px rail of faces (see Rows, width, rail and foot below). No separate Team page remains.
 
-Both sides are resized by dragging (R-UI-110): there is no fold button and no handle is drawn, only the cursor changes over the edge and a thin line shows while it moves. The list's right edge drags it from 240 to 400 px; narrower than 176 px it folds to the 88 px rail, and the rail dragged out opens it at the width it was let go. Both edges write their width as a property that is not inherited, on the elements that read it (R-PERF-25), and hold the window's cursor with one shield element (R-PERF-26); `sidebar-resize-smooth` and `panel-resize-smooth` drag them with a real pointer and measure the frames. The details panel's left edge drags it from 300 to 720 px; narrower than 240 px it closes, and the header's name opens it again at its kept width. Widths and the fold are kept in the browser's storage. Each edge is a keyboard separator (arrows; Enter folds the list or closes the panel); Ctrl+B still folds the list.
+Both sides are resized by dragging (R-UI-110): there is no fold button and no handle is drawn, only the cursor changes over the edge and a thin line shows while it moves. The list's right edge drags it from 240 to 400 px; narrower than 176 px it folds to the 88 px rail, and the rail dragged out opens it at the width it was let go. Both edges write their width as a property that is not inherited, on the elements that read it (R-PERF-25), and hold the window's cursor with one shield element (R-PERF-26); `sidebar-resize-smooth`, `sidebar-resize-reading`, `panel-resize-smooth` and `panel-resize-reading` drag them with a real pointer over a long conversation (read at its bottom and in its middle) and measure the frames; while an edge is held the conversation takes the width it has and keeps the line read where it stands, so no word is covered by the panes (R-PERF-27). The details panel's left edge drags it from 300 to 720 px; narrower than 240 px it closes, and the header's name opens it again at its kept width. Widths and the fold are kept in the browser's storage. Each edge is a keyboard separator (arrows; Enter folds the list or closes the panel); Ctrl+B still folds the list.
 
 ```powershell
 npm run look -- sidebar-rail sidebar-rail-dragged-open sidebar-dragged-wider panel-dragged-wider panel-drag-keeps-place panel-close-keeps-place panel-drag-closes --theme both --width 1120,720,1920x1080
 ```
 
-The drags and toggles are measured too (R-PERF-25, R-PERF-26): frames, style work, elements restyled per write and how the words move.
+The drags and toggles are measured too (R-PERF-25, R-PERF-26, R-PERF-27): frames, style work, elements restyled per write, how far any text reaches past the conversation's area, how far the line read moves, and whether a word jumps and comes back.
 
 ```powershell
-npm run look -- sidebar-resize-smooth sidebar-resize-busy sidebar-toggle-smooth panel-resize-smooth panel-resize-busy panel-toggle-smooth --theme both --width 1120,720,1920x1080
+npm run look -- sidebar-resize-smooth sidebar-resize-reading sidebar-resize-busy sidebar-toggle-smooth panel-resize-smooth panel-resize-reading panel-resize-busy panel-toggle-smooth --theme both --width 1120,720,1920x1080
 ```
 
 ### Rows, width, rail and foot (R-SIDE-01)
@@ -575,15 +575,15 @@ npm run look -- context-menu-member context-menu-conversation context-menu-routi
 Clear, clear all, delete and remove never stand open on a page. They wait in the ⋯ of the row or section title they
 act on, and its right click: the clears of Settings › 資料 in their rows (所有聽寫紀錄,
 所有對話紀錄), a person's removal in their Telegram row and a downloaded local model's deletion in its row of the chooser.
-Every item that destroys or disconnects (`ask` of `openActions`, `openConfirmMenu`, both in app/src/main/member-column.ts) closes its menu on a press and opens the red
-confirmation dialog of a member's deletion (`confirmDelete`, app/src/main/member-dialogs.ts): a title that asks about that one thing and names it, a sentence of what
-happens, 取消 and a red button with the item's own word. Nothing is done until the red button; 取消, Escape and the scrim do nothing, and the focus goes back to the ⋯.
+Every item that destroys or disconnects (`ask` of `openActions`, `openConfirmMenu`, both in app/src/main/member-column.ts) closes its menu on a press and opens the shared
+confirmation dialog (`confirmDelete`, app/src/main/member-dialogs.ts): a title that asks about that one thing and names it, a sentence of what
+happens, 取消 and a primary button with the item's own word (R-UI-184). The action waits for confirmation; 取消, Escape and the scrim do nothing, and the focus goes back to the ⋯.
 No item, button or row turns into a question in its own place: a downloaded local model, an app's 中斷連線, Telegram's 中斷連線, a provider's 移除, a calendar event,
 a project folder and a skill or command all ask in that dialog. A clear of 資料 still gives its ten seconds of 復原.
 
 The audit of every look scene (`R-UI-56`) fails a button named for clearing, deleting or removing, in any of the three languages, unless it stands in a menu, in a
 dialog about that one thing (`.mb-dialog`, `.cs-dialog`), or in what is being composed (`.composer`, `.draft-panel`); a question that replaces a row in its own place is rejected. The Settings window is a page: it is
-not excepted. Telegram's 中斷連線 (a row of its card that opens the red dialog), a pending person's reject and a mail draft's 捨棄 use other words and stay where they are.
+not excepted. Telegram's 中斷連線 (a row of its card that opens the quiet dialog), a pending person's reject and a mail draft's 捨棄 use other words and stay where they are.
 
 ```powershell
 npm run look -- dictation messaging-paired-aligned messaging-user-menu messaging-user-removed model-choices-local-menu context-menu-local-model --theme both --width 1120,720,1920x1080
@@ -1134,8 +1134,8 @@ one private row beside the library and captures the grant dialog after giving on
 member access and taking it from another. Inspect all four scenes at every size and
 theme, comparing private/app switches with grant switches and source import buttons
 with the section action. Member details continue using mountMemberResources.
-raphael-skills and details-skills also include an inherited package and assert its
-existing switch, readable source copy and library-only edit ownership. Inspect
+raphael-skills and details-skills list only the member's own skills as rows (R-SKILL-17): a team skill is never
+one, and its package stays read-only under 來自團隊技能. Inspect
 their full-size images as changed consumers too. Library icons keep the app's 20px
 size inside 28px row and 40px header slots, aligned with the existing member faces.
 
@@ -1217,7 +1217,9 @@ member-profile-resources.test.ts. This presentation change adds no migration or 
 
 R-COLLEAGUE-01..03: New member > Start from a template opens eight shipped slime roles; Open template file uses the system file picker and previews profile, skill names, paused routines and one disabled connect card per app. Import creates the colleague without grants; only subsequent per-app Connect requests sign-in and member access. The member row menu exports one .raphael-member file without memory, pictures, credentials or model choices.
 
-A new member's greeting is its own model's line with ONE question card (R-COLLEAGUE-02: a choice form, one thing set up at a time); the card is the ordinary `ask_owner` card, and the earlier idle clone (`member-greeting.ts`) is gone. Greetings stored earlier with locally computed suggestions read as the plain line they were. The shared API/CLI prompt puts the one outcome question rule beside owner input before set_my_job saves the goal. Fake-brain tests prove routing and persistence, not a real model's judgment.
+A new member's greeting and question card use its explicit language preference or the owner's, with the named interface
+language as the fallback (R-LANG-02). The model starts from Raphael's connected model or a connected source's
+recommended answer model. The greeting is its own model's line with ONE question card (R-COLLEAGUE-02: a choice form, one thing set up at a time); the card is the ordinary `ask_owner` card, and the earlier idle clone (`member-greeting.ts`) is gone. Greetings stored earlier with locally computed suggestions read as the plain line they were. The shared API/CLI prompt puts the one outcome question rule beside owner input before set_my_job saves the goal. Fake-brain tests prove routing and persistence, not a real model's judgment.
 
 ### A new member sets itself up by cards (R-COLLEAGUE-08)
 
@@ -1425,7 +1427,7 @@ npm run look -- opener-toggle-connect-apps opener-toggle-settings opener-toggle-
 ## A member shared by one link
 
 R-SHARE-01. With the owner's share service set (`SHARE_URL`, share-template/), the template card's primary button is 複製連結: the core
-sends the recipe to the service and keeps the link and its key; the page copies the link and says 已複製連結. The shared card shows its
+sends the recipe to the service and keeps the link and its key; the page copies the link, and no toast says so (R-TOAST-01): the card shows it. The shared card shows its
 link, 複製連結 again (nothing is sent) and 停止分享. With no service the card offers 儲存檔案 as primary and 查看內容, including legacy published cards. Whoever opens the link
 sees the service's preview page and downloads the .raphael-member file, which opens in the import review.
 

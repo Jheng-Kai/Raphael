@@ -420,7 +420,7 @@ function projectFolderRows(v: SettingsView): string {
     const info = v.projectDetails?.get(path), name = info?.name ?? folderName(path);
     const description = `<span class="project-path owner-data">${esc(path)}</span>${branchLabel(info)}`;
     // Settings has no right click and no ⋯: the row's one action is its ×, which takes the folder off the list (its files stay)
-    // after the red dialog asks.
+    // after the quiet dialog asks.
     const remove = iconBtn("x", `${t("projectFolders.remove")} ${name}`, ` data-act="project-remove" data-project="${index}" data-k="project-remove:${index}"`);
     return row(`<span class="owner-data">${esc(name)}</span>`, description, remove, { attrs: ' data-row="project-folder"' });
   });

@@ -1,0 +1,13 @@
+@import "../main/styles.css";
+/* The card under System Settings (R-PRIV-AX-02). The window is as large as the card, which sits at its top left. */
+html, body { margin: 0; overflow: hidden; background: transparent; }
+#permission-guide { box-sizing: border-box; display: grid; gap: var(--sp-3); width: 420px; padding: var(--sp-3); border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--panel); color: var(--text); font: var(--fs-sm)/1.5 var(--ui); cursor: default; user-select: none; -webkit-user-select: none; }
+#permission-guide[hidden] { display: none; }
+.guide-head { display: flex; align-items: flex-start; gap: var(--sp-2); }
+.guide-arrow { display: inline-flex; flex: none; padding-top: 3px; color: var(--accent-icon); }
+.guide-text { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.guide-close { flex: none; margin-top: calc(-1 * var(--sp-1)); }
+/* The tile the app is dragged from: AppKit starts the drag from its place (macos/guide.rs), never the page. */
+.guide-tile { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--content); cursor: grab; }
+.guide-icon { flex: none; width: 32px; height: 32px; -webkit-user-drag: none; }
+.guide-name { min-width: 0; font-weight: var(--weight-semibold); overflow-wrap: anywhere; }

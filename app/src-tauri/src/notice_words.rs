@@ -960,8 +960,8 @@ pub(super) fn text(source: &str, language: &str) -> Option<&'static str> {
             "tr" => Some("《Bildirim. Henüz ses gelmiyor. Mikrofon sessize alınmış olabilir.》"),
             _ => None,
         },
-        "《Notice. Standing by, Master.》" => match language {
-            "zh-CN" => Some("《告。主人，请下达指示。》"),
+        "《Notice. Standing by.》" => match language {
+            "zh-CN" => Some("《告。请下达指示。》"),
             "ko" => Some("《알림. 지시를 기다리고 있습니다.》"),
             "es" => Some("《Aviso. A la espera de tus instrucciones.》"),
             "fr" => Some("《Avis. En attente de vos instructions.》"),

@@ -343,8 +343,10 @@ async def run(models, output, *, max_turns=200, seconds=90, brains=None, client=
     brains = brains or CliBrains()
     conn = db.connect(directory / "scratch.db")
     sessions = Sessions(conn)
-    # Keep CLI workspaces inside the run while retaining existing subscription login discovery.
-    environ = {**brains.environ, "CODEX_HOME": str(Path(brains.environ.get("CODEX_HOME", brains.home / ".codex"))), "CLAUDE_CONFIG_DIR": str(Path(brains.environ.get("CLAUDE_CONFIG_DIR", brains.home / ".claude")))}
+    # Keep CLI workspaces inside the run while retaining existing subscription login discovery. Claude's folder is left as
+    # the owner has it: naming CLAUDE_CONFIG_DIR, even as ~/.claude, makes Claude Code look for its sign-in under another
+    # Keychain item on a Mac, and every Claude cell said it was not logged in.
+    environ = {**brains.environ, "CODEX_HOME": str(Path(brains.environ.get("CODEX_HOME", brains.home / ".codex")))}
     class IsolatedBrains:
         home = directory
         command = brains.command

@@ -1,8 +1,4 @@
-"""The interface language is the window's alone: 「我不是說過系統的 UI 語言並不會影響到使用者內部聊天的語言
-嗎？它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt，什麼事都不會發生」.
-
-No prompt, schema or message a model is sent takes the interface language; what must still be chosen per language for
-a model is read from the conversation's own words (`conversation_language`). Fake models only."""
+"""Offline contracts for owner-authored language and the interface fallback."""
 
 import inspect
 
@@ -65,15 +61,17 @@ def test_the_first_words_that_have_a_language_decide_and_english_is_the_last_res
     persona.member_worker_system_prompt, persona.reaction_prompt, persona.language_reminder, reply_schema,
     build_user_message, computer_run.system_prompt, background_service._prompts,
 ])
-def test_no_prompt_builder_takes_a_language(builder):
-    # The interface language cannot reach what a builder makes when it has no way in.
+def test_shared_prompt_builders_do_not_require_a_locale(builder):
     assert "language" not in inspect.signature(builder).parameters
 
 
-def test_the_interface_language_has_no_words_for_a_model_left():
+def test_the_reply_rule_ranks_explicit_preferences_owner_words_and_interface():
     assert not hasattr(owner_language, "reply_context")
     assert not hasattr(ui_languages, "interface_context")
-    assert "interface language never selects" in persona.REPLY_LANGUAGE.casefold()
+    rule = persona.REPLY_LANGUAGE
+    assert rule.index("explicit saved preference") < rule.index("owner's latest message") < rule.index("use the interface language")
+    assert "member_update on yourself" in rule
+    assert "Preserve quotations and examples in their original language." in rule
 
 
 def test_the_reply_kinds_are_one_fixed_set_and_read_as_the_windows_prefix():
@@ -132,11 +130,13 @@ def test_the_memory_host_marks_an_entry_in_the_language_it_is_written_in():
     assert MemoryService._told_name(host, 0, "zh-TW") == "拉斐爾"
 
 
-def test_a_greeting_and_a_task_are_told_whose_language_without_naming_one():
-    # With no word of the owner's yet, the member's own instructions, then what it knows of the owner, decide.
+@pytest.mark.parametrize("language", ui_languages.LANGUAGES)
+def test_first_message_and_unattended_turn_name_each_interface_locale(language):
     from raphael_core.agent.service import GREETING_NOW
-    from raphael_core.background.service import TASK_LANGUAGE
-    from raphael_core.ui_languages import LANGUAGE_NAMES
-    for line in (GREETING_NOW, TASK_LANGUAGE):
-        assert "your own" in line
-        assert not any(name.split(" as written")[0] in line for name in LANGUAGE_NAMES.values())
+    from raphael_core.agent.speaker import Speaker
+
+    name = ui_languages.LANGUAGE_NAMES[language].split(" as written", 1)[0]
+    label = f"{name} ({language})"
+    assert label in GREETING_NOW.format(language=label)
+    assert label in persona.greeting_prompt(Speaker(id=1, name="123"), language)
+    assert label in persona.language_reminder(language)

@@ -2249,7 +2249,7 @@ describe("what the dialog does", () => {
       c.reset();
     });
 
-    test("the menu has 重新命名 and then 移除 in red, and renaming is what the 帳號名稱 button did", async () => {
+    test("the menu has 重新命名 and then 移除, and renaming is what the 帳號名稱 button did", async () => {
       const c = await openGmail(TWO);
       const { document, done } = await mounted(c);
       try {
@@ -2258,7 +2258,7 @@ describe("what the dialog does", () => {
         c.click(more);
         const items = Array.from(document.querySelectorAll<HTMLElement>('#app-popover [role="menuitem"]'));
         expect(items.map((item) => item.textContent)).toEqual(["重新命名", "移除"]);
-        expect(items.map((item) => item.classList.contains("danger"))).toEqual([false, true]);
+        expect(items.map((item) => item.classList.contains("danger"))).toEqual([false, false]);
         expect(items.map((item) => item.dataset.conn)).toEqual(["account-label", "account-remove"]);
         expect(items.every((item) => item.dataset.account === "a2" && item.dataset.id === "composio:gmail")).toBe(true);
       } finally { await done(); }
@@ -2324,7 +2324,7 @@ describe("what the dialog does", () => {
       vi.mocked(confirmDelete).mockResolvedValueOnce(false);
       c.click(button("account-remove", { id: "composio:gmail", account: "a2" }));
       await settle();
-      expect(confirmDelete).toHaveBeenCalledWith("Me", { words: { title: "移除「Me」？", hint: "移除後就不能再用這個帳號。", action: "移除" } });
+      expect(confirmDelete).toHaveBeenCalledWith("Me", { quiet: true, words: { title: "移除「Me」？", hint: "移除後就不能再用這個帳號。", action: "移除" } });
       expect(api.connectorsRemoveAccount).not.toHaveBeenCalled();
       c.click(button("account-remove", { id: "composio:gmail", account: "a1" }));
       await settle();
@@ -2333,14 +2333,14 @@ describe("what the dialog does", () => {
       c.reset();
     });
 
-    test("the last connected account is the app: removing it asks the app's own disconnect question in the red dialog, not another", async () => {
+    test("the last connected account is the app: removing it asks the app's own disconnect question in the quiet dialog, not another", async () => {
       const c = await openGmail([{ id: "a1", status: "ACTIVE", label: "Work" }, { id: "a3", status: "INITIATED" }]);
       const { done } = await mounted(c);
       try {
         vi.mocked(confirmDelete).mockResolvedValueOnce(false);
         c.click(button("account-remove", { id: "composio:gmail", account: "a1" }));
         await settle();
-        expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Gmail", { words: { title: "中斷連線 Gmail？", hint: "重新連線之前，就不能再使用它。", action: "中斷連線" } });
+        expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Gmail", { quiet: true, words: { title: "中斷連線 Gmail？", hint: "重新連線之前，就不能再使用它。", action: "中斷連線" } });
         expect(api.connectorsRemoveAccount).not.toHaveBeenCalled();
         expect(api.connectorsDisconnect).not.toHaveBeenCalled(); // Cancel did nothing
         c.click(button("account-remove", { id: "composio:gmail", account: "a1" }));
@@ -2401,7 +2401,7 @@ describe("what the dialog does", () => {
     expect(api.integrationsRefresh).toHaveBeenCalledWith("ab12");
   });
 
-  test("disconnects only when the red dialog's button is pressed, without a toast after successful revocation", async () => {
+  test("disconnects only when the quiet dialog's button is pressed, without a toast after successful revocation", async () => {
     const c = createConnections(host);
     await c.load();
     c.click(button("open", { id: "ab12" }));
@@ -2409,7 +2409,7 @@ describe("what the dialog does", () => {
     vi.mocked(confirmDelete).mockResolvedValueOnce(false);
     c.click(button("disconnect", { id: "ab12" }));
     await settle();
-    expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Notion", { words: { title: "刪除「Notion」？", hint: "此操作無法復原。", action: "刪除" } });
+    expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Notion", { quiet: true, words: { title: "刪除「Notion」？", hint: "此操作無法復原。", action: "刪除" } });
     expect(api.integrationsDisconnect).not.toHaveBeenCalled(); // Cancel, Escape and the scrim do nothing
     expect(c.view().open).not.toBeNull();
     api.toolsetsList.mockResolvedValue({ groups: [custom] });

@@ -1,0 +1,99 @@
+/* The guided tour (tour/): a dim with one cut-out, Raphael's slime and its bubble. */
+.tour { position: fixed; inset: 0; z-index: 120; overflow: hidden; pointer-events: none; }
+.tour[data-mode="step"] { z-index: 145; }
+.mb-scrim.tour-confirm { z-index: 165; }
+.tour-catch { position: absolute; inset: 0; display: none; background: var(--scrim); }
+.tour[data-mode="step"] .tour-catch { display: block; pointer-events: auto; }
+:root:has(.tour[data-mode="step"]) .window-chrome { visibility: hidden; }
+:root:has(.tour[data-mode="step"]) .window-chrome .window-controls { visibility: visible; }
+:root:has(.tour[data-mode="step"]) .window-resize { pointer-events: none; }
+.tour-spot { position: absolute; pointer-events: none; }
+.tour[data-mode="step"] .tour-spot {
+  outline: 2px solid var(--raphael-color); box-shadow: 0 0 8px 2px color-mix(in srgb, var(--raphael-color) 55%, transparent);
+  animation: tour-pulse 1.6s ease-in-out infinite;
+}
+/* While the person looks at what a step opened, the frame round it rests: nothing there is to be pressed. */
+.tour[data-state="see"] .tour-spot { animation: none; box-shadow: 0 0 10px 2px color-mix(in srgb, var(--raphael-color) 45%, transparent); }
+@keyframes tour-pulse {
+  0%, 100% { box-shadow: 0 0 6px 2px color-mix(in srgb, var(--raphael-color) 45%, transparent); }
+  50% { box-shadow: 0 0 14px 2px color-mix(in srgb, var(--raphael-color) 75%, transparent); }
+}
+.tour-ground, .tour-slime { position: absolute; height: 64px; pointer-events: none; }
+.tour-ground { width: calc(64px + 2 * var(--tour-ground-inset)); }
+/* Keep the inline avatar's baseline from adding a line box below the portrait. */
+.tour-slime { display: flex; top: 0; left: var(--tour-ground-inset); width: 64px; transform-origin: 50% var(--tour-foot); }
+.tour-glow {
+  --hop-glow-opacity: 0.5;
+  position: absolute; inset-inline: 4px; top: calc(var(--tour-foot) - 6px);
+  height: 16px; opacity: var(--hop-glow-opacity);
+  background: radial-gradient(ellipse closest-side, color-mix(in srgb, var(--raphael-color) 85%, transparent), color-mix(in srgb, var(--raphael-color) 36%, transparent) 48%, transparent);
+}
+:root[data-theme="dark"] .tour-glow { --hop-glow-opacity: 0.65; }
+/* The portrait stays on whole pixels while the ground light breathes. */
+.tour.is-idle .tour-glow { animation: tour-glow-breathe 2.6s ease-in-out infinite; }
+@keyframes tour-glow-breathe {
+  0%, 100% { transform: scaleX(1); opacity: var(--hop-glow-opacity); }
+  50% { transform: scaleX(1.025); opacity: calc(var(--hop-glow-opacity) * 1.025); }
+}
+
+/* The bubble floats like a menu: the floating surface and its edge, controls filled with the control colour. */
+:where(.tour-bubble) {
+  --btn: var(--float-ctl); --btn-edge: var(--float-ctl-edge); --btn-hover: var(--float-ctl-hover); --btn-pressed: var(--float-pressed);
+  --key: var(--float-ctl); --key-edge: var(--float-ctl-edge);
+  --hover: var(--float-hover); --pressed: var(--float-pressed); --edge: var(--float-edge); --line: var(--float-edge);
+  --panel: var(--float); --surface-2: var(--float-ctl); --field: var(--float-ctl);
+}
+/* As narrow as its words allow, never wider than 300 px or than the window less Raphael's room. */
+.tour-bubble { position: absolute; box-sizing: border-box; width: max-content; max-width: min(300px, calc(100% - 136px)); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--float-edge); border-radius: var(--r-md); background: var(--float); color: var(--text); box-shadow: var(--pop); font-size: var(--fs-sm); line-height: 1.5; pointer-events: auto; }
+.tour-title { margin: 0 0 var(--sp-1); font-size: var(--fs-md); }
+.tour-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin-bottom: var(--sp-1); }
+.tour-head .tour-title { margin: 0; }
+/* Lines break between characters as Chinese and Japanese text does, and never leave a comma at the start of a line. */
+.tour-text { margin: 0; word-break: normal; line-break: strict; overflow-wrap: break-word; text-wrap: pretty; }
+/* The keys that ask Raphael, drawn as large keyboard keys: each one sinks and lights in Raphael's blue while it is held. */
+.tour-keys { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); margin-top: var(--sp-3); color: var(--text-3); }
+.tour-key {
+  --key-face: color-mix(in srgb, var(--float-ctl) 88%, var(--text) 12%);
+  --key-side: color-mix(in srgb, var(--float-ctl) 55%, black 45%);
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 68px; height: 46px; margin-bottom: 5px;
+  padding: 0 var(--sp-3); border: 1px solid color-mix(in srgb, var(--text) 12%, transparent); border-radius: var(--r-md);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--key-face) 85%, white 15%), var(--key-face)); color: var(--text);
+  /* The key's side under its face, its shadow on the desk, and the light on its top edge. */
+  box-shadow: 0 5px 0 var(--key-side), 0 7px 12px color-mix(in srgb, black 28%, transparent), inset 0 1px 0 color-mix(in srgb, white 22%, transparent);
+  font: inherit; font-size: var(--fs-md); font-weight: var(--weight-medium); line-height: 1;
+  transition: transform 70ms ease-out, box-shadow 70ms ease-out, background 70ms ease-out, border-color 70ms ease-out;
+}
+.tour-key[data-down] {
+  --key-face: color-mix(in srgb, var(--raphael-color) 30%, var(--float-ctl));
+  transform: translateY(5px); border-color: var(--raphael-color);
+  box-shadow: 0 0 0 var(--key-side), 0 1px 3px color-mix(in srgb, black 25%, transparent), inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
+}
+.tour-plus { font-size: var(--fs-md); }
+/* In the air Raphael turns to its side: its eyes move toward where it goes and draw closer, as a face seen from the side. */
+.tour .tour-slime .slime-follow, .tour .tour-slime .slime-gaze { transition: translate 140ms ease-out, scale 140ms ease-out; }
+.tour[data-facing="left"] .tour-slime .slime-follow { translate: -7px 0; }
+.tour[data-facing="right"] .tour-slime .slime-follow { translate: 7px 0; }
+.tour[data-facing] .tour-slime .slime-gaze { scale: 0.72 1; }
+.tour-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin-top: var(--sp-3); }
+.tour-count > span { display: flex; align-items: center; gap: var(--sp-1); }
+.tour-dot { box-sizing: border-box; width: 6px; height: 6px; border-radius: var(--r-pill); border: 1px solid color-mix(in srgb, var(--text-3) 65%, transparent); }
+.tour-dot[data-current] { border-color: var(--raphael-color); background: var(--raphael-color); }
+.tour-buttons { display: flex; align-items: center; gap: var(--sp-2); margin-inline-start: auto; }
+.tour[data-mode="bye"] .tour-bubble { cursor: default; }
+
+/* The words come once Raphael has landed (the delay is set by the view). */
+.tour-bubble.is-arriving { animation: tour-bubble-in 160ms var(--tour-in-delay, 0ms) ease-out both; }
+@keyframes tour-bubble-in { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+/* Words that are done with fade where they stand (a copy, `fadeWords`), while the bubble itself waits empty. */
+.tour-bubble.is-hushed { visibility: hidden; }
+.tour-ghost { pointer-events: none; animation: tour-words-out 180ms ease-in both; }
+@keyframes tour-words-out { to { opacity: 0; translate: 0 4px; } }
+.tour.is-covered { opacity: 0; visibility: hidden; transition: opacity 150ms ease, visibility 0s 150ms; }
+.tour.is-covered .tour-bubble { pointer-events: none; }
+.tour.is-leaving { opacity: 0; transition: opacity 200ms ease; }
+@media (prefers-reduced-motion: reduce) {
+  .tour, .tour * { transition: none !important; animation: none !important; }
+  .tour-ground, .tour-slime, .tour-glow { transform: none !important; }
+  .tour-slime { opacity: 1 !important; }
+  .tour-glow { opacity: var(--hop-glow-opacity) !important; }
+}

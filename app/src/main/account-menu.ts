@@ -4,8 +4,8 @@
 // its tightest window and number, or what is truthfully known instead; no reset time) and 管理用量. The row itself carries no number:
 // one provider's figure under the bare word would read as everyone's. 聽寫 and 行事曆 (the calendar, on today in a fresh session, R-CAL-04)
 // follow. After a hairline Raphael stands alone with its blue slime (its conversation space, `go("agent", "raphael")`: it is not a
-// slime of the sidebar's list), and after another 設定. What each reading means is decided in usage-blocks.ts, which Settings'
-// usage cards use as well.
+// slime of the sidebar's list), followed by another hairline before Settings. The usage cards read the same data from
+// usage-blocks.ts.
 
 import { t } from "./i18n";
 import { RAPHAEL_ID, faceHTML } from "./members";

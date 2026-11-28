@@ -31,7 +31,7 @@ describe("the owner refused the Keychain (R-PRIV-KEYCHAIN-01)", () => {
     expect(document.querySelectorAll(".toast")).toHaveLength(1);
   });
 
-  test("再問一次 asks the core once, takes the toast away and says what happens next", async () => {
+  test("再問一次 asks the core once and takes the toast away, saying nothing more", async () => {
     askAgain.mockResolvedValue({ refused: false });
     warnKeychainRefused();
     const button = document.querySelector<HTMLButtonElement>("[data-keychain-ask-again]")!;
@@ -39,7 +39,8 @@ describe("the owner refused the Keychain (R-PRIV-KEYCHAIN-01)", () => {
     button.click();
     await vi.waitFor(() => expect(document.querySelector(".keychain-refused")).toBeNull());
     expect(askAgain).toHaveBeenCalledTimes(1);
-    expect(notes()).toEqual(["下次需要金鑰時會再問你一次。"]);
+    expect(notes()).toEqual([]);
+    expect(document.querySelector(".toast")).toBeNull();
   });
 
   test("a failed call leaves the toast and its button for another try", async () => {

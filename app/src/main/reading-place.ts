@@ -3,6 +3,8 @@
 // and a view at the bottom stays at the bottom. The thread's own scroll anchoring is off (agent.css: the thread
 // manages its scrolling itself), so this corrects width changes only; growth, new turns and a scroller made shorter or taller
 // by what stands under it are followed by the thread's one stick to the bottom (message-rich.ts readingAnchor).
+// While a pane's edge is dragged the conversation takes the width it has at every moment and keeps the line the owner reads
+// where it stands on the screen, in the frame the lines rewrap (`followLines`).
 
 import { IS_MAC } from "../shared/platform";
 
@@ -41,8 +43,8 @@ export function repaintView(scroller: HTMLElement, slack = 4): () => void {
  * nudged place once.
  */
 export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4, repaint = IS_MAC): () => void {
-  // The width that sets the lines is the column's: a scroller made wider or narrower beside a column at its widest, or around one
-  // whose width a drag holds (`holdLines`), sets the same lines, and its place needs nothing.
+  // The width that sets the lines is the column's: a scroller made wider or narrower beside a column at its widest sets the same
+  // lines, and its place needs nothing.
   const column = scroller.querySelector<HTMLElement>(":scope > .ra-col") ?? scroller;
   const lineWidth = (): number => scroller.clientWidth && column.clientWidth;
   let width = lineWidth();
@@ -60,11 +62,14 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
   };
   let frame = 0, settle = 0, cancelNudge = (): void => {};
   const paint = (): void => { cancelNudge(); cancelNudge = repaintView(scroller, slack); };
+  // A drag of an edge in the window (`followLines`) owns the place until it is let go: the line read, or the bottom.
+  let drag: { line: Line | null; want: number; observer: ResizeObserver | null; lines: number } | null = null;
   const resized = (): void => {
     const now = lineWidth();
     // Not drawn: the width it had stays the one to compare with when it is drawn again, and the place it had with it.
     if (!now || now === width) return;
     width = now;
+    if (drag) return;
     const keep = anchor, want = offset, atBottom = bottom;
     const place = (): void => {
       if (atBottom) scroller.scrollTop = scroller.scrollHeight;
@@ -84,30 +89,135 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
   // A thread made wider is shorter: the place read can lie past its new end, and the browser clamps it to the bottom with a
   // scroll that may come before the width is reported (the details panel closed). That scroll is the width change, not the
   // owner's: the place read before it is the one kept.
-  const scrolled = (): void => { const now = lineWidth(); if (now && now !== width) resized(); else take(); };
+  const scrolled = (): void => {
+    if (drag) return;
+    const now = lineWidth();
+    if (now && now !== width) resized(); else take();
+  };
   scroller.addEventListener("scroll", scrolled, { passive: true });
   const observer = typeof ResizeObserver === "function" ? new ResizeObserver(resized) : null;
   observer?.observe(scroller);
   if (column !== scroller) observer?.observe(column);
   take();
-  return () => { scroller.removeEventListener("scroll", scrolled); observer?.disconnect(); clearTimeout(settle); cancelNudge(); };
+
+  // The edge is taken: the line read is found now, before anything moves, and put back where it stood after every layout.
+  // An observer made now is told after the ones the page made earlier (a message's fold measured for the new lines), in the
+  // frame of the change and before it is drawn, so the line is read where the owner will see it and the place is written once.
+  const press = (): (() => void) | null => {
+    if (drag || !scroller.clientWidth || !scroller.clientHeight) return null;
+    const bottom = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= slack;
+    const line = bottom ? null : readLine(scroller, items);
+    if (!bottom && !line) return null;
+    const own = drag = { line, want: line ? (lineTop(line) ?? 0) - scroller.getBoundingClientRect().top : 0, observer: null as ResizeObserver | null, lines: column.getBoundingClientRect().width };
+    // The column's width goes in steps (agent.css `data-stepping`): the grid of widths it may take passes through the width it has
+    // now, so nothing wraps again when the edge is taken, and a width never passes the space the pane leaves.
+    const stepped = column !== scroller;
+    if (stepped) {
+      column.style.setProperty("--step-r", `${((own.lines % LINE_STEP_PX) - 0.02).toFixed(2)}px`);
+      scroller.dataset.stepping = "";
+    }
+    // A place in the middle is the owner's: the thread does not follow its newest turn while the lines move under it.
+    if (line) scroller.dispatchEvent(new CustomEvent("conversation-hold"));
+    const keep = (): void => {
+      if (drag !== own || !scroller.clientHeight) return;
+      // Folds and the like are measured for the lines of this frame before the place is read (the page listens); the lines change
+      // only in the frames where the column crosses a step.
+      const lines = column.getBoundingClientRect().width;
+      if (lines !== own.lines) { own.lines = lines; scroller.dispatchEvent(new CustomEvent("conversation-measure")); }
+      if (!own.line) { scroller.scrollTop = scroller.scrollHeight; return; }
+      const at = lineTop(own.line);
+      if (at === null) return;
+      const off = at - scroller.getBoundingClientRect().top - own.want;
+      if (Math.abs(off) >= LINE_SLACK_PX) scroller.scrollTop += off;
+    };
+    if (typeof ResizeObserver === "function") {
+      own.observer = new ResizeObserver(keep);
+      own.observer.observe(scroller);
+      if (column !== scroller) own.observer.observe(column);
+    }
+    return () => {
+      if (drag !== own) return;
+      own.observer?.disconnect();
+      if (stepped) { delete scroller.dataset.stepping; column.style.removeProperty("--step-r"); }
+      own.lines = -1;
+      keep();
+      drag = null;
+      width = lineWidth() || width;
+      take();
+      if (repaint) { clearTimeout(settle); settle = window.setTimeout(paint, SETTLE_MS); }
+    };
+  };
+  const keeper: Keeper = { press };
+  keepers.add(keeper);
+  return () => { keepers.delete(keeper); drag?.observer?.disconnect(); drag = null; scroller.removeEventListener("scroll", scrolled); observer?.disconnect(); clearTimeout(settle); cancelNudge(); };
+}
+
+interface Keeper { press(): (() => void) | null }
+/** Every conversation that keeps its reading place. */
+const keepers = new Set<Keeper>();
+/** A line's top that is still the same to the eye: a move of less than this is the browser's rounding of the scroll to a device pixel. */
+const LINE_SLACK_PX = 0.5;
+/** The steps of the column's width while an edge is dragged (px): the lines wrap again when the width crosses one, not at every pixel. Keep it equal to `--step` in agent.css. */
+export const LINE_STEP_PX = 24;
+
+/** A position in a text: the character that starts a line the owner reads. Its top is where that line stands. */
+export interface Line { text: Text; offset: number }
+
+/** The top of the character at `line`, or null where it is no longer drawn (its text was replaced). */
+export function lineTop(line: Line): number | null {
+  if (!line.text.isConnected || line.offset >= line.text.length) return null;
+  const range = document.createRange();
+  range.setStart(line.text, line.offset);
+  range.setEnd(line.text, line.offset + 1);
+  const box = range.getBoundingClientRect();
+  return box.height > 0 ? box.top : null;
 }
 
 /**
- * While a pane's edge is dragged, every conversation keeps the lines it had when the edge was taken: its column holds that
- * width, centred on a whole pixel and cut by its pane where the pane is narrower, so no word rewraps and none moves up or down
- * as the pane changes. Letting go gives the column back to its pane: its lines are set once for the width the pane was left
- * at, and `keepReadingPlace` keeps the reading place across that one change. Returns the letting go.
+ * The first line of the conversation the owner can read whole: its text and the character that starts it, found among the
+ * messages `items` that reach into the view. Text is searched in order and the character by halving, so a long thread costs a
+ * few reads.
  */
-export function holdLines(root: ParentNode = document): () => void {
-  const held = [...root.querySelectorAll<HTMLElement>(".ra-scroll > .ra-col")].filter(column => column.isConnected && column.getClientRects().length > 0);
-  for (const column of held) {
-    const width = column.getBoundingClientRect().width;
-    column.style.width = `${width}px`;
-    column.style.maxWidth = "none";
-    column.style.marginInline = `max(0px, round(down, calc((100% - ${width}px) / 2), 1px)) 0`;
-  }
-  return () => {
-    for (const column of held) for (const name of ["width", "max-width", "margin-inline"]) column.style.removeProperty(name);
+export function readLine(scroller: HTMLElement, items: string): Line | null {
+  const view = scroller.getBoundingClientRect();
+  const range = document.createRange();
+  const charTop = (text: Text, at: number): number | null => {
+    range.setStart(text, at); range.setEnd(text, at + 1);
+    const box = range.getBoundingClientRect();
+    return box.height > 0 ? box.top : null;
   };
+  for (const item of scroller.querySelectorAll<HTMLElement>(items)) {
+    const box = item.getBoundingClientRect();
+    if (box.bottom <= view.top) continue;
+    if (box.top >= view.bottom) break;
+    const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode() as Text | null; text; text = walker.nextNode() as Text | null) {
+      if (!text.data.trim() || text.parentElement?.closest("[hidden], [aria-hidden='true'], svg, textarea, button")) continue;
+      range.selectNodeContents(text);
+      const line = [...range.getClientRects()].find(rect => rect.width > 2 && rect.height > 4 && rect.top >= view.top - 0.5 && rect.bottom <= view.bottom);
+      if (!line) continue;
+      // The first character at or below that line's top: the line's own first one (the characters of a text run down the page).
+      let low = 0, high = text.length - 1;
+      while (low < high) {
+        const middle = (low + high) >> 1;
+        let probe = middle, top = charTop(text, probe);
+        while (top === null && probe < high) top = charTop(text, ++probe);
+        if (top === null || top >= line.top - 0.5) high = middle; else low = middle + 1;
+      }
+      return charTop(text, low) === null ? null : { text, offset: low };
+    }
+  }
+  return null;
 }
+
+/**
+ * While a pane's edge is dragged, every conversation takes the width it has at every moment of the drag, so no word is covered
+ * or cut by the panes beside it. The line the owner reads stays where it stands on the screen while the lines wrap again around
+ * it (the last line of a conversation at its bottom stays at the bottom), written in the frame of each change, after layout.
+ * Returns the letting go.
+ */
+export function followLines(): () => void {
+  const released = [...keepers].map(keeper => keeper.press()).filter((release): release is () => void => release !== null);
+  return () => { for (const release of released) release(); };
+}
+

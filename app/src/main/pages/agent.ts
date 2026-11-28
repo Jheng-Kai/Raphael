@@ -265,6 +265,7 @@ export function createAgent(app: AppContext, places?: {
   resolved(member: number, conversation: number): void;
 }): Page & {
   sidebar: HTMLElement; loadSidebar(): Promise<void>; memberFace(id: number, size: number): string; settingsOf(): number | null;
+  conversationShown(): boolean;
   keepNavigationPlace(): boolean;
   currentChatPlace(): ChatPlace; chatPlaceExists(place: ChatPlace): boolean; showChatPlace(place: ChatPlace): void;
 } {
@@ -299,8 +300,6 @@ export function createAgent(app: AppContext, places?: {
   // A panel dragged wider or narrower leaves the reading place where it was (reading-place.ts); a dock that grows or shrinks
   // under a thread that follows its bottom is followed by the thread's one stick to the bottom (message-rich.ts).
   keepReadingPlace(scroller, ".thread > li");
-  // A card waiting for the owner, scrolled out of sight, floats at the top of the conversation (card-float.ts).
-  mountCardFloat({ stage, scroller, thread });
   const none = el.querySelector<HTMLElement>(".ra-none")!;
   const wait = el.querySelector<HTMLElement>(".ra-wait")!;
   const dock = el.querySelector<HTMLElement>(".ra-dock")!;
@@ -365,6 +364,8 @@ export function createAgent(app: AppContext, places?: {
       if (visible && !scroller.hidden) drawThread();
     },
   });
+  // A card waiting for the owner, scrolled out of sight, floats at the top of the conversation (card-float.ts).
+  const cardFloat = mountCardFloat({ stage, scroller, thread, memberOfCard: () => members.member() });
   el.prepend(members.column);
   el.append(members.details);
   el.append(members.settings.el);
@@ -703,6 +704,8 @@ export function createAgent(app: AppContext, places?: {
   const measureAllMessages = messagePreviewMeasure(thread);
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureAllMessages) : null;
   void document.fonts?.ready.then(measureAllMessages);
+  // While an edge is dragged each frame is measured in the frame itself, before the line read is put back (reading-place.ts followLines).
+  scroller.addEventListener("conversation-measure", () => measureMessagePreviews(thread, { all: true }));
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let ticker: ReturnType<typeof setInterval> | null = null;
   /** Questions typed here whose turns have not come yet. */
@@ -890,6 +893,7 @@ export function createAgent(app: AppContext, places?: {
    * Raphael's or the member's. Every thread's voice button is the gold emblem (拉斐爾大師), never a picture.
    */
   function drawFaces(): void {
+    cardFloat.sync();
     drawComposerTask();
     // Each conversation wears its member's colour, Raphael's being the first blue slime's (R-UI-81).
     const member = members.member(), color = memberColor(member);
@@ -1292,6 +1296,8 @@ export function createAgent(app: AppContext, places?: {
     // An open conversation between members follows the turns it is read from, and closes with its conversation.
     if (peer) queueMicrotask(() => peer?.update());
     stage.setAttribute("aria-busy", String(pending));
+    // Whose space the page shows: the guided tour knows from it that Raphael's own conversation is open.
+    el.toggleAttribute("data-raphael", inRaphael());
     // Only a thread not read yet says it is loading: a refresh of an empty one keeps its ordinary empty layout (R-UI-71, R-UI-183).
     if (pending && isEmpty() && !loadedThread) {
       wait.innerHTML = loadingHTML();
@@ -2753,12 +2759,13 @@ export function createAgent(app: AppContext, places?: {
     if (visible) void load(false);
   }
 
-  async function cancelMessage(control?: HTMLElement): Promise<void> {
-    const source = control ? messageSource(control) : null;
-    const cardTurnId = control?.dataset.act === "cancel-secret-turn" ? Number(control.closest<HTMLElement>(".tn[data-id]")?.dataset.id) : undefined;
+  /** 取消 in the ⋯ of a message the owner chose to take back (one on its way or waiting its turn); Stop is `stopComposerTask`. */
+  async function cancelMessage(control: HTMLElement): Promise<void> {
+    const source = messageSource(control);
+    const cardTurnId = control.dataset.act === "cancel-secret-turn" ? Number(control.closest<HTMLElement>(".tn[data-id]")?.dataset.id) : undefined;
     const cardTurn = cardTurnId === undefined ? undefined : turns.find(item => item.id === cardTurnId);
-    const pending = control ? outgoing.find(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session) : [...outgoing].reverse().find(item => item.member === memberId());
-    const turn = pending ? turns.find(turn => turn.session_id === pending.requestId) : source?.turn ?? cardTurn ?? (!control ? own().find(turn => sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && !delegatedTurn(turn) && (turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting")) : undefined);
+    const pending = outgoing.find(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session);
+    const turn = pending ? turns.find(turn => turn.session_id === pending.requestId) : source?.turn ?? cardTurn;
     const session = pending?.requestId ?? turn?.session_id;
     if (!session || retracting.has(session)) return;
     const member = memberId(), sentConversation = conversationId();
@@ -3174,7 +3181,9 @@ export function createAgent(app: AppContext, places?: {
     const task = composerTask();
     return visible && !roomPane.active && task ? {
       key: task.key, immediate: task.key.startsWith("listening:") || task.key.startsWith("voice:"), button: voiceButton, hint: t("common.cancelAgain"),
-      cancel: () => { void (listening ? api.cancelSession() : input.value.trim() || files.length || !task.key.startsWith("request:") ? stopComposerTask() : cancelMessage()).catch(error => toaster.info(describeError(error))); },
+      // Escape twice is the Stop button: the core decides whether anything of the reply was shown (R-CHAT-STOP-02). It never takes the
+      // message back on its own, which once removed a message its member had already answered.
+      cancel: () => { void (listening ? api.cancelSession() : stopComposerTask()).catch(error => toaster.info(describeError(error))); },
     } : null;
   });
   // Escape in the composer that holds a message taken back for editing gives the edit up: at once while the composer still holds what 編輯
@@ -3487,6 +3496,7 @@ export function createAgent(app: AppContext, places?: {
     loadSidebar: () => members.load(),
     memberFace: (id, size) => members.faceOf(id, size),
     settingsOf: () => members.settings.isOpen() ? members.current() : null,
+    conversationShown: () => !memberChat.hidden && !members.settings.isOpen() && !desktop.expanded() && !pagesHost.shown() && !peer,
     keepNavigationPlace,
     currentChatPlace,
     chatPlaceExists,

@@ -22,7 +22,7 @@ it.each(navInputs)("opens server actions and retraces the editor and app views w
   control.click(root.querySelector('[data-conn="server-menu"]')!);
   const menu = document.querySelector('[role="menu"]')!;
   expect(Array.from(menu.querySelectorAll('button')).map(button=>button.textContent)).toEqual(["測試","編輯伺服器","刪除"]);
-  expect(menu.querySelector('[data-conn="disconnect"]')?.classList.contains("danger")).toBe(true);
+  expect(menu.querySelector('[data-conn="disconnect"]')?.classList.contains("danger")).toBe(false);
   menu.querySelector<HTMLButtonElement>('[data-conn="edit-server"]')!.click();
   expect(document.querySelector('[role="menu"]')).toBeNull();
   expect(control.view().form?.id).toBe("own");
@@ -37,9 +37,9 @@ it.each(navInputs)("opens server actions and retraces the editor and app views w
   control.click(root.querySelector('[data-conn="form-cancel"]')!);
   control.click(root.querySelector('[data-conn="open"]')!);
   control.click(root.querySelector('[data-conn="server-menu"]')!);
-  // 刪除 closes the menu and asks in the red dialog naming the server; 取消 deletes nothing.
+  // 刪除 closes the menu and asks in the quiet dialog naming the server; 取消 deletes nothing.
   document.querySelector<HTMLButtonElement>('.menu [data-conn="disconnect"]')!.click();
-  await vi.waitFor(() => expect(document.querySelector(".mb-delete h2")?.textContent).toBe("刪除「Workspace」？"));
+  await vi.waitFor(() => expect(document.querySelector(".mb-delete.is-quiet h2")?.textContent).toBe("刪除「Workspace」？"));
   expect(document.querySelector('[role="menu"]')).toBeNull();
   document.querySelector<HTMLElement>('.mb-delete [data-dlg="cancel"]')!.click();
   await Promise.resolve();

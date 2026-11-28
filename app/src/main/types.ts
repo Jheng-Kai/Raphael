@@ -110,6 +110,8 @@ export interface ProviderTest {
   ok: boolean;
   kind?: "auth" | "offline" | "error";
   models: number;
+  /** What a test of an unsaved form found: kept by nothing, shown under the fields. */
+  found?: ProviderModel[];
 }
 export interface ProviderModel {
   id: string;
@@ -897,6 +899,8 @@ export interface DeviceSettings {
   /** Learn the words the owner corrects in pasted dictations; asks the cleanup model, off by default. */
   auto_learn?: boolean;
   onboarded: boolean;
+  /** The person answered Raphael's guided tour offer. Older settings may omit this. */
+  tour_offered?: boolean;
   /**
    * The apps Raphael may always operate on this PC (the 一律允許 answer of a question), by the
    * executable's file name in lower case (`excel.exe`) and the name to show (`Microsoft Excel`).
@@ -920,6 +924,8 @@ export type MainEvent =
   | { type: "KeychainRefused" }
   | { type: "Level"; value: number }
   | { type: "ModelProgress"; name: string; done: number; total: number }
+  /** What an import of Team skills is doing, by the id the window gave it (skill-library.ts): `read` says skill `done` of `total`. */
+  | { type: "SkillImportProgress"; import_id: string; step: "fetch" | "read" | "install"; done: number | null; total: number | null }
   /** An editor hides its text from UI Automation, so corrections in it cannot be learned. */
   | { type: "LearnLimited"; app: string; reason: string }
   /** A tray menu item asks for a page, and perhaps one thing to do there (tray-open.ts). */

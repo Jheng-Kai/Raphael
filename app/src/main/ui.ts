@@ -219,6 +219,7 @@ interface ActionButton {
   label: string;
   attrs?: string;
   kind?: "sm";
+  danger?: boolean;
 }
 
 export interface ActionRowOptions {
@@ -230,11 +231,11 @@ export interface ActionRowOptions {
   sticky?: boolean;
 }
 
-/** Danger first and separated, secondary controls next, and the primary action last in tab order. */
+/** Removal first and separated, secondary controls next, and the primary action last in tab order. */
 export function actionRow(o: ActionRowOptions): string {
-  const button = (b: ActionButton, kind: string): string => btn(b.label, `${kind}${b.kind ? ` ${b.kind}` : ""}`, b.attrs);
+  const button = (b: ActionButton, kind = ""): string => btn(b.label, [kind, b.kind, b.danger ? "danger" : ""].filter(Boolean).join(" "), b.attrs);
   return `<div class="action-row${o.cls ? ` ${o.cls}` : ""}${o.sticky ? " is-sticky" : ""}">` +
-    (o.destructive ? `<span class="action-destructive">${button(o.destructive, "danger")}</span>` : "") +
+    (o.destructive ? `<span class="action-destructive">${button(o.destructive)}</span>` : "") +
     (o.secondary ?? "") + (o.primary ? button(o.primary, "pri") : "") + `</div>`;
 }
 
@@ -244,8 +245,8 @@ export function actionRow(o: ActionRowOptions): string {
  * (styles.css `.btn.icon`): a border is what tells a button with words in it. The ⋯ (`more`) is marked
  * `data-overflow`: context-menu.ts presses it when its row is right-clicked.
  */
-export const iconButton = (name: IconName, label: string, attrs = "", cls = ""): string =>
-  `<button type="button" class="btn icon${name === "trash" ? " danger" : ""}${cls ? " " + cls : ""}" aria-label="${esc(label)}" title="${esc(label)}"${attrs}${name === "more" ? " data-overflow" : ""}>${ico(name)}</button>`;
+export const iconButton = (name: IconName, label: string, attrs = "", cls = "", options: { danger?: boolean } = {}): string =>
+  `<button type="button" class="btn icon${options.danger ? " danger" : ""}${cls ? " " + cls : ""}" aria-label="${esc(label)}" title="${esc(label)}"${attrs}${name === "more" ? " data-overflow" : ""}>${ico(name)}</button>`;
 
 /** The round control used to return from a page or a nested view. */
 export const backButton = (label: string, attrs = "", cls = ""): string =>
@@ -401,6 +402,7 @@ interface MenuState {
 }
 let menu: MenuState | null = null;
 let menuListening = false;
+let heldMenu: MenuState | null = null;
 
 /** Where a right click asked for the menu of a ⋯ button; `until` is when that stops holding (see `pressOverflow`). */
 interface PointerAt { x: number; y: number; until: number }
@@ -423,7 +425,14 @@ export function pressOverflow(button: HTMLElement, at?: { x: number; y: number }
 }
 
 export function closeMenu(): void {
+  if (heldMenu) return;
   while (menu) closeMenuLevel();
+}
+
+/** Keep a visible menu in place while a modal above it owns input. */
+export function holdMenuOpen(): () => void {
+  heldMenu = menu;
+  return () => { heldMenu = null; };
 }
 
 /** Closes the submenus of the open menu and keeps the menu itself (a pick in a submenu that only changes a row). */
@@ -462,7 +471,7 @@ function listenForMenuEvents(): void {
   if (menuListening) return;
   menuListening = true;
   document.addEventListener("keydown", (e) => {
-    if (!menu || e.isComposing || e.keyCode === 229) return;
+    if (!menu || heldMenu || e.isComposing || e.keyCode === 229) return;
     const target = e.target === document ? document.activeElement : e.target;
     if (["PageDown", "PageUp", "Home", "End", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", " "].includes(e.key) && !insideMenus(target) &&
       !(target instanceof Element && target.closest('input, textarea, [contenteditable="true"]'))) {
@@ -680,9 +689,9 @@ function listenForSubmenus(state: MenuState): void {
     while (child && child.parent !== state) child = child.parent;
     return child;
   };
-  const closeChild = (): void => { while (menu && menu !== state && childOf()) closeMenuLevel(); };
+  const closeChild = (): void => { while (!heldMenu && menu && menu !== state && childOf()) closeMenuLevel(); };
   const move = (event: PointerEvent): void => {
-    if (!(event.target instanceof Element) || !state.el.isConnected) return;
+    if (heldMenu || !(event.target instanceof Element) || !state.el.isConnected) return;
     const child = childOf(), point = { x: event.clientX, y: event.clientY };
     const inChild = child && child.el.contains(event.target);
     const row = event.target.closest<HTMLElement>('button[role="menuitem"], button[role="menuitemradio"]');
@@ -699,7 +708,7 @@ function listenForSubmenus(state: MenuState): void {
       const open = (): void => {
         pending = null; timer = undefined;
         // A press that opened the submenu before the pointer's delay ran out has done it: opening it again would be a second press on its opener, which folds it away (R-UI-124).
-        if (!row.isConnected || !state.el.isConnected || childOf()?.anchor === row) return;
+        if (heldMenu || !row.isConnected || !state.el.isConnected || childOf()?.anchor === row) return;
         const focus = document.activeElement as HTMLElement | null;
         row.click();
         focus?.focus({ preventScroll: true });
@@ -795,6 +804,7 @@ export interface MenuAction {
   /** A mark drawn for this item alone, in the icon's place (trusted HTML: a member's faces, a tile). */
   mark?: string;
   submenu?: boolean;
+  danger?: boolean;
   /** What it does is under way: the item stays where it is but does nothing until it is done. */
   busy?: boolean;
   /** Runs when the item is chosen. The menu stays open, so that what the action finds shows in it. */
@@ -1038,7 +1048,7 @@ export function openMenu(
     actions
       .map(
         (a, i) =>
-          `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-action="${i}"${a.busy ? ' aria-disabled="true"' : ""}${a.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
+          `<button type="button" role="menuitem" tabindex="-1" class="menu-action${a.danger ? " danger" : ""}" data-action="${i}"${a.busy ? ' aria-disabled="true"' : ""}${a.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
           `${a.mark ? `<span class="mmark" aria-hidden="true">${a.mark}</span>` : `<span class="ck">${a.icon ? ico(a.icon) : ""}</span>`}<span class="mtd"><span class="mt">${esc(a.label)}</span>${a.desc ? `<span class="mdesc">${esc(a.desc)}</span>` : ""}</span>${a.submenu ? ico("right") : ""}</button>`,
       )
       .join("");

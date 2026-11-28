@@ -1,7 +1,7 @@
 """The words of a run that are not lines of Raphael's: the three answers to the question about an
 app, and the step the overlay shows beside the emblem while it operates.
 
-The lines themselves (the questions, 《了。已停止。》, 《告。這一步需要主人親自操作。》...) are
+The lines themselves (the questions, 《了。已停止。》, 《告。這一步需要你親自操作。》...) are
 `agent.persona` phrases, under the rules every fixed line follows. These are labels and fragments:
 a button says 「允許一次」, and the overlay says 《告。操作中：點擊「七」》, whose 「點擊「七」」 is
 made here. What an element is called comes from the app: it is cleaned and cut before it is put

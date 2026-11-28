@@ -146,7 +146,7 @@ async def test_a_password_field_hands_the_run_over_to_the_owner(make_run, shell)
     )
     run = make_run(model)
     _, final = await drive(run)
-    assert (final.which, final.text, final.kind) == ("notice", "這一步需要主人親自操作。", "handoff")
+    assert (final.which, final.text, final.kind) == ("notice", "這一步需要你親自操作。", "handoff")
     assert "act" not in shell.ops()
     assert run.take_steps()[-1].reason == "handoff"
 
@@ -380,7 +380,7 @@ async def test_the_lines_of_the_run_are_in_the_owners_language(make_run, shell):
 
 
 def test_the_prompt_asks_for_the_owners_language_and_names_no_interface_language():
-    # The interface language goes to no model. The run's prompt takes no language at all.
+    # The desktop prompt's shared rules remain stable across interface locales.
     from raphael_core.agent.persona import REPLY_LANGUAGE
     prompt = run_module.system_prompt()
     assert REPLY_LANGUAGE in prompt

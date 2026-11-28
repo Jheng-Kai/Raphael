@@ -187,7 +187,7 @@ describe("a draft in a turn", () => {
   });
 
   test("a draft handed to this chat is a card: what the carrier turn is told is for the model, not the page", () => {
-    const carrier = turn({ question: "", route: "draft", source: "draft", prefix: "", text: "佳佳把一封郵件草稿「週四」交給你，等主人編輯後寄出。", drafts: [draft({ author_name: "佳佳" })] });
+    const carrier = turn({ question: "", route: "draft", source: "draft", prefix: "", text: "佳佳把一封郵件草稿「週四」交給你，等使用者編輯後寄出。", drafts: [draft({ author_name: "佳佳" })] });
     const html = turnHTML(carrier, emptyTimelineState(), false, LOOK);
     expect(html).toContain('data-mail-card="dr1"');
     expect(visible(html)).not.toContain("交給你");

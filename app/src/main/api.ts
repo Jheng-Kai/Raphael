@@ -84,7 +84,7 @@ const ASKED_AGAIN = new Set(["usage.allowances", "usage.analytics"]);
 let changes = 0;
 const reading = new Map<string, { answer: Promise<unknown>; changes: number }>();
 /** Events that say something may have changed; the microphone's loudness and the like do not. */
-const NOISE = new Set<string>(["Level", "VoiceLevel", "ModelProgress", "Dictation", "Hotkey"]);
+const NOISE = new Set<string>(["Level", "VoiceLevel", "ModelProgress", "SkillImportProgress", "Dictation", "Hotkey"]);
 let heard = 0;
 /** While the window starts up, a read answered a moment ago is the answer to the same read now. */
 const RECENT_MS = 1500;
@@ -181,7 +181,8 @@ export const providersList = (): Promise<{ providers: ModelProvider[] }> => core
 export const providersAdd = (patch: ProviderPatch & { kind: string }): Promise<{ provider: ModelProvider }> => core("providers.add", patch);
 export const providersUpdate = (patch: ProviderPatch & { id: string }): Promise<{ provider: ModelProvider }> => core("providers.update", patch);
 export const providersRemove = (id: string): Promise<{ removed: boolean }> => core("providers.remove", { id });
-export const providersTest = (id: string): Promise<ProviderTest> => core("providers.test", { id });
+/** A saved provider by its id, or the form as it stands (saved or not; the core keeps nothing of a draft). */
+export const providersTest = (target: { id: string } | (ProviderPatch & { id?: string; kind?: string })): Promise<ProviderTest> => core("providers.test", target);
 export const providersModels = (id: string): Promise<{ models: ProviderModel[] }> => core("providers.models", { id });
 
 // ---------- history ----------
@@ -626,6 +627,12 @@ export const deviceComputerAppRemove = (exe: string): Promise<DeviceSettings> =>
 export const keyboardHasAltgr = (): Promise<boolean> => invoke("keyboard_has_altgr");
 /** macOS: whether the app may use Accessibility (the global keys, pasting, tidying), read without asking; null on Windows. */
 export const accessibilityAccess = (): Promise<boolean | null> => invoke("accessibility_access");
+/**
+ * macOS: opens a privacy pane of System Settings with the card under it that drags this app into the pane's list
+ * (R-PRIV-AX-02). Whether the card is there: a run outside an app bundle opens the pane alone.
+ */
+export const permissionGuideOpen = (pane: "accessibility", language: string): Promise<boolean> =>
+  invoke("permission_guide_open", { pane, language });
 /** The text on the owner's clipboard, read once for the desktop viewer's paste while the owner holds the screen; null when there is none. */
 export const ownerClipboardText = (): Promise<string | null> => invoke("owner_clipboard_text");
 /** A number that changes whenever the owner's clipboard does; null where the system has none. */
@@ -639,6 +646,8 @@ export const hotkeysPause = (paused: boolean): Promise<void> =>
  * question (a lesson that shows the key being pressed). Always switch it off again.
  */
 export const hotkeysPractice = (on: boolean): Promise<void> => invoke("hotkeys_practice", { on });
+/** The practice's answer: Raphael's emblem appears in its corner with 《`prefix`。`text`》 and vanishes, as a real answer does. */
+export const overlayRehearse = (prefix: string, text: string): Promise<void> => invoke("overlay_rehearse", { prefix, text });
 /** Esc for a dictation or question that is under way (the app ignores it when none is). */
 export const cancelSession = (): Promise<void> => invoke("window_hotkey", { kind: "cancel" });
 /** Whether the privacy settings of Windows let desktop apps use the microphone. */

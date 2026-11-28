@@ -9,7 +9,7 @@ const MAP = {
   clock: "clock", book: "book", down: "chevron-down", up: "chevron-up", plus: "plus", copy: "copy",
   trash: "trash-2", search: "search", x: "x", gear: "settings", mic: "mic", wallet: "wallet", sparkle: "sparkle",
   info: "info", lock: "lock", left: "chevron-left", right: "chevron-right", refresh: "refresh-cw", link: "link",
-  chat: "message-square", globe: "globe", monitor: "monitor", arrowLeft: "arrow-left", arrowRight: "arrow-right", rotateClockwise: "rotate-cw", expand: "maximize", open: "maximize-2", shrink: "minimize-2",
+  chat: "message-square", globe: "globe", monitor: "monitor", arrowLeft: "arrow-left", arrowRight: "arrow-right", arrowUp: "arrow-up", rotateClockwise: "rotate-cw", expand: "maximize", open: "maximize-2", shrink: "minimize-2",
   eye: "eye", shield: "shield", star: "star", grid: "layout-grid", check: "check", sliders: "sliders-horizontal",
   keyboard: "keyboard", cloud: "cloud", send: "arrow-up", stop: "square", bot: "bot", pencil: "pencil", share: "share", steps: "list",
   plug: "plug", bell: "bell", calendar: "calendar", news: "newspaper", folder: "folder", memory: "brain", attach: "paperclip",
@@ -19,7 +19,7 @@ const MAP = {
   fileDown: "file-down", fileArchive: "file-archive", fileText: "file-text", gauge: "gauge", gridPlus: "grid-2x2-plus",
   alert: "circle-alert", success: "circle-check", volume: "volume-2", volumeOff: "volume-x",
   app: "blocks", slash: "square-slash",
-  hand: "hand", scroll: "scroll-text", zap: "zap", warning: "triangle-alert", unplug: "unplug",
+  hand: "hand", scroll: "scroll-text", zap: "zap", warning: "triangle-alert", unplug: "unplug", compass: "compass",
   // The composer's formats (composer-rich-toolbar.ts).
   bold: "bold", italic: "italic", underline: "underline", strike: "strikethrough", codeInline: "code-xml", highlight: "highlighter", unlink: "unlink",
   heading1: "heading-1", heading2: "heading-2", heading3: "heading-3", bullets: "list", numbers: "list-ordered", tasks: "list-todo", quote: "quote",

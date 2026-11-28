@@ -6,8 +6,13 @@ While the guide is up the window is the card itself: guide-window.ts
 sizes it to 1080 x 720 under the control strip (on a screen
 whose free area is smaller it takes that area less a 32 px edge, never below the app's 720 x 480), centres it,
 turns off resizing and maximizing (no maximize
-button, no resize edges, a double-click on the strip does nothing) and gives back the earlier size, place
-and maximized state when the guide ends; `guide-window-fixed` in the onboarding scene checks the requests.
+button, no resize edges, a double-click on the strip does nothing) and, when the guide ends, gives back only the resizing and
+maximizing: the window keeps the size and place the guide had, so the step into the app is a step into a page and not a new
+window (R-GUIDE-04). A first run opens at that size already (lib.rs `opening_size`: 1080 x 752, centred), and the window's
+backdrop is painted with its theme (`backdrop`: black in dark, the sidebar's grey in light, never the webview's white) from
+the window's creation and again whenever its theme changes, so no light strip shows at its edge while it is shown or resized.
+`guide-window-fixed` in the onboarding scene checks the requests while the guide is up, `guide-window-kept` in
+`after-onboarding` those at its end: one size and one place request in all, none after the guide.
 The welcome's language is a quiet button at the card's top left (globe, the language's own name, chevron; its
 name is its aria-label) that opens the language picker (language-picker.ts: each language in its own script, a
 search field once there are more than eight).
@@ -60,7 +65,7 @@ Settings has no 導覽 entry any more;
    only its account), and on the right its one button, then the check of a ready tile (black edge in
    light, lifted fill in dark; the check carries the word a reader hears). Three tiles to a row where
    each gets at least 256 px, two in a 720 px window. Every provider, OpenRouter included, has 連接,
-   which opens the same editor as Settings › 模型 › 新增供應商; the guide has no key tile of its own
+   which opens the same editor as Settings › 模型 › 新增供應商 (`onboarding-provider-editor`: Connect tests the setup form, saves on success and shows the models, R-PROV-TEST-01); the guide has no key tile of its own
    (R-COPY-02). ChatGPT and the command-line tools are driven by the same account controller as
    Settings > Models (`createCliBrains`).
 3. **Services** (`onboarding-services`, `onboarding-service-waiting`, `onboarding-services-composio`,
@@ -87,6 +92,19 @@ Settings has no 導覽 entry any more;
    opens, inside the card, the choice of service with its key, and for images the model picker. That choice dims the whole
    window like every dialog, the caption strip included (R-UI-141); the window buttons stay on top of the dim.
 
+R-GUIDE-02: the store's apps (the built-in catalog, Composio's state and Composio's apps) are read in the background from the
+welcome on, so the services step opens on its tiles and never on a lone spinner (`onboarding-services` checks
+`onboarding-services-ready` the moment the step is drawn); the spinner stays only for a read that has not answered yet.
+Composio's key field is on this step already (`onboarding-services-composio`, `onboarding-composio-key`,
+`onboarding-composio-saved`); a saved key reads the store again behind the tiles already shown.
+
+R-GUIDE-03: an ability's dialog opens and closes over a page that does not move. The guide drew the abilities step again whole
+at each change, so its rows played their entrance again under the dimmed page and after it (a flash); only what the abilities
+hold is drawn again now (`swapHTML`, as Settings does), and the title, the floating slimes, the column and the foot stay the same
+elements. Scene `onboarding-abilities-still` (motion on) opens 看圖片, closes it with × and again with Esc, and checks that every
+part is the same element at the same place, the page is not scrolled, and no row, title or slime is coming in (checks
+`onboarding-abilities-still-before`, `-open` and `-closed`; it fails on the old drawing).
+
 Every choice can be gone past without choosing; the first slime asks only for its name. The last step's primary button finishes; a first
 run then saves the device setting `onboarded`, a rerun from Settings does not.
 
@@ -99,7 +117,7 @@ state.
 ## Driving it with look
 
 ```powershell
-npm run look -- onboarding onboarding-slime onboarding-tools onboarding-back-hover onboarding-back-focus settings-owner onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- onboarding onboarding-slime onboarding-tools onboarding-provider-editor onboarding-back-hover onboarding-back-focus settings-owner onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice onboarding-abilities-still onboarding-slime-press after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 Keep the welcome and each step's PNGs, the contact sheet and the report. Each scene presses the
@@ -121,6 +139,84 @@ is before the primary in the tab order). Native proof needs an authorized fresh 
 steps, relaunch and verify onboarding stays dismissed and the chosen tools, services and switches
 persist. Keep sanitized readback and stop the owned dev process.
 
+## Raphael's guided tour of the window
+
+Raphael's blue slime offers a tour after the first-run guide or on an ordinary launch
+with an unanswered offer. It waits for the main conversation to be uncovered. When another page or a dialog covers it, the offer fades out in 150 ms and its buttons immediately leave the tab order. Returning to the uncovered conversation plays one pop-in and keeps the offer unanswered. The tour's own confirmations sit above it. Start and confirmed Skip save `tour_offered`. Escape on
+the offer leaves it unanswered. The account menu has no route to relaunch the tour.
+`app/src/main/tour/` contains the controller, placement and view. Titles, short spoken
+lines, progress labels and confirmation copy come from fifteen `tour.*` catalogues.
+
+- **The offer** (`tour-offer`, `tour-offer-returning`, `tour-offer-skip`, `tour-offer-escape`):
+  Raphael grows from the account button and touches down at 250 ms, revealing its blue light.
+  The bubble appears after the landing settles, at 430 ms. The offer says about two minutes. Start begins immediately.
+  `tour-offer-settings-open` opens Settings over the offer and checks its portrait, light and
+  buttons are hidden, its controls are inert and the answer is still unwritten.
+  `tour-offer-skip-ask` shows the Skip confirmation over the unanswered offer.
+  Cancel, Escape or a press beside it returns focus to Skip. Confirming saves the answer
+  and dismisses the offer in `tour-offer-skip`.
+- **The walk**: every step is one framed action. When the app reacts, a step that opened something
+  worth a look lights it inside a resting frame with one plain line and waits for 好的, for as long
+  as the owner reads. `tour-step-N` captures the instruction; `tour-step-N-seen` captures what
+  the action opened, lit and explained. A new slime comes first, then what sets the app apart; the composer and the permission
+  chip are not steps. What is lit can be used while it is explained, and closing it by that use moves on.
+
+  | Look scenes | Action | What is lit and explained |
+  | --- | --- | --- |
+  | `tour-step-1`, `tour-step-1-seen` | Press the sidebar plus | The member maker: a slime can really be made; 好的 cancels it |
+  | `tour-step-2`, `tour-step-2-seen` | Press the slime's name at the top (an already open panel is closed first) | Its panel, with routines and messaging apps |
+  | `tour-step-3`, `tour-step-3-seen` | Press 電腦 in the lit panel | The computer it works on |
+  | `tour-step-4`, `tour-step-4-seen` | Press the panel's gear | Its settings: tools, skills, personality, notifications |
+  | `tour-step-5`, `tour-step-5-seen` | Press Connect apps | The dialog |
+  | `tour-step-6` | Press the model chip | (its menu opens and the tour moves on into it) |
+  | `tour-step-7`, `tour-step-7-seen` | Press the model name inside the lit menu | The model list |
+  | `tour-step-8` | Press the account avatar | (its menu opens and the tour moves on into it) |
+  | `tour-step-9`, `tour-step-9-seen` | Press 聽寫 in the lit account menu | The dictation page, beside the dimmed sidebar |
+  | `tour-step-10`, `tour-step-10-seen` | Press 行事曆 in the account menu the tour opened again | The calendar page |
+  | `tour-step-11`, `tour-step-11-seen` | Press Raphael's row | Raphael's own conversation, which stays open to the end |
+  | `tour-step-12` | Hold the quick-ask keys together (practised: they start nothing) | Each large 3D key sinks and lights while held; all down makes the real quick-ask corner say Raphael's introduction as a notice and vanish (nothing recorded), and Finish shows |
+
+  A missing action is skipped at entry. Nothing moves on by the clock: a press the app does not react to leaves the step
+  as it was. 好的 closes what the step opened through the window's own path; after the dictation and calendar pages it
+  brings the conversation back and opens the account menu again for the next row, and a resize that closed a menu opens
+  it again. No line of the tour ends with a full stop. The keys are practised while the last step shows (`hotkeys_practice`), and the practice ends however the tour ends.
+- **Ending early** (`tour-end-ask`, `tour-close`): every step has the shared round End tour
+  button at the top right and in the Tab order. End tour and Skip use the compact shared
+  confirmation with the ordinary primary button and shared Cancel. The confirmation
+  catches presses above the dim and takes keyboard focus. Cancel, Escape and a press
+  beside it preserve the same step and open layer and return focus to End tour. Confirm closes the step's layer and removes the tour
+  immediately. The saved answer stands. The farewell and its hops belong to Finish.
+- **The motion** (`tour-hop`): the scene enables motion and waits for the hops to settle. The motion is the shared
+  `app/src/main/slime-hop.ts` library (plans as numbers, `playHops` on a ground, body and glow), so any slime can travel the same way.
+  Raphael never appears elsewhere at once: a step's move and one the layout forces (a resize, a layer that opened) are
+  hopped along one straight line from where it stands. 80 ms of crouch, then two to six hops (the square root of the
+  distance over 40 px), each 240 to 420 ms in the air and rising 14 to 80 px (never above the window), 70 ms on the
+  ground between them and a 180 ms landing. Hops under way keep their course to the landing; a move the layout forces
+  meanwhile is hopped from there afterwards. In the air its eyes turn toward where it
+  goes, as a face seen from the side, and it faces the person again on landing. A nudge of a few pixels only shifts where
+  the hops land. Its blue light follows the ground and narrows and dims at the top. At rest the shared portrait sits on
+  whole pixels, and only the light breathes over 2.6 s. The words being left fade where they stand; the new ones appear
+  after landing. Reduced motion places both immediately.
+- **The goodbye** (`tour-end`, `tour-end-closed`): Finish clears the dim, Raphael returns to
+  the sidebar foot and hops twice as the farewell appears. Each hop is 12 px high and
+  takes 150 ms. The farewell fades 4.5 s after it appears. Reduced motion skips both hops.
+- **The checks**: `page-unshifted` checks the app root and the zero scroll offsets in
+  `after-onboarding`, the offer scenes, `tour-step-1`, `tour-step-5`, every `-seen` scene and
+  `tour-end`. The dim covers the window edges and opens on the action. The full group stays
+  inside the viewport and clears the ring and every visible pressable element in the open
+  layer, including connection buttons. The window's own dialogs, menus and pages never move or
+  get padded for the tour at any size: the group tries the space beside the layer (its bubble
+  narrows to no less than 200 px to fit a strip), the open part of its header, then the dim above
+  or below it. Only while a dialog that leaves no such strip is looked at does Raphael stand on
+  its lower right, clear of its title; the check then proves no strip could hold the group. Check
+  the apps, maker and page scenes at the owner's 1080 × 640 size as well as the usual sizes.
+
+```powershell
+npm run look -- tour-offer tour-offer-returning tour-offer-settings-open tour-offer-skip-ask tour-offer-skip tour-offer-escape tour-step-1 tour-step-1-seen tour-step-2 tour-step-2-seen tour-step-3 tour-step-3-seen tour-step-4 tour-step-4-seen tour-step-5 tour-step-5-seen tour-step-6 tour-step-7 tour-step-7-seen tour-step-8 tour-step-9 tour-step-9-seen tour-step-10 tour-step-10-seen tour-step-11 tour-step-11-seen tour-step-12 tour-hop tour-end tour-end-closed tour-end-ask tour-close --theme both --width 1120,720,1920x1080,1080x640
+```
+
+Native verification still needs the real window. Look exercises the app with fixture data.
+
 ## Gotchas
 
 Each scene begins fresh. The onboarding variant overrides the ordinary onboarded device setting.
@@ -128,6 +224,15 @@ The look mock signs no one in to ChatGPT, has all three command-line tools ready
 OpenRouter key set; `integrations.connect` is cancelled there, so only a managed app proves a
 completed sign-in. Credentials, real browser logins, command-line sign-in and native persistence
 remain separate checks.
+
+## Every slime answers a press
+
+R-GUIDE-01: each slime of the guide (the one being made, each picker slime, the three floating by a title) is pushed down
+by a press and springs back, as the sidebar's slimes do (`slime.css`, "a squish that follows the press and the release";
+the guide's pictures are given back only the transition their still rule stopped, in the motion-allowed block, so reduced
+motion keeps them still). A floating slime and the large one only squish: they take no focus and change no step. Scene
+`onboarding-slime-press` (motion on) presses each with the real mouse (`slime-press` in driver.mjs: scale while held, back
+after, the press reaches the slime, the step unchanged) and once more with reduced motion, where nothing squishes.
 
 ## UI audit regression coverage
 

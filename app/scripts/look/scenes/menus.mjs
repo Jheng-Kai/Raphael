@@ -1,7 +1,8 @@
 import { scene, click, hover, wait, waitGone, check, key, member, scroll, settings, rightClick } from "./steps.mjs";
 
 const column = { action: "member-column", collapsed: false };
-const open = [column, click('.mb-col [data-member-more="1"]'), wait('#app-popover [data-pick="move"]')];
+// Member 1 is the chief, whose menu has no 移到分組 (member-column.ts): an ordinary slime's row has the submenu.
+const open = [column, click('.mb-col [data-member-more="2"]'), wait('#app-popover [data-pick="move"]')];
 const hovered = [...open, hover('#app-popover [data-pick="move"]'), wait('#app-submenu'), check("submenu-placement")];
 export default [
   scene("menu-wheel-closes", "A real wheel over the page closes both menu levels", [...hovered, { action: "menu-wheel" }, check("menu-scroll-closed")]),

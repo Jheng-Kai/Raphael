@@ -875,6 +875,7 @@ class App(Router):
             self.providers = ProviderRegistry(
                 self._conn, self.client, self.keys,
                 credential=(lambda pid: provider_keys.setdefault(pid, MemoryKeyStore())) if fake_llm else None,
+                openrouter_catalog=lambda: self.brain.known_models(),
                 transport=offline_transport() if fake_llm else None,
             )
             self.client = ProviderRouter(self.providers, self.client)
@@ -1036,6 +1037,7 @@ class App(Router):
             notify=self.notify,
             connections=self.integrations.connections,
             vault=self.vault,
+            default_answer_model=self.providers.starting_answer_model,
         )
         # The Docker computers mount the library's own folder, read-only: a skill's script runs there by its path, with no copy of
         # the skills anywhere (R-SKILL-29). A member told where a skill is is told the path in its own computer.

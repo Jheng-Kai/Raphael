@@ -212,3 +212,10 @@ test("choosing Raphael opens its conversation space as the app's ordinary route"
   expect(menu()).toBeNull();
   expect(document.activeElement).toBe(anchor);
 });
+
+test("the account menu has no tour entry", async () => {
+  const { anchor } = mount(async () => ({ brains: [] }));
+  anchor.click(); await flush();
+  expect(menu()!.querySelector('[data-account="tour"]')).toBeNull();
+  expect(menu()!.textContent).not.toContain("\u5c0e\u89bd");
+});

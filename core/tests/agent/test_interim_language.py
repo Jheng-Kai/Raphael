@@ -63,7 +63,8 @@ def test_a_line_is_in_the_owners_language_when_it_is_mostly_in_its_script(langua
 def test_a_cli_is_told_plainly_that_every_text_it_writes_is_in_the_owners_language():
     named = cli.language_rule("zh-TW")
     assert "including each note between tool calls" in named and "Traditional Chinese" in named
-    assert "the language of the owner's own words" in cli.language_rule(None)
+    assert "unless your persona or the owner specifies another language" in named
+    assert "Use the reply-language rule" in cli.language_rule(None)
     loop = cli.CliLoop(brains=SimpleNamespace(environ={}, home=None), sessions=None, member_id=5, model="cli:claude:fake",
                        ledger=None, language="en", plain=True, system="", user="x", tools=[], progress=print,
                        thinking=lambda text: None, event=lambda text: None, execute=None, owner_language="zh-TW")

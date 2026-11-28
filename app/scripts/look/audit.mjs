@@ -316,9 +316,12 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (!floatingLatest && element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
       const routineNavigation = element.matches('.chat-message .routine-origin > button.routine-run-link[data-act="open-routine"]');
       const dockerSetupInChat = element.matches('.desktop-docker-setup > button.desktop-docker-help[data-docker-help]');
+      // A provider's dialog: the page where a key is made, on the key field's label line, is plain blue words as the app's inline
+      // links are (R-PROV-EDITOR-01); every other action of the dialog is a framed button.
+      const providerLink = element.matches('.pv-dialog .pv-label-row > button.pv-link[data-pv="docs"]');
       // On a floating surface (R-FLOAT-01) a control is framed by its fill (`--float-ctl`), like the chips and 「Connect」 buttons.
       const filledOnFloat = !!element.closest('.modal, .mb-dialog, .cs-dialog, .au-pop, .cb-card, .menu') && !/rgba\(0, 0, 0, 0\)|transparent/.test(style.backgroundColor);
-      if (!navigation && !routineNavigation && !dockerSetupInChat && !element.matches(".queued-actions > .btn:is([data-act=cancel-message], [data-act=send-now])") && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder && !filledOnFloat) violation('R-UI-18', 'Text action button has no frame');
+      if (!navigation && !routineNavigation && !dockerSetupInChat && !providerLink && !element.matches(".queued-actions > .btn:is([data-act=cancel-message], [data-act=send-now])") && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder && !filledOnFloat) violation('R-UI-18', 'Text action button has no frame');
     }
     // The guide's row follows the rule like any other: its round arrow (or ×) is at the left of the black
     // primary, not stacked above it, so nothing in the guide is exempt.
@@ -353,7 +356,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (allowed && !element.closest('.cmp-input, .message-link, .url-chip, .local-command, .message-code pre code, .msg .note code, .bot-scopes code, .mb-row-p, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg, .dl-code')) for (const value of strings) {
       let copy = productPattern ? value.replace(productPattern, "") : value;
       if (element.matches('[data-skl="pick-file"]')) copy = copy.replace(/\.(?:zip|tar\.gz|tgz|md)\b/g, "");
-      for (const [word] of copy.replace(/\{input\}/g, "").replace(keyPattern, "").replace(IANA_ZONE_ID, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").matchAll(/[A-Za-z]{2,}/g)) {
+      for (const [word] of copy.replace(/\{input\}/g, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").replace(keyPattern, "").replace(IANA_ZONE_ID, "").matchAll(/[A-Za-z]{2,}/g)) {
         if (allowed.has(word.toLowerCase()) || seenWords.has(word)) continue;
         seenWords.add(word); mixedLanguage.push({ ...description, word });
       }

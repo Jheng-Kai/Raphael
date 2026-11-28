@@ -7,8 +7,9 @@
 // The open page (R-PAGE-08) is the whole area right of the sidebar: the header's centre becomes the page's own pill (its mark and
 // title) while it stands and its Share button is at the right; a report scrolls as one in that area, an HTML page in its own frame.
 // The page (R-PAGE-11) runs to the window's
-// foot and the composer floats over it: the view measures what stands over the page's foot (the composer's dock
-// and the answer line over it) so a report can scroll its last line clear of them, and an HTML page's frame ends above them.
+// foot and the composer floats over it, as one line (R-PAGE-15): the view measures what stands over the page's foot (the composer's dock
+// and the answer line over it) so a report can scroll its last line clear of them, and an HTML page, whose frame runs to the foot too, is
+// told that room (page-card.ts) and keeps its own last line clear of it.
 import { rememberLayerBack } from "./nav-history";
 import { bindNavLayer } from "./nav-layers";
 import "./page-view.css";

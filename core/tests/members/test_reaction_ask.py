@@ -163,8 +163,7 @@ async def test_the_question_about_a_reaction_is_in_the_owners_language_whatever_
     await react(rig, turn_id, '👎', who=one.id)
     await until(lambda: len(client.chat_calls) == calls + 1)
     system = client.chat_calls[-1]['messages'][0]['content']
-    # The language the owner writes in, never the window's (the interface language reaches no model), and what the member's
-    # persona says of Japanese is read before it.
+    # The instruction to follow the owner's words comes after the persona.
     assert named not in system
     assert "the language the owner writes to you in" in system and "whatever language you teach or your persona uses" in system
     assert system.index('日本語を教える') < system.index('whatever language you teach')
@@ -178,9 +177,9 @@ def test_an_ordinary_reply_is_in_the_language_of_the_owners_message_not_of_the_l
     # The old rule followed "the owner's message or established conversation", and a conversation full of Japanese lessons won.
     assert "established conversation" not in REPLY_LANGUAGE
     assert "answer in the language of the owner's latest message, not a lesson's" in REPLY_LANGUAGE
-    # What a persona or the owner's instructions say stays first, and the window's language still chooses no speech.
-    assert REPLY_LANGUAGE.startswith("Use the language specified in your own persona and the owner's instructions")
-    assert "The interface language never selects your speaking language" in REPLY_LANGUAGE
+    # An explicit preference takes priority, then the owner's message, then the interface fallback.
+    assert REPLY_LANGUAGE.startswith("Use the language specified in your own persona or the owner's instructions")
+    assert "Without one, use the interface language." in REPLY_LANGUAGE
 
 
 async def test_a_positive_reaction_may_get_a_few_words_when_the_member_finds_them_right(setup, client):

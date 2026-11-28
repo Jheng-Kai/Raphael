@@ -154,10 +154,10 @@ export function chatCardAction(act: HTMLElement, askDockerSetup?: () => void): b
   }
   if (kind === "template-share") {
     // The link is copied only once the service has made it; a failure leaves the card as it was and says so. The card is
-    // drawn again with its link, so the toast, not the pressed button, says it is on the clipboard.
+    // drawn again with its link and its 複製連結 button, so no toast repeats what it shows (R-TOAST-01).
     busy(true);
     void api.core<{ share_url: string }>("members.template_card_share", { id: template })
-      .then(async ({ share_url }) => { if (await copyButton(act, share_url)) toaster.info(t("cards.templateLinkCopied")); },
+      .then(async ({ share_url }) => { await copyButton(act, share_url); },
         () => toaster.info(t("cards.templateLinkFailed")))
       .finally(() => busy(false));
     return true;

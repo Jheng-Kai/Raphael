@@ -31,7 +31,10 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
   (`permissions::accessibility(true)`; macOS 26 asks again for an entry of another signature) and the window adds no
   note beside it (R-PRIV-AX-01). The app never clears its own entry: cleared while that question was up, Raphael was
   missing from the list the question opened. Raphael missing from the list, or on without effect, is added from
-  Applications with + (the listed one removed with − first), which the note says. Another version or signature
+  Applications with + (the listed one removed with − first), which the note says. The note's button opens the pane with
+  a card under System Settings (R-PRIV-AX-02, `permission_guide.rs`): Raphael's own icon on it is dragged into the list
+  (AppKit's drag of the running bundle, `macos/guide.rs`), and the card says to turn its switch on; it follows System
+  Settings' window, shows only while System Settings is in front, and goes once the permission is on. Another version or signature
   of the app (a build folder, an older disk image) may not match the entry allowed, and opening the app again can bring
   forward a copy still running: quit every copy before allowing the one in Applications. A local build signed with
   one Apple Development identity keeps its permissions across rebuilds.
@@ -159,7 +162,7 @@ An unavailable tidy model or connection points to Models, and a timeout invites 
 An unsuccessful tidy keeps the original selection and clipboard. Its RPC reply carries no replacement text.
 
 ```powershell
-npm run look -- settings-tidy-key settings-mic-undecided settings-mic-denied settings-accessibility-off dictation-overview dictation --theme both --width 1120,720,1920x1080
+npm run look -- settings-tidy-key settings-mic-undecided settings-mic-denied settings-accessibility-off permission-guide-card dictation-overview dictation --theme both --width 1120,720,1920x1080
 ```
 
 The other layers, each from its own folder (the core's tests, the shell's):
@@ -176,6 +179,11 @@ question key's, has a whole name and does not make the page scroll sideways, and
 `settings-accessibility-off` is a Mac without Accessibility (the look mock's `accessibility_access` answers false): 聽寫
 shows the `missing.accessibility` note above the shortcuts, saying to add Raphael with +, no wider than them, with the one
 button that opens the Accessibility pane (R-PRIV-AX-01);
+`permission-guide-card` draws the card that button puts under System Settings (`permission-guide.html`, R-PRIV-AX-02): the
+sentence to drag Raphael into the list above and turn its switch on, the tile with the app's icon and the name System
+Settings lists it by, the × with its name, and the size and tile place the page reports for the native window and its drag.
+Not proved here: the real drag into System Settings' list, the card following that window, and its going once the
+permission is on, which only a real run of an app bundle shows;
 `settings-mic-undecided` and `settings-mic-denied` are a Mac whose microphone macOS has not asked
 about, or refused (the look mock's `microphone_permission`): 聽寫 shows the note above the shortcuts, no wider than them,
 the meter never sends `audio.monitor` on, 測試麥克風 calls `microphone_ask` once, and a refused one has the button that
@@ -265,9 +273,16 @@ the model names the misheard terms in any language; rewording is never learned, 
 the model. Learning waits for the send (R-LEARN-SEND-01): the composer compares only the dictated text as pasted with the
 same stretch as sent and gives the core that one pair (no state typed on the way, nothing during an input method's
 composition, nothing for a message never sent); another application's field is learned from only when it lost the pasted
-text (the send), by the last text two reads in a row agreed on, and a focus move, the minute's end or a new dictation
-learns nothing. A keyboard source or terminal learns after its own Enter. The owner's report, 珠蔡 saved on the way to
-朱菜, is proved by the composer's input-method test and the Rust watch tests, not by a real input method in the app. The first correction
+text (the send), by the last text two reads in a row agreed on, and a focus move, the end of the watch or a new dictation
+learns nothing. The field is read every 500 ms and every 100 ms while its text changes, so a fix sent a moment after it
+was typed is still read twice; the watch lasts three minutes from the paste (a keyboard source or terminal keeps its
+observer's minute). A keyboard source or terminal learns after its own Enter. The owner's report, 珠蔡 saved on the way to
+朱菜, is proved by the composer's input-method test and the Rust watch tests, not by a real input method in the app.
+自動加入字典 then never added a word (R-LEARN-REVIEW-01): the logs and spend rows showed every edit reaching the review
+and every review answering an empty list, misheard names the owner put right among them, because the prompt turned away
+well-known names, acronyms and anything in a path. It now takes a name or term however well known, and a term inside a
+path, link, command or code alone; nothing after the model changed. Whether the real model names the owner's corrections
+is not measured offline. The first correction
 makes the word a term and the pair a hint: in the phrase list and the prompt from the next dictation, shown under
 常被聽成 in the Dictionary row (`dictionary.list` `heard`), and a replacement rule when the same pair is seen again.
 
@@ -414,10 +429,10 @@ single-use batch Undo, including prior evidence restoration. A separate passive
 `learned.html` native window shows the learned batch and localized Undo at the active
 monitor's horizontal center, 16 px above its taskbar. Every saved batch is queued once,
 including when a new dictation or quick answer is already underway. The native countdown
-starts at reveal and allows ten seconds for one word, plus two seconds per additional
-word. The shell pauses it anywhere over the pill and resumes the remaining time when
-the pointer leaves. Only Undo receives clicks. The core holds each batch's Undo token
-through the queue and hover, and releases it on expiry or Undo. The window is made
+starts at reveal and lasts five seconds, however many words the batch names and wherever
+the pointer is (R-UI-51); only an Undo already pressed is carried out before the pill goes.
+Only Undo receives clicks. The core holds each batch's Undo token through the queue and
+while it shows, and releases it on expiry or Undo. The window is made
 hidden with an empty title (R-LEARN-WIN-01), shown without activation after layout,
 and hidden after the 220 ms fade interval before showing the next batch (R-LEARN-WIN-02).
 The ordinary overlay stays independent. Run the `overlay-learned-pill` scene in both
@@ -692,7 +707,7 @@ npm.cmd run native -- conversation-and-learned-pill voice-conversation locale-sw
 `conversation-and-learned-pill` uses the bundled debug shell, real Rust correction Tracker, core
 acceptance (the offline model's `native_learn_review` names the replaced words) and SQLite evidence. It checks owner
 expansion, conversation scrolling, two Escape presses for a pending fake answer, that nothing is learned while
-`auto_learn` is off, a complete learned batch once it is on, retention while the real desktop pointer hovers over the click-through caption past the two-word countdown, exact
+`auto_learn` is off, a complete learned batch once it is on, Undo pressed within the five seconds, that the pill leaves about five seconds after its reveal while the real desktop pointer rests on the click-through caption (R-UI-51), exact
 batch/evidence Undo and expiry. Read-only Win32 inspection
 checks the learned window's NOACTIVATE style, that its window style has no title bar
 (R-LEARN-WIN-01: while shown, after Undo and after expiry), rounded click region, click-through
@@ -733,8 +748,8 @@ R-UI-70: the desktop overlay and learned notice start click-through. The real pa
 report visible physical client rectangles over the shell-only floating_controls IPC,
 allowlisted only for the calling overlay/learned window. The overlay reports the
 question card, question buttons, expansion button and Stop. The learned page reports
-only Undo. While the pill is shown, a separate cursor-position poll tracks hover over
-the whole pill without changing its click regions.
+only Undo. Nothing reads the pointer over the rest of the pill: its five seconds run
+wherever the pointer is (R-UI-51).
 Scene changes/notice completion clear holds and invalidate late geometry by revision.
 UI-thread setters also reject obsolete queued changes, so a worker enable cannot
 run after an immediate hide and restore interception.

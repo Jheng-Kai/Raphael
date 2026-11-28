@@ -234,7 +234,7 @@ function roomActions(anchor: HTMLElement, room: Room, saved: () => void = () => 
     { id: "rename", label: t("members.rename"), icon: "pencil" },
     ...(!room.is_team ? [{ id: "members", label: t("rooms.members"), icon: "grid" as const }] : []),
     { id: "roles", label: t("rooms.roles"), icon: "grid" },
-    { id: "delete", label: t("members.delete"), icon: "trash" },
+    { id: "delete", label: t("members.delete"), icon: "trash", danger: true },
   ], action => {
     if (action === "pin" || action === "hide") { void api.roomsUpdate(room.id, action === "pin" ? { pinned: !room.pinned } : { hidden: !room.hidden }).then(() => { changed(); saved(); }).catch(error => toaster.info(describeError(error))); }
     else if (action === "roles") void editRoomRoles(room, saved);
@@ -254,8 +254,21 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   el.innerHTML=`<header class="page-head mb-head" data-window-drag><span class="room-picker"></span><div class="au-room-heading"></div><div class="ra-tools">${iconButton("more",t("members.more",{p0:t("rooms.title")}), ' data-room-menu')}</div></header><div class="ra-find" hidden></div><div class="ra-stage"><div class="ra-scroll"><div class="ra-col"><div class="ra-older"></div><ol class="thread au-room-thread"></ol></div></div><div class="ra-dock"></div></div>`;
   const thread=el.querySelector<HTMLElement>(".thread")!,scroll=el.querySelector<HTMLElement>(".ra-scroll")!,older=el.querySelector<HTMLElement>(".ra-older")!;
   keepReadingPlace(scroll, ".thread > *");
-  mountCardFloat({ stage: el.querySelector<HTMLElement>(".ra-stage")!, scroller: scroll, thread });
   let room:Room|undefined,list:MembersList={members:[],groups:[]},messages:RoomMessage[]=[],generation=0,opened=false,canOlder=false,loadingOlder=false;
+  const cardFloat = mountCardFloat({ stage: el.querySelector<HTMLElement>(".ra-stage")!, scroller: scroll, thread, memberOfCard(card) {
+    const messageId = Number(card.closest<HTMLElement>("[data-room-message]")?.dataset.roomMessage);
+    const message = messages.find(item => item.id === messageId);
+    const turn = message?.turn;
+    const { ownerQuestion, connector, secretCard, pairingCard, permissionCard, computerCard, mailCard, mailOffer, mcpProposal } = card.dataset;
+    const cardId = connector ?? secretCard ?? permissionCard ?? computerCard ?? pairingCard ?? mailCard ?? mailOffer ?? mcpProposal;
+    const speaker = turn?.owner_questions?.find(question =>
+      ownerQuestion ? question.id === ownerQuestion : !!cardId && question.card_id === cardId && question.state === "asked");
+    const pairing = pairingCard ? turn?.pairings?.find(item => item.id === pairingCard) : undefined;
+    const draftId = mailCard ?? mailOffer;
+    const draft = draftId ? turn?.drafts?.find(item => item.id === draftId) : undefined;
+    const id = speaker?.member_id ?? pairing?.member_id ?? draft?.holder_id ?? message?.member_id ?? turn?.member_id ?? RAPHAEL_ID;
+    return memberOf(list, id) ?? { id };
+  } });
   // Navigation identity remains available while the complete room is loading.
   let roomId: number | undefined;
   let closeSideThread: (() => void) | undefined;
@@ -338,6 +351,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const measureAllMessages = messagePreviewMeasure(thread);
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureAllMessages) : null;
   messageResize?.observe(thread);
+  // While an edge is dragged each frame is measured in the frame itself (reading-place.ts followLines).
+  scroll.addEventListener("conversation-measure", () => measureMessagePreviews(thread, { all: true }));
   const finder = mountConversationFind({bar:el.querySelector('.ra-find')!,thread,scroll,
     records: () => roomWindow.before || roomWindow.after ? messages.map(message => ({ key: `message:${message.id}`, texts: message.member_id === null ? [messagePlainText(message.text)] : plainReplies(replyMessages(message.text)).map(text => messagePlainText(text, true, composioAction(message.turn))) })) : undefined,
     reveal: key => { releaseRichScroll(scroll); if (roomWindow.focus(key)) draw(); }, load:async current=>{
@@ -431,7 +446,9 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     }
     const faceOf=(id:number,name:string)=>faceHTML(person(id)??{id,name},20);
     // A reply that never came stands where its exchange stopped: after its last message, before its wrap-up.
-    const blocked=(exchange?.reply_intents??[]).filter(intent=>intent.state==="blocked").flatMap(intent=>{
+    // After a member showed anything of its reply, the owner's Stop only stops: it says nothing of the members that had not spoken yet (R-CHAT-STOP-02).
+    const spoke=(origin:number)=>messages.some(m=>(m.origin_message_id??m.id)===origin&&m.member_id!==null&&m.kind!=="wrapup"&&m.text.trim()!=="");
+    const blocked=(exchange?.reply_intents??[]).filter(intent=>intent.state==="blocked"&&!(intent.reason==="owner"&&spoke(intent.origin_message_id))).flatMap(intent=>{
       const anchor=messages.filter(m=>(m.origin_message_id??m.id)===intent.origin_message_id&&m.kind!=="wrapup").pop();
       return anchor?[{created:anchor.created,order:1,intent}]:[];
     });
@@ -510,6 +527,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
         return () => { node.before(made); restorePages(); restoreSetup(); node.remove(); restoreTyped(); restoreMail(); };
       },
     });
+    cardFloat.sync();
     newestMessage = Math.max(newestMessage, ...messages.map(message => message.id)); drewOnce = true;
     if (changed) {
     updateLiveTimes(thread);

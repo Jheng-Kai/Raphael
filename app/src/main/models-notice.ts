@@ -1,7 +1,7 @@
 // What the core says about the models of the features (R-DEFAULT-05). Nothing ships a model: when a source is connected,
-// the core fills the features that had none with that source's recommended models and says so once (`ModelsFilled`); when
-// a feature is used with no model it says which feature (`ModelMissing`), and the toast's one button opens that feature's
-// own choice. The words name the feature, never a provider.
+// the core fills the features that had none with that source's recommended models, and the choices on screen show it (no
+// toast says so, R-TOAST-01); when a feature is used with no model it says which feature (`ModelMissing`), and the toast's
+// one button opens that feature's own choice. The words name the feature, never a provider.
 
 import { t } from "./i18n";
 import { btn, esc, toaster } from "./ui";
@@ -9,11 +9,6 @@ import { btn, esc, toaster } from "./ui";
 export type ModelRole = "answer" | "quick" | "cleanup" | "stt";
 const ROLES: readonly ModelRole[] = ["answer", "quick", "cleanup", "stt"];
 const MISSING = { answer: "models.missing.answer", quick: "models.missing.quick", cleanup: "models.missing.cleanup", stt: "models.missing.stt" } as const;
-
-export function tellModelsFilled(filled: { source: string; roles: readonly string[] }): void {
-  if (!filled.source || !filled.roles.length) return;
-  toaster.info(t("models.filled", { p0: filled.source }));
-}
 
 export function modelMissingHTML(role: ModelRole): string {
   return `<span class="model-missing" role="status">${esc(t(MISSING[role]))}</span>` +

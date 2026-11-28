@@ -136,7 +136,8 @@ describe("cards a member shows in its conversation for the panel's buttons", () 
     expect(chatCardAction(host.querySelector<HTMLElement>('[data-act="template-share"]')!)).toBe(true);
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith("https://share.example/s/Ab3dE5gH9k"));
     expect(api.core).toHaveBeenCalledWith("members.template_card_share", { id: "tpl-1" });
-    await vi.waitFor(() => expect(document.querySelector(".toast")?.textContent).toContain(t("cards.templateLinkCopied")));
+    // The card shows the link and its copy button: no toast repeats it (R-TOAST-01).
+    expect(document.querySelector(".toast")).toBeNull();
     writeText.mockClear();
     api.core.mockRejectedValueOnce(new Error("The share service answered 500"));
     chatCardAction(host.querySelector<HTMLElement>('[data-act="template-share"]')!);

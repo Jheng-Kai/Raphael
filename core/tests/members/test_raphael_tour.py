@@ -40,20 +40,20 @@ async def test_an_empty_raphael_conversation_begins_the_tour_with_its_own_welcom
     assert "<new_member" not in system and "newly created assistant" not in system
 
 
-async def test_the_tour_is_told_where_the_owner_stands_and_speaks_in_the_owners_language_never_the_windows(chain, client):
+async def test_the_tour_uses_the_named_interface_fallback_and_keeps_owner_preferences(chain, client):
     rig = chain
     rig.team.members.store.create_member(name="Calendar", role="Manage appointments")
     rig.team.members._connections = lambda: [{"name": "Gmail", "enabled": True, "state": "ready"},
                                              {"name": "Offline", "enabled": True, "state": "unreadable"}]
-    rig.settings.set("owner_about", "I run the Filia project")
+    rig.settings.set("owner_about", "I run the Filia project. I prefer replies in Japanese.")
     rig.settings.set("languages", ["ja-JP", "en-US"])
     await tour(rig, client, language="fr")
-    system = client.chat_calls[0]["messages"][0]["content"]
-    for known in ("Manage appointments", "Gmail", "Filia", "<languages_spoken>", '["ja-JP", "en-US"]'):
+    system, user = (message["content"] for message in client.chat_calls[0]["messages"][:2])
+    for known in ("Manage appointments", "Gmail", "Filia", "I prefer replies in Japanese."):
         assert known in system
-    assert "Offline" not in system
-    assert "never the window's" in system and "The interface language never selects" in system
-    assert "fr" not in json.dumps(client.chat_calls[0]["messages"][1:])  # the window's language reaches no model
+    assert "Offline" not in system and "<languages_spoken>" not in system
+    for prompt in (system, user):
+        assert "explicit saved preference" in prompt and "Otherwise use French (fr)." in prompt
 
 
 async def test_a_tour_whose_welcome_is_missing_is_sent_back_for_it(chain, client):
@@ -79,9 +79,9 @@ async def test_a_conversation_with_an_owner_message_in_it_begins_no_tour(chain, 
 
 
 async def test_a_slime_is_greeted_as_a_new_member_and_raphael_is_not(chain, client):
-    new_prompt = greeting_prompt(Speaker(id=5, name="Mia", role="Researcher"))
+    new_prompt = greeting_prompt(Speaker(id=5, name="Mia", role="Researcher"), "en")
     assert "newly created assistant" in new_prompt and TOUR not in new_prompt
-    assert greeting_prompt(RAPHAEL).startswith(TOUR)
+    assert greeting_prompt(RAPHAEL, "en").startswith(TOUR)
 
 
 async def test_the_owners_pick_goes_on_with_the_tour_in_a_turn_of_raphaels_own(chain, client):

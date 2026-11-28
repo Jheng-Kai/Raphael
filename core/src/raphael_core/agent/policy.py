@@ -43,7 +43,7 @@ CONFIRM_TIMEOUT_S = 600.0
 NO_TIMER_S = float("inf")
 CONFIRM_TIMEOUT_MS = round(CONFIRM_TIMEOUT_S * 1000)
 # What a model is told when nobody answered a question in time. It is the model's, not the window's: the same words
-# whatever the interface language, which goes to no model. The owner's own notice of it is the
+# whatever the interface language. The owner's own notice of it is the
 # fixed phrase `expired` in the interface language.
 EXPIRED_NOTE = "Nobody answered the owner's approval in time. The action was not done and nothing was executed."
 # How long a question waits when nobody sits at the keyboard to answer it: the background worker's

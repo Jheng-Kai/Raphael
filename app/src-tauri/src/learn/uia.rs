@@ -931,7 +931,7 @@ impl WatchedField for UiaField {
     }
 
     /// A keyboard source or a terminal knows the send itself: Enter, or the input row cleared. A
-    /// focus move or the end of the minute is not one.
+    /// focus move or the end of the watch is not one.
     fn submitted(&self) -> Option<bool> {
         match &self.mode {
             ReadMode::Terminal { tracker, .. } => Some(tracker.is_sent()),

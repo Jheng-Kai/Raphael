@@ -1,8 +1,19 @@
 """Rich reply guidance reaches every production brain without changing tool safety."""
+import json
+
 import pytest
 
 from raphael_core.agent.persona import cli_system_prompt, member_system_prompt, system_prompt
 from raphael_core.agent.self_check import DOCTRINE
+
+
+@pytest.mark.parametrize("kind", ["forecast", "board", "chart"])
+def test_answer_form_example_is_a_closed_json_fence(kind):
+    lines = DOCTRINE.splitlines()
+    start = next(index for index, line in enumerate(lines) if line.startswith(f"```{kind}"))
+    assert lines[start] == f"```{kind}"
+    end = lines.index("```", start + 1)
+    assert isinstance(json.loads("\n".join(lines[start + 1:end])), dict)
 
 
 @pytest.mark.parametrize("language", ["zh-TW", "en", "ja"])
