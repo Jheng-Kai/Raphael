@@ -2,11 +2,10 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mountComposerBrain } from "../composer-brain";
+import { openMemberCreator } from "../member-creator";
 import { setLocale, t } from "../i18n";
 import { closeMenu, openPopover } from "../ui";
-import type { DeviceSettings, Member } from "../types";
-import { touches } from "./place";
+import type { DeviceSettings, MainEvent } from "../types";
 import { STEPS } from "./steps";
 import { BYE_MS, OFFER_DELAY_MS, createTour, type Tour } from "./tour";
 
@@ -48,8 +47,8 @@ let reduced = true;
 function harness(patch: Partial<DeviceSettings> = {}) {
   document.body.innerHTML =
     '<div class="window-chrome"><button class="window-drag">Drag</button><div class="window-controls"><button>Close window</button></div></div>' +
-    '<nav id="nav"><div class="sidebar-conversations"></div><button class="sidebar-apps"></button><button class="sidebar-account"></button></nav>' +
-    '<main id="main"><div class="page-agent"><form class="composer"><textarea class="cmp-input"></textarea><button type="button" class="cmp-mode"></button>' +
+    '<nav id="nav"><div class="sidebar-conversations"><button data-col="add"></button></div><button class="sidebar-apps"></button><button class="sidebar-account"></button></nav>' +
+    '<main id="main"><div class="page-agent"><form class="composer"><textarea class="cmp-input"></textarea><button type="button" class="cmp-send"></button><button type="button" class="cmp-mode"></button>' +
     '<span class="cmp-model"><button type="button" class="mp-trigger" aria-expanded="false"></button></span></form></div></main>';
   place(find(".sidebar-conversations"), 0, 32, 348, 780);
   place(find(".sidebar-apps"), 52, 856, 284, 36);
@@ -59,12 +58,19 @@ function harness(patch: Partial<DeviceSettings> = {}) {
   place(find(".cmp-mode"), 440, 832, 60, 26);
   place(find(".cmp-model"), 900, 832, 120, 26);
   place(find(".mp-trigger"), 900, 832, 120, 26);
+  place(find(".cmp-send"), 1040, 830, 28, 28);
+  place(find('[data-col="add"]'), 315, 40, 30, 30);
   const device = { onboarded: true, agent_keys: ["AltRight+Space"], tour_offered: false, ...patch } as DeviceSettings;
   const setDevice = vi.fn(async (change: Partial<DeviceSettings>) => Object.assign(device, change));
   const closeSettings = vi.fn(() => find(".modal-scrim")?.remove());
-  const tour = createTour({ device: () => device, setDevice, closeSettings });
+  let conversation = true;
+  const listeners = new Set<(event: MainEvent) => void>();
+  const emit = (event: MainEvent) => listeners.forEach(listener => listener(event));
+  const tour = createTour({ device: () => device, setDevice, closeSettings, isConversation: () => conversation,
+    onEvent: listener => { listeners.add(listener); return () => void listeners.delete(listener); } });
+  const showConversation = (shown: boolean) => { conversation = shown; tour.conversationChanged(); };
   tours.push(tour);
-  return { tour, device, setDevice, closeSettings };
+  return { tour, device, setDevice, closeSettings, showConversation, emit };
 }
 
 async function offer(tour: Tour): Promise<void> {
@@ -75,30 +81,6 @@ async function offer(tour: Tour): Promise<void> {
 async function begin(tour: Tour): Promise<void> {
   await offer(tour);
   await press("start");
-}
-
-function permissionMenu(): HTMLElement {
-  const menu = openPopover(find(".cmp-mode"), '<div class="cb-modes"><button>Manual</button></div>', { className: "menu cb-menu", role: "dialog" });
-  place(menu, 440, 520, 305, 290);
-  return menu;
-}
-
-async function completeComposer(): Promise<void> {
-  find(".cmp-input").focus();
-  await settle();
-}
-
-async function advance(): Promise<void> {
-  if (!button("next")) {
-    const step = find(".tour").dataset.step!;
-    if (step === "composer") await completeComposer();
-    else {
-      const selectors: Record<string, string> = { permission: ".cmp-mode", model: ".mp-trigger", apps: ".sidebar-apps", account: ".sidebar-account" };
-      find(selectors[step]!).click();
-      await settle(4000);
-    }
-  }
-  await press("next");
 }
 
 beforeEach(() => {
@@ -123,12 +105,79 @@ afterEach(() => {
 test("the offer introduces Raphael and has Skip and Start, with no dim", async () => {
   const { tour } = harness();
   await offer(tour);
-  expect(words()).toBe("哈囉！我是拉斐爾。要我為你介紹一些基本的操作方式嗎？");
+  expect(words()).toBe(t("tour.offer"));
+  expect(words()).toContain("大約兩分鐘");
   expect([...bubble().querySelectorAll("button")].map(item => item.textContent)).toEqual(["跳過", "開始"]);
   expect(button("start").classList.contains("pri")).toBe(true);
   expect(button("skip").classList.contains("pri")).toBe(false);
   expect(bubble().getAttribute("aria-label")).toBe("拉斐爾的導覽");
   expect(find(".tour").dataset.dim).toBe("none");
+});
+
+test.each(["modal-scrim", "mb-scrim", "cs-scrim"])("the offer hides under %s and returns unanswered when it closes", async scrimClass => {
+  const { tour, device, setDevice } = harness();
+  const scrim = document.createElement("div");
+  scrim.className = scrimClass;
+  scrim.hidden = true;
+  document.body.append(scrim);
+  await offer(tour);
+  const root = find(".tour");
+  scrim.hidden = false;
+  button("start").click();
+  await settle();
+  expect(root.inert).toBe(true);
+  expect(root.classList.contains("is-covered")).toBe(true);
+  expect(tour.active()).toBe(false);
+  button("start").click();
+  key("Escape");
+  expect(device.tour_offered).toBe(false);
+  expect(setDevice).not.toHaveBeenCalled();
+
+  scrim.hidden = true;
+  await settle();
+  expect(tour.active()).toBe(true);
+  expect(root.inert).toBe(false);
+  expect(root.classList.contains("is-covered")).toBe(false);
+  expect(setDevice).not.toHaveBeenCalled();
+});
+
+test("the offer hides on another page and pops in once on each return to the conversation", async () => {
+  const { tour, showConversation, setDevice } = harness();
+  await offer(tour);
+  const root = find(".tour"), firstStart = button("start");
+  for (let visit = 0; visit < 2; visit++) {
+    const before = button("start");
+    showConversation(false);
+    await settle();
+    expect(root.inert).toBe(true);
+    showConversation(true);
+    await settle();
+    expect(root.inert).toBe(false);
+    const after = button("start");
+    expect(after).not.toBe(before);
+    showConversation(true);
+    document.body.append(document.createElement("p"));
+    await settle(8000);
+    expect(button("start")).toBe(after);
+  }
+  expect(button("start")).not.toBe(firstStart);
+  expect(setDevice).not.toHaveBeenCalled();
+});
+
+test("the first offer waits for the conversation and for its covering dialog to clear", async () => {
+  const { tour, showConversation, setDevice } = harness();
+  showConversation(false);
+  await offer(tour);
+  const scrim = document.createElement("div");
+  scrim.className = "modal-scrim";
+  document.body.append(scrim);
+  showConversation(true);
+  await settle(OFFER_DELAY_MS + 50);
+  expect(mode()).toBeUndefined();
+  scrim.remove();
+  await settle(OFFER_DELAY_MS + 50);
+  expect(mode()).toBe("offer");
+  expect(setDevice).not.toHaveBeenCalled();
 });
 
 test("Start remembers the offer and begins without a confirmation", async () => {
@@ -152,6 +201,7 @@ test("Skip asks before saving the answer, then closes the offer immediately", as
   expect(cancelButton().textContent).toBe("取消");
   expect(confirmation().classList.contains("is-quiet")).toBe(true);
   expect(mode()).toBe("offer");
+  expect(tour.active()).toBe(true);
   expect(device.tour_offered).toBe(false);
   expect(setDevice).not.toHaveBeenCalled();
   button("start").click();
@@ -214,378 +264,263 @@ test("the offer gives up quietly when the account button never appears", async (
   expect(setDevice).not.toHaveBeenCalled();
 });
 
-test("seven titled steps show progress dots, no Next before the action, and key caps at the end", async () => {
-  const { tour } = harness({ agent_keys: ["ControlLeft+F8"] });
+const stepId = () => find(".tour")?.dataset.step;
+const submit = () => {
+  const field = find(".cmp-input") as HTMLTextAreaElement;
+  field.value = "Hello";
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+  find(".composer").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+};
+const thread = () => find(".page-agent");
+const ownerMessage = (id: number, words: string) => {
+  thread().insertAdjacentHTML("beforeend", `<div class="tn" data-id="${id}"><div data-message="question"><div class="message-text">${words}</div></div></div>`);
+};
+const reachPermission = async (tour: Tour) => {
   await begin(tour);
-  expect(STEPS.map(step => step.id)).toEqual(["composer", "permission", "model", "apps", "team", "account", "keys"]);
-  for (let index = 1; index <= 7; index++) {
-    expect(find(".tour-title").textContent).toBe(t(STEPS[index - 1]!.title));
-    expect(find(".tour-count").getAttribute("aria-label")).toBe(`第 ${index} 步，共 7 步`);
-    const dots = [...bubble().querySelectorAll(".tour-dot")];
-    expect(dots).toHaveLength(7);
-    expect(dots.filter(dot => dot.hasAttribute("data-current"))).toEqual([dots[index - 1]]);
-    expect(button("close").getAttribute("aria-label")).toBe(t("tour.close"));
-    expect(!!button("back")).toBe(index > 1);
-    if (index < 7) {
-      if (index === 5) expect(button("next").classList.contains("pri")).toBe(true);
-      else expect(button("next")).toBeNull();
-      await advance();
+  submit();
+  ownerMessage(1, "Hello");
+  await settle();
+};
+
+function wireSteps() {
+  const open = (selector: string, html: string) => {
+    const parent = document.createElement("div");
+    parent.innerHTML = html;
+    const layer = parent.firstElementChild as HTMLElement;
+    document.body.append(layer);
+    place(layer, 260, 310, 500, 330);
+    for (const [index, el] of Array.from(layer.querySelectorAll("button, input, .modal, .cb-body, [data-cs-body], .cs-grid")).entries()) {
+      place(el, 280, 335 + index * 24, 400, 22);
     }
+    return layer.querySelector<HTMLElement>(selector) ?? layer;
+  };
+  const model = () => open(".cb-menu", '<div class="cb-menu"><div class="cb-now"><button data-cb-act="models" class="cb-pick">Models</button></div><div class="cb-body" hidden></div></div>');
+  find(".cmp-mode").addEventListener("click", () => {
+    const menu = open(".cb-menu", '<div class="cb-menu"><div class="cb-modes"><button class="cb-row" data-mode="ask">Manual</button></div></div>');
+    menu.querySelector("button")!.addEventListener("click", () => { find(".cmp-mode").dataset.mode = "ask"; menu.remove(); });
+  });
+  find(".mp-trigger").addEventListener("click", () => {
+    // The shared close path owns the popover, just as it does in the app.
+    const paint = model();
+    const menu = openPopover(find(".mp-trigger"), paint.innerHTML, { className: "menu cb-menu", role: "dialog" });
+    paint.remove();
+    place(menu, 420, 400, 420, 300);
+    const pick = menu.querySelector<HTMLElement>("button")!, body = menu.querySelector<HTMLElement>(".cb-body")!;
+    place(pick, 445, 445, 315, 42);
+    place(body, 430, 430, 400, 265);
+    pick.addEventListener("click", () => { body.hidden = false; body.dataset.view = "models"; });
+  });
+  find(".sidebar-apps").addEventListener("click", () => {
+    const panel = open(".modal", '<div class="modal-scrim" data-standalone="connections"><div class="modal"><input id="conn-search"><div data-cs-body></div></div></div>');
+    place(panel, 140, 100, 780, 600);
+    const input = find("#conn-search");
+    input.addEventListener("input", () => {
+      find("[data-cs-body]").innerHTML = '<div class="cs-grid"></div>';
+      place(find(".cs-grid"), 210, 450, 620, 150);
+    });
+  });
+  const create = vi.fn(async () => null);
+  const cancel = vi.fn();
+  find('[data-col="add"]').addEventListener("click", () => {
+    const maker = openMemberCreator({ groupId: null, taken: [], create });
+    const dialog = find(".cr-dialog");
+    place(dialog, 180, 185, 640, 495);
+    place(find(".cr-picker"), 205, 415, 480, 115);
+    find(".cr-picker").addEventListener("click", () => {
+      place(find('.cr-face svg[data-state="arriving"]'), 410, 245, 96, 96);
+    });
+    maker.el.querySelector('[data-dlg="cancel"]')!.addEventListener("click", cancel);
+  });
+  find(".sidebar-account").addEventListener("click", () => {
+    const menu = open(".account-menu", '<div class="account-menu"><button data-account="settings">Settings</button></div>');
+    menu.querySelector("button")!.addEventListener("click", () => {
+      menu.remove();
+      const panel = open(".modal", '<div class="modal-scrim" data-page="settings"><div class="modal"><button data-pane="usage">Usage</button></div></div>');
+      place(panel, 180, 185, 780, 600);
+      find('[data-pane="usage"]').addEventListener("click", () => {
+        panel.insertAdjacentHTML("beforeend", '<button data-usage-tab="overview" aria-selected="true">Overview</button>');
+        place(find("[data-usage-tab]"), 630, 430, 100, 30);
+      });
+    });
+  });
+  return { create, cancel };
+}
+
+test("all thirteen steps wait for their own action and show no Next or Back", async () => {
+  const { tour, closeSettings, emit } = harness();
+  const { create, cancel } = wireSteps();
+  const actions = [
+    () => { submit(); ownerMessage(1, "Hello"); },
+    () => find(".cmp-mode").click(),
+    () => find('.cb-row[data-mode="ask"]').click(),
+    () => find(".mp-trigger").click(),
+    () => find('[data-cb-act="models"]').click(),
+    () => find(".sidebar-apps").click(),
+    () => {
+      const field = find("#conn-search") as HTMLInputElement;
+      field.value = "Gmail";
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    },
+    () => find('[data-col="add"]').click(),
+    () => find(".cr-picker [data-slime-character]").click(),
+    () => find(".sidebar-account").click(),
+    () => find('[data-account="settings"]').click(),
+    () => find('[data-pane="usage"]').click(),
+  ];
+
+  ownerMessage(0, "Hello");
+  await begin(tour);
+  for (const [index, step] of STEPS.entries()) {
+    expect(stepId()).toBe(step.id);
+    expect(count()).toBe(`${index + 1}/13`);
+    expect([...bubble().querySelectorAll("button")].map(el => el.dataset.tour)).toEqual(["close"]);
+    emit({ type: "Dictation", phase: "processing", agent: true });
+    document.body.append(document.createElement("hr"));
+    await settle(80);
+    expect(stepId()).toBe(step.id);
+    if (step.keys) break;
+
+    actions[index]();
+    await settle(490);
+    expect(stepId()).toBe(step.id);
+    await settle(60);
   }
-  expect(count()).toBe("7/7");
-  expect(spot().hidden).toBe(true);
-  expect([...bubble().querySelectorAll("kbd")].map(cap => cap.textContent)).toEqual(["Ctrl", "F8"]);
-  await press("back");
-  expect(count()).toBe("6/7");
-  await advance();
+  expect(closeSettings).toHaveBeenCalledTimes(2);
+  expect(find(".cb-menu")).toBeNull();
+  expect(find(".cr-dialog")).toBeNull();
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(create).not.toHaveBeenCalled();
+  expect(find(".modal-scrim")).toBeNull();
+  expect(find(".tour-keys kbd")).not.toBeNull();
+
+  emit({ type: "Dictation", phase: "listening", agent: false });
+  expect(button("done")).toBeNull();
+  emit({ type: "Dictation", phase: "listening", agent: true });
+  expect(button("done")).not.toBeNull();
   await press("done");
   expect(mode()).toBe("bye");
-  expect(words()).toBe("完成！基本操作都學會了。有問題隨時叫我。");
-  expect(find(".tour").dataset.dim).toBe("none");
-  await settle(BYE_MS - 601);
-  expect(mode()).toBe("bye");
+  await settle(BYE_MS);
+  expect(mode()).toBeUndefined();
+});
+
+test("the composer advances only when its submitted owner message appears", async () => {
+  const { tour } = harness();
+  await begin(tour);
+  find(".cmp-input").focus();
+  find(".cmp-input").click();
+  find(".cmp-input").dispatchEvent(new Event("input", { bubbles: true }));
+  await settle(4100);
+  expect(stepId()).toBe("composer");
+  ownerMessage(1, "Hello");
+  const field = find(".cmp-input") as HTMLTextAreaElement;
+  field.value = "Hello";
+  key("Enter", field, true);
+  await settle(4100);
+  expect(stepId()).toBe("composer");
+  key("Enter", field);
+  ownerMessage(2, "Another message");
+  await settle();
+  expect(stepId()).toBe("composer");
+  ownerMessage(3, "Hello");
+  await settle();
+  expect(stepId()).toBe("permission");
+});
+
+test("an attempted action with no reaction advances after four seconds", async () => {
+  const { tour } = harness();
+  await reachPermission(tour);
+  find(".cmp-mode").click();
+  await settle(3999);
+  expect(stepId()).toBe("permission");
   await settle(1);
-  expect(mode()).toBeUndefined();
+  expect(stepId()).toBe("model");
 });
 
-test("Tab and Shift-Tab cycle through the control and bubble buttons only", async () => {
+test("a missing target skips immediately and keeps the original progress count", async () => {
   const { tour } = harness();
+  find(".cmp-input").remove();
+  find(".cmp-mode").remove();
   await begin(tour);
-  expect(document.activeElement).toBe(bubble());
-  expect(find(".tour").dataset.step).toBe("composer");
-  expect(key("Tab", bubble()).defaultPrevented).toBe(true);
-  expect(find(".tour").dataset.step).toBe("composer");
-  expect(document.activeElement).toBe(find(".cmp-input"));
-  await settle();
-  expect(key("Tab", find(".cmp-input")).defaultPrevented).toBe(true);
-  expect(document.activeElement).toBe(button("close"));
-  expect(key("Tab", button("close")).defaultPrevented).toBe(true);
-  expect(document.activeElement).toBe(button("next"));
-  expect(key("Tab", button("next"), true).defaultPrevented).toBe(true);
-  expect(document.activeElement).toBe(button("close"));
-  expect(key("Tab", button("close"), true).defaultPrevented).toBe(true);
-  expect(document.activeElement).toBe(find(".cmp-input"));
-  const other = find(".sidebar-apps");
-  other.focus();
-  await settle();
-  expect(document.activeElement).toBe(button("next"));
-  await press("next");
-  expect(key("Tab", button("back")).defaultPrevented).toBe(true);
-  expect(document.activeElement).toBe(find(".cmp-mode"));
+  expect(stepId()).toBe("model");
+  expect(count()).toBe("4/13");
 });
 
-test("composer focus completes the step and its typing keys are untouched", async () => {
-  const { tour } = harness();
-  await begin(tour);
-  const composer = find(".cmp-input");
-  composer.focus();
-  await settle();
-  expect(words()).toBe("很好！之後直接打字跟史萊姆說。");
-  expect(button("next").classList.contains("pri")).toBe(true);
-  expect(key("ArrowRight", composer).defaultPrevented).toBe(false);
-  expect(key("ArrowLeft", composer).defaultPrevented).toBe(false);
-  const typed = vi.fn();
-  composer.addEventListener("keydown", typed);
-  expect(key("a", composer).defaultPrevented).toBe(false);
-  expect(typed).toHaveBeenCalledOnce();
-  expect(count()).toBe("1/7");
-  expect(document.activeElement).toBe(composer);
-  await press("next");
-  expect(count()).toBe("2/7");
-});
-
-test("the permission step follows its menu from ask to done and back to ask", async () => {
-  const { tour } = harness();
-  await begin(tour);
-  await advance();
-  expect(button("next")).toBeNull();
-  expect(spot().style.top).toBe("828px");
-  permissionMenu();
-  await settle();
-  expect(words()).toContain(t("chat.modeAsk"));
-  expect(button("next").classList.contains("pri")).toBe(true);
-  expect(spot().style.top).toBe("520px");
-  closeMenu();
-  await settle();
-  expect(words()).toContain("點一下。");
-  expect(button("next")).toBeNull();
-  expect(spot().style.top).toBe("828px");
-});
-
-test("Next from done closes the step's layer through its own close path", async () => {
-  const { tour } = harness();
-  await begin(tour);
-  await advance();
-  const menu = permissionMenu();
-  await settle();
-  const heard = vi.fn();
-  document.addEventListener("pointerdown", heard, true);
-  button("next").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true }));
-  document.removeEventListener("pointerdown", heard, true);
-  expect(heard).not.toHaveBeenCalled();
-  expect(menu.isConnected).toBe(true);
-  await press("next");
-  expect(menu.isConnected).toBe(false);
-  expect(count()).toBe("3/7");
-  const dismiss = vi.fn();
-  const modelMenu = openPopover(find(".mp-trigger"), '<div class="cb-now"></div>', { className: "menu cb-menu", role: "dialog", onClose: dismiss });
-  place(modelMenu, 620, 640, 300, 100);
-  try {
-    await settle();
-    expect(words()).toBe("左邊的圖示換服務商，點模型名稱挑模型。");
-    expect(spot().style.width).toBe("300px");
-    await press("next");
-    expect(dismiss).toHaveBeenCalledOnce();
-    expect(count()).toBe("4/7");
-  } finally { closeMenu(); }
-});
-
-test("the tour completes the model step when the composer chip opens its own menu", async () => {
-  const { tour } = harness();
-  const slot = find(".cmp-model");
-  slot.replaceChildren();
-  mountComposerBrain(slot, () => ({ id: 0, name: "Raphael" }) as Member);
-  place(find(".mp-trigger"), 900, 832, 120, 26);
-  await begin(tour);
-  await advance();
-  await advance();
-  const trigger = find(".mp-trigger");
-  trigger.click();
-  const menu = find(".cb-menu:has(.cb-now)");
-  try {
-    expect(menu).toBeTruthy();
-    place(menu, 620, 640, 300, 100);
-    await settle();
-    expect(find(".tour").dataset.state).toBe("done");
-    expect(trigger.getAttribute("aria-expanded")).toBe("true");
-  } finally { closeMenu(); }
-});
-
-test("the standalone Connect apps dialog completes the apps step and Back returns to its prompt", async () => {
-  const { tour, closeSettings } = harness();
-  await begin(tour);
-  for (let i = 0; i < 3; i++) await advance();
-  expect(find(".tour").dataset.step).toBe("apps");
-  expect(find(".tour").dataset.state).toBe("ask");
-  const scrim = document.createElement("div");
-  scrim.className = "modal-scrim";
-  scrim.dataset.page = "settings";
-  scrim.dataset.standalone = "connections";
-  scrim.innerHTML = '<div class="modal" role="dialog"><div class="modal-body"><div class="cs"></div></div></div>';
-  document.body.append(scrim);
-  place(scrim, 0, 0, 1120, 900);
-  const panel = find(".modal");
-  place(panel, 128, 100, 864, 730);
-  Object.defineProperties(panel, {
-    offsetParent: { value: scrim }, offsetLeft: { value: 110 }, offsetTop: { value: 86 },
-    offsetWidth: { value: 900 }, offsetHeight: { value: 760 },
-  });
-  Object.defineProperties(bubble(), { offsetWidth: { value: 288 }, offsetHeight: { value: 81 } });
-  const main = find("#main");
-  main.setAttribute("inert", "");
-  closeSettings.mockImplementationOnce(() => {
-    main.removeAttribute("inert");
-    scrim.remove();
-  });
-  await settle();
-  expect(find(".tour").dataset.state).toBe("done");
-  expect(spot().style.width).toBe("900px");
-  const ground = find(".tour-ground");
-  const left = parseFloat(ground.style.left), top = parseFloat(ground.style.top);
-  const inset = parseFloat(ground.style.getPropertyValue("--tour-ground-inset"));
-  const composer = find(".composer").getBoundingClientRect();
-  expect(touches({ left, top, width: 64 + 2 * inset, height: 64 }, composer)).toBe(false);
-  await press("next");
-  expect(closeSettings).toHaveBeenCalledOnce();
-  expect(scrim.isConnected).toBe(false);
-  await press("back");
-  expect(find(".tour").dataset.step).toBe("apps");
-  expect(find(".tour").dataset.state).toBe("ask");
-});
-
-test("the account step highlights the avatar while the group stands above the sidebar foot", async () => {
-  const { tour } = harness();
-  const foot = document.createElement("div");
-  foot.className = "side-foot";
-  foot.append(find(".sidebar-account"), find(".sidebar-apps"));
-  find("#nav").append(foot);
-  place(foot, 12, 810, 324, 82);
-  await begin(tour);
-  Object.defineProperties(bubble(), { offsetWidth: { value: 260 }, offsetHeight: { value: 100 } });
-  for (let i = 0; i < 5; i++) await advance();
-  expect(find(".tour").dataset.step).toBe("account");
-  expect(spot().style.top).toBe("852px");
-  expect(bubble().dataset.side).toBe("above");
-  expect(parseFloat(bubble().style.top) + bubble().offsetHeight).toBeLessThanOrEqual(810);
-  expect(parseFloat(find(".tour-ground").style.top) + 64).toBeLessThanOrEqual(810);
-});
-
-test("Escape and the mouse side buttons keep the walk and its open layer in place", async () => {
-  const { tour } = harness();
-  await begin(tour);
-  expect(key("Escape").defaultPrevented).toBe(true);
-  expect(mode()).toBe("step");
-  await advance();
-  const menu = permissionMenu();
-  await settle();
-  expect(find(".tour").dataset.step).toBe("permission");
-  expect(find(".tour").dataset.state).toBe("done");
-  expect(key("Escape", menu).defaultPrevented).toBe(true);
-  expect(menu.isConnected).toBe(true);
-  for (const [direction, mouseButton] of [["back", 3], ["forward", 4]] as const) {
-    const side = new MouseEvent("pointerup", { button: mouseButton, bubbles: true, cancelable: true });
-    button("next").dispatchEvent(side);
-    expect(side.defaultPrevented).toBe(true);
-    expect(tour.navigate(direction)).toBe(true);
-  }
-  await settle();
-  expect(menu.isConnected).toBe(true);
-  expect(count()).toBe("2/7");
-  expect(mode()).toBe("step");
-});
-
-test.each(["Cancel", "Escape", "outside press"])("%s from End tour resumes the same step and open layer", async method => {
-  const { tour } = harness();
-  await begin(tour);
-  await advance();
-  const menu = permissionMenu();
-  await settle();
-  const close = button("close");
-  expect(close.matches(".btn.icon.close-button")).toBe(true);
-  expect(close.getAttribute("aria-label")).toBe("結束導覽");
-  await press("close");
-  expect(confirmation().querySelector("h2")?.textContent).toBe("確定要結束導覽嗎？");
-  expect(confirmation().querySelector("p")?.textContent).toBe("結束後就不會再出現導覽。");
-  expect(confirmButton().textContent).toBe("結束導覽");
-  expect(document.activeElement).toBe(cancelButton());
-  expect(menu.isConnected).toBe(true);
-  expect(key("Tab", cancelButton(), true).defaultPrevented).toBe(true);
-  expect(document.activeElement).toBe(confirmButton());
-  const shortcut = new KeyboardEvent("keydown", { key: "b", ctrlKey: true, bubbles: true, cancelable: true });
-  confirmButton().dispatchEvent(shortcut);
-  expect(shortcut.defaultPrevented).toBe(true);
-  expect(key("Enter", confirmButton()).defaultPrevented).toBe(false);
-  button("next").click();
-  expect(count()).toBe("2/7");
-  dismissConfirmation(method);
-  await settle();
-  expect(confirmation()).toBeNull();
-  expect(document.activeElement).toBe(close);
-  expect(menu.isConnected).toBe(true);
-  expect(find(".tour").dataset.state).toBe("done");
-  expect(count()).toBe("2/7");
-});
-
-test("confirming End tour closes its layer and removes the tour immediately without a goodbye", async () => {
-  const { tour, device, setDevice } = harness();
-  await begin(tour);
-  await advance();
-  const menu = permissionMenu();
-  await settle();
-  await press("close");
-  expect(mode()).toBe("step");
-  expect(tour.active()).toBe(true);
-  expect(confirmButton().classList.contains("pri")).toBe(true);
-  expect(confirmation().classList.contains("is-quiet")).toBe(true);
-  const css = readFileSync(resolve(__dirname, "../members.css"), "utf8");
-  const redSelectors = [...css.matchAll(/(^[^\r\n{]+\.btn\.pri[^\r\n{]*) \{[^}]*background: var\(--close\)/gm)]
-    .flatMap(([, selectors]) => selectors!.split(", "));
-  expect(redSelectors).toHaveLength(3);
-  for (const selector of redSelectors) expect(confirmButton().matches(selector.replace(/:(hover|active)/g, ""))).toBe(false);
-  reduced = false;
-  confirmButton().click();
-  await Promise.resolve();
-  expect(tour.active()).toBe(false);
-  expect(mode()).toBeUndefined();
-  expect(confirmation()).toBeNull();
-  expect(menu.isConnected).toBe(false);
-  expect(device.tour_offered).toBe(true);
-  expect(setDevice).toHaveBeenCalledExactlyOnceWith({ tour_offered: true });
+test("an unavailable quick ask still offers Finish after eight seconds", async () => {
+  const { tour } = harness({ agent_keys: [] });
   await offer(tour);
-  expect(mode()).toBeUndefined();
+  for (const selector of [".cmp-input", ".cmp-mode", ".mp-trigger", ".sidebar-apps", '[data-col="add"]', ".sidebar-account"]) find(selector).remove();
+  button("start").click();
+  expect(stepId()).toBe("keys");
+  await settle(7999);
+  expect(button("done")).toBeNull();
+  await settle(1);
+  expect(button("done")?.classList.contains("pri")).toBe(true);
 });
 
 test("the action fallback timer waits for the confirmation to close", async () => {
   const { tour } = harness();
-  await begin(tour);
-  await advance();
+  await reachPermission(tour);
   find(".cmp-mode").click();
-  await settle(1000);
   await press("close");
   await settle(5000);
-  expect(find(".tour").dataset.state).toBe("ask");
-  dismissConfirmation("Cancel");
-  await settle(2500);
-  expect(find(".tour").dataset.state).toBe("ask");
-  await settle(500);
-  expect(find(".tour").dataset.state).toBe("fallback");
+  expect(stepId()).toBe("permission");
+  cancelButton().click();
+  await settle(4000);
+  expect(stepId()).toBe("model");
 });
 
-test("the dim blocks outside presses and opened layers while the target and caption receive presses", async () => {
+test.each(["Cancel", "Escape", "outside press"])("%s from End tour resumes the same step and open layer", async method => {
   const { tour } = harness();
-  await begin(tour);
-  await advance();
-  const opener = find(".cmp-mode");
-  const open = vi.fn(permissionMenu);
-  opener.addEventListener("click", open);
-  const outside = find(".sidebar-account");
-  const leaked = vi.fn();
-  outside.addEventListener("click", leaked);
-  const caption = find(".window-controls button");
-  const captionPress = vi.fn();
-  caption.addEventListener("click", captionPress);
-  outside.click();
-  caption.click();
-  expect(leaked).not.toHaveBeenCalled();
-  expect(captionPress).toHaveBeenCalledOnce();
-  expect(button("next")).toBeNull();
-  opener.click();
-  expect(open).toHaveBeenCalledOnce();
-  await settle();
-  const menu = open.mock.results[0]!.value;
-  menu.querySelector("button")!.addEventListener("click", leaked);
-  menu.querySelector("button")!.click();
-  const dim = find(".tour-catch");
-  for (const type of ["pointerdown", "pointerup", "click"]) {
-    const press = new MouseEvent(type, { bubbles: true, cancelable: true });
-    dim.dispatchEvent(press);
-    expect(press.defaultPrevented).toBe(true);
-  }
-  expect(leaked).not.toHaveBeenCalled();
-  expect(menu.isConnected).toBe(true);
-});
-
-test("Next becomes available four seconds after a press with no resulting layer", async () => {
-  const { tour } = harness();
-  await begin(tour);
-  await advance();
-  await settle(5000);
-  expect(button("next")).toBeNull();
+  wireSteps();
+  await reachPermission(tour);
   find(".cmp-mode").click();
-  await settle(3999);
-  expect(button("next")).toBeNull();
-  await settle(1);
-  expect(find(".tour").dataset.state).toBe("fallback");
-  expect(button("next").classList.contains("pri")).toBe(true);
-  await press("next");
-  expect(count()).toBe("3/7");
-  expect(button("next")).toBeNull();
+  await settle();
+  await press("close");
+  expect(confirmation()).not.toBeNull();
+  dismissConfirmation(method);
+  await settle();
+  expect(stepId()).toBe("manual");
+  expect(find(".cb-menu")).not.toBeNull();
+  expect(document.activeElement).toBe(button("close"));
 });
 
-test("a missing target shows primary Next and keeps the step in the count", async () => {
-  const { tour } = harness({ agent_keys: [] });
+test("confirming End tour closes its layer and removes the tour immediately without a goodbye", async () => {
+  const { tour } = harness();
+  wireSteps();
+  for (const selector of [".cmp-input", ".cmp-mode"]) find(selector).remove();
   await begin(tour);
-  expect(count()).toBe("1/6");
-  const composer = find(".composer");
-  composer.remove();
+  find(".mp-trigger").click();
   await settle();
-  expect(bubble()).toBeTruthy();
-  expect(spot().hidden).toBe(true);
-  expect(button("next").classList.contains("pri")).toBe(true);
-  await press("next");
-  expect(count()).toBe("2/6");
-  expect(find(".tour").dataset.state).toBe("fallback");
-  expect(button("next").classList.contains("pri")).toBe(true);
+  expect(stepId()).toBe("model-list");
+  await press("close");
+  confirmButton().click();
+  await settle();
+  expect(mode()).toBeUndefined();
+  expect(find(".cb-menu")).toBeNull();
+});
+
+test("Tab cycles through the composer field, send and the close button while outside presses are blocked", async () => {
+  const { tour } = harness();
+  await begin(tour);
+  const field = find(".cmp-input"), send = find(".cmp-send");
+  const outside = vi.fn(), caption = vi.fn();
+  find(".sidebar-account").addEventListener("click", outside);
+  find(".window-controls button").addEventListener("click", caption);
+  find(".sidebar-account").click();
+  find(".window-controls button").click();
+  expect(outside).not.toHaveBeenCalled();
+  expect(caption).toHaveBeenCalledOnce();
+
+  button("close").focus();
+  key("Tab", button("close"));
+  expect(document.activeElement).toBe(field);
+  key("Tab", field);
+  expect(document.activeElement).toBe(send);
+  key("Tab", send);
+  expect(document.activeElement).toBe(button("close"));
+  expect(key("Escape").defaultPrevented).toBe(true);
+  expect(tour.navigate("back")).toBe(true);
+  expect(stepId()).toBe("composer");
 });
 
 test("placement follows a resized target without a hop, and locale changes redraw the line", async () => {
@@ -598,28 +533,5 @@ test("placement follows a resized target without a hop, and locale changes redra
   await settle();
   expect(spot().style.left).toBe("128px");
   setLocale("ja");
-  expect(words()).toMatch(/入力欄/);
-});
-
-test("Raphael hops between steps only with motion enabled", async () => {
-  const animate = vi.fn(() => ({ cancel: vi.fn(), currentTime: 0 }));
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: reduced && query.includes("reduce") }));
-  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "animate");
-  Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: animate });
-  try {
-    const still = harness();
-    await begin(still.tour);
-    await advance();
-    expect(animate).not.toHaveBeenCalled();
-    still.tour.stop();
-    reduced = false;
-    await begin(harness().tour);
-    await completeComposer();
-    animate.mockClear();
-    await press("next");
-    expect(animate).toHaveBeenCalledTimes(3);
-  } finally {
-    if (original) Object.defineProperty(HTMLElement.prototype, "animate", original);
-    else Reflect.deleteProperty(HTMLElement.prototype, "animate");
-  }
+  expect(words()).toBe(t("tour.composer"));
 });

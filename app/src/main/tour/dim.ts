@@ -1,7 +1,7 @@
 import type { Spot } from "./steps";
 
 /** Keep the outer contour tied to the viewport while the rounded opening moves in pixels. */
-export function dimClip({ box, radius }: Spot): string {
+function contour({ box, radius }: Spot): string {
   const { left, top, width, height } = box;
   const right = left + width, bottom = top + height;
   const r = Math.min(Math.max(0, radius), width / 2, height / 2);
@@ -11,6 +11,10 @@ export function dimClip({ box, radius }: Spot): string {
     const angle = (corner - 1 + segment / 8) * Math.PI / 2;
     return `${(x + r * Math.cos(angle)).toFixed(3)}px ${(y + r * Math.sin(angle)).toFixed(3)}px`;
   }));
-  // Close both contours. The bridge between them is traversed in both directions.
-  return `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${opening.join(", ")}, ${opening[0]})`;
+  return `${opening.join(", ")}, ${opening[0]}, 0 0`;
+}
+
+export function dimClip(spot: Spot, extra?: Spot): string {
+  // Each closed contour returns over the same bridge so it only cuts out its own interior.
+  return `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${contour(spot)}${extra ? ", " + contour(extra) : ""})`;
 }

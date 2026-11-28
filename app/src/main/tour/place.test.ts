@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { EDGE, EDGE_TOP, GROUP_GAP, SPOT_GAP, groundBox, placeGroup, type Box, type PlaceInput } from "./place";
+import { EDGE, EDGE_TOP, GROUP_GAP, SPOT_GAP, groundBox, placeAroundLayer, placeGroup, type Box, type PlaceInput } from "./place";
 
 const view = { width: 1120, height: 900 };
 const bubble = { width: 260, height: 110 };
@@ -55,16 +55,20 @@ test("the model group stands above the composer with the slime left of the bubbl
   expect(apart(groundBox(found.slime, 18), composer)).toBe(true);
 });
 
-test("the portrait and its light stay clear of the standalone Connect apps dialog at 720 px", () => {
-  const dialog = { left: 16, top: 86, width: 688, height: 760 };
-  const composer = { left: 120, top: 782, width: 568, height: 90 };
-  const found = placeGroup({ ...base, view: { width: 720, height: 900 }, bubble: { width: 300, height: 88 },
-    spot: dialog, clear: [composer], slime: 64, slimeInset: 18, prefer: ["right", "above"] });
+test("placement tries beside a layer before the free part of its header", () => {
+  const layer = { left: 60, top: 80, width: 740, height: 740 };
+  const header = { left: 80, top: 100, width: 680, height: 134 };
+  const close = { left: 680, top: 105, width: 48, height: 45 };
+  const search = { left: 110, top: 245, width: 440, height: 40 };
+  const input: PlaceInput = { ...base, spot: search, prefer: ["right"], controls: [close], slimeInset: 16 };
+  expect(placeAroundLayer(input, { ...layer, width: 620 }, header)?.side).toBe("right");
+  const found = placeAroundLayer(input, layer, header)!;
   expect(found.side).toBe("inside");
-  expect(found.hideSlime).toBeUndefined();
-  expect(bottom(groundBox(found.slime, 18))).toBe(dialog.top);
-  expect(apart(groundBox(found.slime, 18), composer)).toBe(true);
-  expect(found.bubble.top).toBeGreaterThan(dialog.top);
+  for (const part of [groundBox(found.slime, 16), found.bubble]) {
+    expect(part.top).toBeGreaterThanOrEqual(header.top);
+    expect(bottom(part)).toBeLessThanOrEqual(bottom(header));
+    expect(apart(part, close) && apart(part, search)).toBe(true);
+  }
 });
 
 test("the whole account group stands above the sidebar foot, clear of its controls and the composer", () => {
@@ -81,16 +85,20 @@ test("the whole account group stands above the sidebar foot, clear of its contro
   }
 });
 
-test("the bubble still avoids the composer when it has to stand inside a large dialog", () => {
-  const dialog = { left: 16, top: 86, width: 688, height: 760 };
-  const composer = { left: 104, top: 159, width: 584, height: 88 };
-  const foot = { left: 12, top: 812, width: 64, height: 80 };
-  const found = placeGroup({ ...base, view: { width: 720, height: 900 }, bubble: { width: 300, height: 88 },
-    spot: dialog, controls: [foot, composer], slime: 64, slimeInset: 16, prefer: ["right", "above"] });
-  expect(found.side).toBe("inside");
-  expect(found.hideSlime).toBeUndefined();
-  expect(apart(found.bubble, composer)).toBe(true);
-  expect(apart(found.bubble, foot)).toBe(true);
+test("a nearly full dialog needs a clear dim strip when the header is too short", () => {
+  const dialog = { left: 90, top: 54, width: 900, height: 560 };
+  const search = { left: 124, top: 140, width: 700, height: 32 };
+  const input: PlaceInput = { ...base, view: { width: 1080, height: 640 }, spot: search,
+    slime: 64, slimeInset: 16, prefer: ["right"], controls: [search] };
+  expect(placeAroundLayer(input, dialog, { left: 110, top: 80, width: 840, height: 42 })).toBeNull();
+  const shifted = { ...dialog, top: 174, height: 440 };
+  const movedSearch = { ...search, top: 260 };
+  const found = placeAroundLayer({ ...input, spot: movedSearch, controls: [movedSearch] }, shifted)!;
+  expect(found.side).toBe("above");
+  for (const part of [groundBox(found.slime, 16), found.bubble]) {
+    expect(part.top).toBeGreaterThanOrEqual(EDGE_TOP);
+    expect(bottom(part)).toBeLessThanOrEqual(shifted.top - SPOT_GAP);
+  }
 });
 
 test("pointing at nothing puts the group in the middle of the window", () => {

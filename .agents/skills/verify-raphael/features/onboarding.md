@@ -124,29 +124,43 @@ persist. Keep sanitized readback and stop the owned dev process.
 ## Raphael's guided tour of the window
 
 Raphael's blue slime offers a tour after the first-run guide or on an ordinary launch
-with an unanswered offer. Start and confirmed Skip save `tour_offered`. Escape on
+with an unanswered offer. It waits for the main conversation to be uncovered. When another page or a dialog covers it, the offer fades out in 150 ms and its buttons immediately leave the tab order. Returning to the uncovered conversation plays one pop-in and keeps the offer unanswered. The tour's own confirmations sit above it. Start and confirmed Skip save `tour_offered`. Escape on
 the offer leaves it unanswered. The account menu has no route to relaunch the tour.
 `app/src/main/tour/` contains the controller, placement and view. Titles, short spoken
 lines, progress labels and confirmation copy come from fifteen `tour.*` catalogues.
 
 - **The offer** (`tour-offer`, `tour-offer-returning`, `tour-offer-skip`, `tour-offer-escape`):
   Raphael grows from the account button and touches down at 250 ms, revealing its blue light.
-  The bubble appears after the landing settles, at 430 ms. Start begins immediately.
+  The bubble appears after the landing settles, at 430 ms. The offer says about two minutes. Start begins immediately.
+  `tour-offer-settings-open` opens Settings over the offer and checks its portrait, light and
+  buttons are hidden, its controls are inert and the answer is still unwritten.
   `tour-offer-skip-ask` shows the Skip confirmation over the unanswered offer.
   Cancel, Escape or a press beside it returns focus to Skip. Confirming saves the answer
   and dismisses the offer in `tour-offer-skip`.
-- **The walk**: `tour-composer`, `tour-permission`, `tour-model`, `tour-apps` and `tour-account`
-  show the real controls with a 2 px blue outline, a 1.6 s pulsing glow and a dim that
-  catches outside presses. The composer and model scenes press the dim over the sidebar
-  account button and verify the action stays pending and the account menu stays closed.
-  Their done scenes, and `tour-permission-done`, `tour-apps-done` and `tour-account-done`,
-  operate the highlighted control and wait for the follow-up and primary Next. The cut-out
-  exposes the opened layer for viewing. Moving on uses the window's own close path.
-  `tour-back` checks that the standalone Connect apps dialog closes and Back returns to its
-  action prompt. `tour-team` and `tour-keys` are read-only with primary actions. The key caps
-  show the configured binding. Each bubble has a title and dots with a localized progress label.
-  When a control is missing or a press produces no layer within four seconds, primary Next appears.
-  `tour-escape` verifies Escape and both mouse side buttons leave the walk and open menu in place.
+- **The walk**: each scene captures one instruction, then performs the framed action and checks
+  what the app shows before the next instruction arrives. The scenes follow the owner through
+  all thirteen steps.
+
+  | Look scene | Action | App reaction |
+  | --- | --- | --- |
+  | `tour-step-1` | Type a greeting and press Enter | The new owner message appears in the thread |
+  | `tour-step-2` | Press the permissions chip | Its menu opens |
+  | `tour-step-3` | Choose Manual | The chip shows Manual and the menu closes |
+  | `tour-step-4` | Press the model chip | Its menu opens |
+  | `tour-step-5` | Press the model name | The model list appears, then the menu closes |
+  | `tour-step-6` | Press Connect apps | The dialog opens |
+  | `tour-step-7` | Search for Gmail | The list filters, then the dialog closes |
+  | `tour-step-8` | Press the sidebar plus | The member maker opens |
+  | `tour-step-9` | Pick a slime look | The preview changes, then Cancel closes the maker without creating a member |
+  | `tour-step-10` | Press the account avatar | The account menu opens |
+  | `tour-step-11` | Press Settings | Settings opens |
+  | `tour-step-12` | Press Usage | The usage pane appears, then Settings closes |
+  | `tour-step-13` | Try the quick-ask shortcut | Listening makes Finish appear |
+
+  The instruction advances 500 ms after its reaction. A missing action is skipped at entry and
+  a press with no reaction advances after four seconds. The same layer stays open for its next
+  action, and otherwise closes through the window's own path. The last step draws the configured
+  shortcut as key caps and offers Finish after eight seconds if listening has not started.
 - **Ending early** (`tour-end-ask`, `tour-close`): every step has the shared round End tour
   button at the top right and in the Tab order. End tour and Skip use the compact shared
   confirmation with the ordinary primary button and shared Cancel. The confirmation
@@ -164,15 +178,16 @@ lines, progress labels and confirmation copy come from fifteen `tour.*` catalogu
 - **The goodbye** (`tour-end`, `tour-end-closed`): Finish clears the dim, Raphael returns to
   the sidebar foot and hops twice as the farewell appears. Each hop is 12 px high and
   takes 150 ms. The farewell fades 4.5 s after it appears. Reduced motion skips both hops.
-- **The checks**: the dim covers all four corner pixels and other samples outside the opening.
-  The light fits its ground box. The portrait, light and bubble clear the composer and
-  sidebar foot controls. The portrait and light clear the active target and any opened
-  layer. In a tight Connect apps layout the bubble may sit over the body of the dialog
-  while the portrait stays beside it or hides when it cannot fit. Unit tests cover focus,
-  the four-second fallback, timing, interruption from the current pose and reduced motion.
+- **The checks**: `page-unshifted` checks the app root and the zero scroll offsets in
+  `after-onboarding`, the offer scenes, `tour-step-1`, `tour-step-6`, `tour-step-7` and
+  `tour-end`. The dim covers the window edges and opens on the action. The full group stays
+  inside the viewport and clears the ring and every visible pressable element in the open
+  layer, including connection buttons. The group tries the space beside the layer, the open
+  part of its header, then the dim above or below it. A nearly full dialog can reserve a dim
+  strip. In a short window, the member maker can move sideways to keep its look picker usable. Check both apps scenes at the owner's 1080 × 640 size as well as the usual sizes.
 
 ```powershell
-npm run look -- tour-offer tour-offer-returning tour-offer-skip-ask tour-offer-skip tour-offer-escape tour-composer tour-composer-done tour-permission tour-permission-done tour-model tour-model-done tour-apps tour-apps-done tour-team tour-account tour-account-done tour-keys tour-back tour-hop tour-end tour-end-closed tour-escape tour-end-ask tour-close --theme both --width 1120,720,1920x1080
+npm run look -- tour-offer tour-offer-returning tour-offer-settings-open tour-offer-skip-ask tour-offer-skip tour-offer-escape tour-step-1 tour-step-2 tour-step-3 tour-step-4 tour-step-5 tour-step-6 tour-step-7 tour-step-8 tour-step-9 tour-step-10 tour-step-11 tour-step-12 tour-step-13 tour-hop tour-end tour-end-closed tour-end-ask tour-close --theme both --width 1120,720,1920x1080,1080x640
 ```
 
 Native verification still needs the real window. Look exercises the app with fixture data.

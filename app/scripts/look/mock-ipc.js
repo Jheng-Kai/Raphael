@@ -2638,6 +2638,13 @@ export function installMock(fixture, config = {}, target = window) {
       }
       if (command === "main_events") { state.channel = args.channel; return; }
       if (command === "main_window_forward") return;
+      if (command === "window_hotkey" && variant.tourQuickAsk && args.memberId === undefined) {
+        if (args.kind === "agent_down" || args.kind === "agent_up") {
+          notify("Dictation", { phase: args.kind === "agent_down" ? "listening" : "processing", agent: true });
+          return;
+        }
+        if (args.kind === "dictation_prefix_down" || args.kind === "dictation_prefix_up" || args.kind === "dictation_blur") return;
+      }
       if (command === "window_hotkey" && variant.ownerVoice && ["agent_down", "agent_up"].includes(args.kind)) {
         const member = args.memberId ?? 0;
         if (!data.conversations.some(c => c.id === args.conversationId && c.member_id === member)) throw new Error("Composer voice must name its own conversation");
@@ -2676,6 +2683,15 @@ export function installMock(fixture, config = {}, target = window) {
         return null;
       }
       if (command === "agent_ask_text") {
+        if (variant.tourUnanswered) {
+          const id = nextId(data.turns);
+          const member = args.memberId ?? 0;
+          const conversation = args.conversationId ?? data.conversations.find(c => c.member_id === member && c.is_default)?.id;
+          data.turns.push({ id, member_id: member, conversation_id: conversation, session_id: args.requestId, question: args.text,
+            source: "app", route: "answer", status: "done", text: "", messages: [], steps: [], attachments: [], created_at_ms: data.now + 1 });
+          notify("AgentTurn", { turn_id: id, member_id: args.memberId ?? 0 });
+          return null;
+        }
         if (variant.cardSendFailure && !variant.cardSendRetried) { variant.cardSendRetried = true; throw new Error("Synthetic send unavailable"); }
         if (variant.ownerAddition || variant.queuedOwner) {
           const active = data.turns.find(turn => turn.status === "running" && turn.member_id === args.memberId);

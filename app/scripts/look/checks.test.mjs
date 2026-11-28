@@ -2,8 +2,37 @@ import { Window } from "happy-dom";
 import { expect, it, vi } from "vitest";
 import { checkRendered } from "./checks.mjs";
 
-it.each(["keys", "team"])("hit-tests the dim at the window edges of the %s step", step => {
-  const highlightsTeam = step === "team";
+it("reports each shifted scroll container and the app root's position", () => {
+  const browser = new Window();
+  const doc = browser.document;
+  doc.body.innerHTML = '<div class="wbody"><nav id="nav"></nav><main id="main"></main></div>';
+  const app = doc.querySelector(".wbody");
+  let appRootY = 0;
+  app.getBoundingClientRect = () => ({ top: appRootY });
+  Object.defineProperty(doc, "scrollingElement", { value: doc.documentElement });
+  vi.stubGlobal("document", doc);
+  vi.stubGlobal("window", browser);
+  const check = () => checkRendered("page-unshifted");
+  try {
+    expect(check()).toEqual({ check: "page-unshifted", windowY: 0, documentTop: 0, bodyTop: 0, appTop: 0, mainTop: 0, navTop: 0, appRootY: 0 });
+    for (const [element, property, report] of [
+      [browser, "scrollY", "windowY"], [doc.scrollingElement, "scrollTop", "documentTop"], [doc.body, "scrollTop", "bodyTop"],
+      [app, "scrollTop", "appTop"], [doc.getElementById("main"), "scrollTop", "mainTop"], [doc.getElementById("nav"), "scrollTop", "navTop"],
+    ]) {
+      Object.defineProperty(element, property, { value: 60, configurable: true });
+      expect(check).toThrow(`${report}=60`);
+      Object.defineProperty(element, property, { value: 0 });
+    }
+    appRootY = -60;
+    expect(check).toThrow("appRootY=-60");
+  } finally {
+    vi.unstubAllGlobals();
+    browser.happyDOM.abort();
+  }
+});
+
+it.each(["keys", "app-search"])("hit-tests the dim at the window edges of the %s step", step => {
+  const highlightsSearch = step === "app-search";
   const browser = new Window();
   const doc = browser.document;
   Object.defineProperties(doc.documentElement, {
@@ -11,31 +40,31 @@ it.each(["keys", "team"])("hit-tests the dim at the window edges of the %s step"
     clientHeight: { value: 600 },
   });
   doc.documentElement.style.setProperty("--float", "rgb(240, 240, 240)");
+  doc.documentElement.style.setProperty("--raphael-color", "rgb(61, 181, 255)");
   doc.body.innerHTML = `
     <nav id="nav"><div class="sidebar-conversations"></div><button class="sidebar-account"></button></nav>
     <main id="main"></main>
+    ${highlightsSearch ? '<div class="modal-scrim" data-standalone="connections"><div class="modal"><input id="conn-search"><button>Telegram Connect</button></div></div>' : ""}
     <div class="window-chrome" id="window-chrome">
       <div class="window-drag"></div>
       <div class="window-controls"><button class="window-button"><svg></svg></button></div>
     </div>
-    <div class="tour" data-mode="step" data-step="${step}" data-state="look" data-dim="${highlightsTeam ? "spot" : "all"}">
+    <div class="tour" data-mode="step" data-step="${step}" data-dim="${highlightsSearch ? "spot" : "all"}">
       <div class="tour-catch" style="--scrim: rgba(0, 0, 0, 0.5); background-color: rgba(0, 0, 0, 0.5); opacity: 1; pointer-events: auto"></div>
-      <div class="tour-spot" style="pointer-events: none; border-radius: 12px" ${highlightsTeam ? "" : "hidden"}></div>
+      <div class="tour-spot" style="pointer-events: none; border-radius: 12px; outline-width: 2px; outline-style: solid; outline-color: rgb(61, 181, 255); outline-offset: 0px; box-shadow: 0 0 8px blue" ${highlightsSearch ? "" : "hidden"}></div>
       <div class="tour-ground">
         <div class="tour-slime"><div class="slime-surface" style="--slime-color: #3db5ff"><div class="slime-body"></div></div></div>
         <div class="tour-glow" style="background-image: radial-gradient(black, transparent); opacity: 0.5"></div>
       </div>
       <div class="tour-bubble" role="dialog" aria-label="Tour" style="background-color: var(--float)">
         <div class="tour-head">
-          <h2 class="tour-title">${highlightsTeam ? "Your team" : "Call me anytime"}</h2>
+          <h2 class="tour-title">${highlightsSearch ? "Connect apps" : "Call me anytime"}</h2>
           <button class="btn icon close-button" data-tour="close" aria-label="End tour"><svg></svg></button>
         </div>
         <p class="tour-text">Raphael's guided tour.</p>
-        <span class="tour-count" role="img" aria-label="Step ${highlightsTeam ? 5 : 7} of 7">${Array.from({ length: 7 }, (_, index) =>
-          `<span class="tour-dot"${index === (highlightsTeam ? 4 : 6) ? " data-current" : ""}></span>`).join("")}</span>
+        <span class="tour-count" role="img" aria-label="Step ${highlightsSearch ? 7 : 13} of 13">${Array.from({ length: 13 }, (_, index) =>
+          `<span class="tour-dot"${index === (highlightsSearch ? 6 : 12) ? " data-current" : ""}></span>`).join("")}</span>
         <div class="tour-keys"><kbd>Alt</kbd><kbd>R</kbd></div>
-        <button data-tour="back">Back</button>
-        <button class="pri" data-tour="${highlightsTeam ? "next" : "done"}">${highlightsTeam ? "Next" : "Done"}</button>
       </div>
     </div>`;
   const measure = (selector, left, top, width, height) => {
@@ -45,7 +74,9 @@ it.each(["keys", "team"])("hit-tests the dim at the window edges of the %s step"
   };
   measure(".window-chrome", 0, 0, 720, 38);
   measure(".sidebar-account", 8, 550, 30, 30);
-  measure(".sidebar-conversations, .tour-spot", 0, 8, 88, 200);
+  measure("#conn-search, .tour-spot", 0, 8, 88, 200);
+  measure(".modal", 0, 8, 710, 470);
+  measure(".modal button", 570, 100, 120, 45);
   measure(".tour-catch", 0, 0, 720, 600);
   measure(".tour-bubble", 300, 100, 160, 90);
   measure(".tour-ground", 300, 200, 80, 64);
@@ -57,8 +88,8 @@ it.each(["keys", "team"])("hit-tests the dim at the window edges of the %s step"
   const dim = doc.querySelector(".tour-catch");
   const captionGlyph = doc.querySelector(".window-button svg");
   const dragStrip = doc.querySelector(".window-drag");
-  const check = () => checkRendered(`tour-step-${step}-look`);
-  const hits = new Map(highlightsTeam ? [["0.25,38.5", doc.body], ["44,108", doc.body]] : []);
+  const check = () => checkRendered(highlightsSearch ? "tour-step-7" : "tour-step-13");
+  const hits = new Map(highlightsSearch ? [["0.25,38.5", doc.body], ["44,108", doc.querySelector("#conn-search")]] : []);
   doc.elementFromPoint = (x, y) => {
     if (Math.round(x) >= doc.documentElement.clientWidth || Math.round(y) >= doc.documentElement.clientHeight) return null;
     return hits.get(`${x},${y}`) ?? dim;
@@ -67,15 +98,21 @@ it.each(["keys", "team"])("hit-tests the dim at the window edges of the %s step"
   vi.stubGlobal("window", browser);
   vi.stubGlobal("getComputedStyle", browser.getComputedStyle.bind(browser));
   try {
+    if (highlightsSearch) {
+      expect(check().pressable).toBe(2);
+      measure(".modal button", 320, 150, 120, 45);
+      expect(check).toThrow("the bubble clears the pressable element Telegram Connect");
+      measure(".modal button", 570, 100, 120, 45);
+    }
     expect(check().dimPoints).toEqual([
       [0.25, 0.25], [719.25, 0.25],
-      ...(highlightsTeam ? [] : [[0.25, 38.5]]), [719.25, 38.5],
+      ...(highlightsSearch ? [] : [[0.25, 38.5]]), [719.25, 38.5],
       [0.25, 599.25], [719.25, 599.25], [360, 300],
     ]);
     for (const [x, y, uncovered] of [
       [0.25, 0.25, dragStrip],
       [719.25, 0.25, captionGlyph],
-      ...(highlightsTeam ? [] : [[0.25, 38.5, doc.body]]),
+      ...(highlightsSearch ? [] : [[0.25, 38.5, doc.body]]),
       [719.25, 38.5, doc.body],
       [719.25, 599.25, doc.body],
     ]) {

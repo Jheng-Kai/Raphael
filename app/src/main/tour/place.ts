@@ -15,7 +15,7 @@ export interface PlaceInput {
   slimeInset?: number;
   /** Other surfaces to keep clear, such as the control that opened a highlighted dialog. */
   clear?: readonly Box[];
-  /** The sidebar foot and composer stay clear even when the bubble must overlap the highlighted dialog. */
+  /** Controls that remain visible around the target or in its open layer. */
   controls?: readonly Box[];
   slimeFirst?: boolean;
   /** The sides to try first. */
@@ -24,7 +24,7 @@ export interface PlaceInput {
   align?: "center" | "start";
 }
 
-export interface Placement { side: Side; slime: Box; bubble: Box; hideSlime?: boolean }
+export interface Placement { side: Side; slime: Box; bubble: Box }
 
 /** The space between Raphael and its words, and between the group and the target. */
 export const GROUP_GAP = 8;
@@ -115,25 +115,53 @@ function nearestFree(box: Box, bounds: Box, obstacles: readonly Box[]): Box | un
   return best;
 }
 
-/** A large dialog may leave room for just the portrait. The bubble can use space inside the dialog. */
-function placeSeparately(input: PlaceInput, placed: Placement, obstacles: readonly Box[]): Placement {
-  const { view, slime, slimeInset = 0, controls = [] } = input;
-  // The still portrait has 10 px of transparent padding above the drawing.
-  const top = input.spot ? 22 : EDGE_TOP;
-  const ground = nearestFree(groundBox(placed.slime, slimeInset), { left: 0, top, width: view.width, height: view.height - top }, obstacles);
-  const bounds = { left: EDGE, top: EDGE_TOP, width: view.width - 2 * EDGE, height: view.height - EDGE_TOP - EDGE };
-  const bubble = placed.bubble;
-  if (ground) {
-    const portrait = { ...placed.slime, left: ground.left + slimeInset, top: ground.top };
-    const after = portrait.left + slime + GROUP_GAP;
-    const before = portrait.left - GROUP_GAP - bubble.width;
-    const left = after + bubble.width <= view.width - EDGE ? after : Math.max(EDGE, before);
-    const y = portrait.top < EDGE_TOP && input.spot ? input.spot.top + slime + SPOT_GAP : portrait.top + slime - bubble.height;
-    const nearby = { ...bubble, left, top: clamp(y, EDGE_TOP, view.height - EDGE - bubble.height) };
-    const free = nearestFree(nearby, bounds, [...controls, ground]);
-    if (free) return { ...placed, slime: portrait, bubble: free };
+/** Try the sides of an open layer, its header, then the dim above or below it. */
+export function placeAroundLayer(input: PlaceInput, layer: Box, header?: Box): Placement | null {
+  const { view, spot } = input;
+  const clampArea = (left: number, top: number, right: number, bottom: number): Box => {
+    left = Math.ceil(Math.max(EDGE, left));
+    top = Math.ceil(Math.max(EDGE_TOP, top));
+    return { left, top, width: Math.floor(Math.min(view.width - EDGE, right)) - left,
+      height: Math.floor(Math.min(view.height - EDGE, bottom)) - top };
+  };
+  const right = layer.left + layer.width, bottom = layer.top + layer.height;
+  const sides = {
+    right: clampArea(right + SPOT_GAP, 0, view.width, view.height),
+    left: clampArea(0, 0, layer.left - SPOT_GAP, view.height),
+  };
+  const sideOrder = input.prefer[0] === "left" ? ["left", "right"] as const : ["right", "left"] as const;
+  const areas: [Side, Box][] = [
+    ...sideOrder.map(side => [side, sides[side]] as [Side, Box]),
+    ...(header ? [["inside", clampArea(header.left, header.top, header.left + header.width, header.top + header.height)] as [Side, Box]] : []),
+    ["above", clampArea(0, 0, view.width, layer.top - SPOT_GAP)],
+    ["below", clampArea(0, bottom + SPOT_GAP, view.width, view.height)],
+  ];
+  const obstacles = [...(spot ? [spot] : []), ...(input.clear ?? []), ...(input.controls ?? [])];
+  for (const [side, bounds] of areas) {
+    const desired = candidate(side, { ...input, spot: layer });
+    const free = nearestFree(desired.all, bounds, obstacles);
+    if (free) {
+      const dx = free.left - desired.all.left, dy = free.top - desired.all.top;
+      const shift = (box: Box) => ({ ...box, left: box.left + dx, top: box.top + dy });
+      return { side, slime: shift(desired.slime), bubble: shift(desired.bubble) };
+    }
   }
-  return { ...placed, bubble: nearestFree(bubble, bounds, controls) ?? bubble, hideSlime: true };
+  return null;
+}
+
+/** Search the free window when the usual anchors are crowded. */
+function placeInWindow(input: PlaceInput, placed: ReturnType<typeof candidate>, obstacles: readonly Box[]): Placement {
+  const { view, slimeInset = 0 } = input;
+  const bounds = { left: EDGE, top: EDGE_TOP, width: view.width - 2 * EDGE, height: view.height - EDGE_TOP - EDGE };
+  const found = nearestFree(placed.all, bounds, obstacles);
+  if (found) {
+    const shift = (box: Box) => ({ ...box, left: box.left + found.left - placed.all.left, top: box.top + found.top - placed.all.top });
+    return { side: "inside", slime: shift(placed.slime), bubble: shift(placed.bubble) };
+  }
+  const ground = nearestFree(groundBox(placed.slime, slimeInset), bounds, obstacles);
+  const bubble = nearestFree(placed.bubble, bounds, ground ? [...obstacles, ground] : obstacles);
+  if (ground && bubble) return { side: "inside", slime: { ...ground, left: ground.left + slimeInset, width: input.slime }, bubble };
+  return candidate("inside", { ...input, spot: null });
 }
 
 /** The first side whose group fits in the window and clears the target and other surfaces. */
@@ -159,5 +187,5 @@ export function placeGroup(input: PlaceInput): Placement {
       if (fits(raised)) return raised;
     }
   }
-  return placeSeparately(input, inside, obstacles);
+  return placeInWindow(input, inside, obstacles);
 }

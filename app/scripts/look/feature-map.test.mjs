@@ -50,11 +50,13 @@ describe("maintained verification feature map", () => {
         allowedWidths.push([1120,720,1920,1180,1280]);
         allowedWidths.push([1120,720,1920,1280]);
         if (name === "connections-mcp") allowedWidths.push([1120, 720, 1920, 1180]);
+        if (name === "onboarding" && options.selected.every(scene => scene.name.startsWith("tour-"))) allowedWidths.push([1120, 720, 1920, 1080]);
         if (name === "automations" && options.selected.every(scene => ["calendar-remember", "calendar-view-reload", "calendar-week-fit", "calendar-today-controls"].includes(scene.name))) allowedWidths.push([900, 480]);
         expect(allowedWidths, `${name}: ${command}`).toContainEqual(options.widths);
         if (options.widths.includes(1920)) expect(options.heights[1920], `${name}: ${command}`).toBe(1080);
         if (options.widths.includes(1180)) expect(options.heights[1180], `${name}: ${command}`).toBe(780);
         if (options.widths.includes(1280)) expect(options.heights[1280], `${name}: ${command}`).toBe(800);
+        if (options.widths.includes(1080)) expect(options.heights[1080], `${name}: ${command}`).toBe(640);
       }
     }
     const stagedFeatures = staged && resolve(staged, "features");

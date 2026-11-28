@@ -5,11 +5,11 @@ import { RAPHAEL_ID, faceHTML } from "../members";
 import { bindNavLayer } from "../nav-layers";
 import { btn, esc, headerCloseButton, keys, reducedMotion, replay } from "../ui";
 import { dimClip } from "./dim";
-import { placeGroup, type Box, type Placement, type Side } from "./place";
-import type { Spot } from "./steps";
+import { EDGE_TOP, groundBox, placeAroundLayer, placeGroup, touches, type Box, type PlaceInput, type Placement, type Side } from "./place";
+import { boxOf, type Spot } from "./steps";
 import "./tour.css";
 
-export type ButtonId = "start" | "skip" | "back" | "next" | "done";
+export type ButtonId = "start" | "skip" | "done";
 export type Pressed = ButtonId | "close" | "dismiss";
 export const CAPTION_CONTROLS = ".window-chrome .window-controls";
 
@@ -17,7 +17,6 @@ export interface ViewModel {
   /** `offer`: the question at the bottom left; `step`: the dim, the cut-out and the walk; `bye`: the last line, nothing dimmed. */
   mode: "offer" | "step" | "bye";
   step?: string;
-  state?: "ask" | "done" | "look" | "fallback";
   title?: string;
   closeLabel?: string;
   text: string;
@@ -25,17 +24,18 @@ export interface ViewModel {
   keys?: string[];
   progress?: { current: number; total: number; label: string };
   buttons: { id: ButtonId; label: string; primary?: boolean }[];
-  control?: () => HTMLElement | null;
+  controls?: () => HTMLElement[];
   celebrate?: boolean;
   /** What the dialog is called for a reader. */
   label: string;
   /** What is pointed at, measured again whenever the window or the layout moves; `dim: false` only stands beside it. */
   locate: () => (Spot & { dim: boolean }) | null;
+  extraSpot?: () => Spot | null;
+  layer?: () => HTMLElement | null;
   /** An independent anchor when Raphael stands beside a different surface from the cut-out. */
   anchor?: () => Box | null;
   prefer: readonly Side[];
   align: "center" | "start";
-  keepClear?: () => readonly Box[];
   keepControlsClear?: () => readonly Box[];
   slimeFirst?: boolean;
   /** Where Raphael comes from while it has no place yet. */
@@ -44,11 +44,12 @@ export interface ViewModel {
 
 export interface TourView {
   render(model: ViewModel, options: { hop: boolean }): number;
+  hideOffer(): void;
   /** Measures the target and places the group again, without a hop. */
   reflow(): void;
   contains(node: Node | null): boolean;
-  tab(target: HTMLElement | null, backward: boolean): void;
-  keepFocus(target: HTMLElement | null): void;
+  tab(controls: HTMLElement[], backward: boolean): void;
+  keepFocus(controls: HTMLElement[]): void;
   setConfirmation(scrim: HTMLElement | null): void;
   focusButton(id: "skip" | "close"): void;
   /** Fades the group out and then removes it (at once when nothing may move). */
@@ -71,7 +72,7 @@ const FALL = "cubic-bezier(0.33, 0, 0.67, 0.33)";
 const FALL_IN_PROGRESS = "cubic-bezier(0.33, 0.16, 0.67, 0.5)";
 const GLOW_OPACITY = "var(--tour-glow-opacity)";
 
-export function createView(on: (pressed: Pressed) => void, onTargetPress: () => void): TourView {
+export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: Element) => void): TourView {
   const root = document.createElement("div");
   root.className = "tour";
   root.dataset.tourRoot = "";
@@ -92,6 +93,7 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: () => 
   // The walk owns layer navigation and consumes both directions until Finish.
   bindNavLayer(bubble, () => {}, { active: () => model?.mode === "step", step: () => true });
   let placed: Box | null = null;
+  let reserved: HTMLElement | null = null;
   let leaving: ReturnType<typeof setTimeout> | undefined;
   let playing: { plan: MotionPlan; body: Animation; tracks: Animation[] } | null = null;
 
@@ -120,7 +122,7 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: () => 
   // Catch presses before the document's outside-press dismissals. The clip supplies pointer hit-testing;
   // this guard also keeps the look-only openings and the margin around a control from taking input.
   const own = (event: Event): void => {
-    if (!(event.target instanceof Element)) return;
+    if (root.inert || !(event.target instanceof Element)) return;
     const target = event.target;
     if (confirmation) {
       if (!confirmation.contains(target)) {
@@ -134,8 +136,8 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: () => 
       const inBubble = bubble.contains(target);
       if (!sideButton && !inBubble && target !== dim) {
         if (target.closest(CAPTION_CONTROLS)) return;
-        if (model.control?.()?.contains(target)) {
-          if (event.type === "click") onTargetPress();
+        if (model.controls?.().some(control => control.contains(target))) {
+          if (event.type === "click") onTargetPress(target);
           return;
         }
       }
@@ -167,8 +169,14 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: () => 
       (count || buttons ? `<div class="tour-foot">${count}<div class="tour-buttons">${buttons}</div></div>` : "");
   }
 
-  function place(next: ViewModel, anchor: Box | null, clear: readonly Box[], controls: readonly Box[]): Placement {
-    return placeGroup({
+  function restoreLayer(): void {
+    reserved?.style.removeProperty("--tour-clearance");
+    reserved?.removeAttribute("data-tour-clearance");
+    reserved = null;
+  }
+
+  function place(next: ViewModel, anchor: Box | null, clear: readonly Box[], controls: readonly Box[], layer: HTMLElement | null): Placement {
+    const input: PlaceInput = {
       spot: anchor,
       view: { width: document.documentElement.clientWidth || innerWidth, height: document.documentElement.clientHeight || innerHeight },
       bubble: { width: bubble.offsetWidth, height: bubble.offsetHeight },
@@ -179,20 +187,55 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: () => 
       slimeFirst: next.slimeFirst,
       prefer: next.prefer,
       align: next.align,
-    });
+    };
+    if (!layer) return placeGroup(input);
+    const header = layer.querySelector<HTMLElement>(".cs-top, .set-head, .mb-dlg-head, .cb-head");
+    if (header) {
+      const title = header.querySelector("h1, h2, h3");
+      if (title && title.textContent) {
+        const words = document.createRange();
+        words.selectNodeContents(title);
+        input.controls = [...controls, words.getBoundingClientRect()];
+      }
+    }
+    const beside = placeAroundLayer(input, boxOf(layer), header?.getBoundingClientRect());
+    if (beside) return beside;
+    const scrim = layer.parentElement;
+    if (scrim?.matches(".mb-scrim") && layer.matches(".cr-dialog")) {
+      // Keep the look picker at its normal height when a short window leaves no strip above the maker.
+      if (scrim.dataset.tourClearance !== "side") scrim.dataset.tourClearance = "side";
+      reserved = scrim;
+      input.bubble = { width: bubble.offsetWidth, height: bubble.offsetHeight };
+      input.spot = next.locate()?.box ?? null;
+      input.controls = next.keepControlsClear?.();
+      return placeAroundLayer(input, boxOf(layer)) ?? placeGroup(input);
+    }
+    if (scrim?.matches(".modal-scrim")) {
+      // Make enough room above a nearly full-window dialog to show the entire instruction and portrait.
+      const clearance = `${EDGE_TOP + Math.max(input.bubble.height, SLIME) + 16}px`;
+      if (scrim.style.getPropertyValue("--tour-clearance") !== clearance) scrim.style.setProperty("--tour-clearance", clearance);
+      if (scrim.dataset.tourClearance !== "above") scrim.dataset.tourClearance = "above";
+      reserved = scrim;
+      const outside = placeAroundLayer({ ...input, controls: next.keepControlsClear?.() }, boxOf(layer));
+      if (outside) return outside;
+    }
+    return placeGroup(input);
   }
 
   function apply(next: ViewModel, hop: boolean, celebrate = false): number {
     const spot = next.locate();
+    const extra = next.extraSpot?.();
+    const layer = next.layer?.() ?? null;
+    if (reserved && reserved !== layer?.parentElement) restoreLayer();
     const anchor = next.anchor?.() ?? null;
-    const clear = [...(next.keepClear?.() ?? []), ...(anchor && spot ? [spot.box] : [])];
+    const clear = [...(anchor && spot ? [spot.box] : []), ...(extra ? [extra.box] : [])];
     const controls = next.keepControlsClear?.() ?? [];
-    const placement = place(next, anchor ?? spot?.box ?? null, clear, controls);
+    const placement = place(next, anchor ?? spot?.box ?? null, clear, controls, layer);
     const to = placement.slime;
     const moved = placed?.left !== to.left || placed.top !== to.top;
     const canMove = !reducedMotion() && typeof slime.animate === "function";
     let plan: MotionPlan | undefined;
-    if (canMove && hop && moved && !placement.hideSlime && !ground.hidden) {
+    if (canMove && hop && (moved || next.mode === "step")) {
       if (placed) {
         // Read all three poses before cancelling or moving their common anchor.
         const currentGround = matrixOf(getComputedStyle(ground).transform);
@@ -200,7 +243,10 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: () => 
         const currentBody = matrixOf(bodyStyle.transform), currentGlow = matrixOf(glowStyle.transform);
         const from = { ...placed, left: placed.left + currentGround.m41, top: placed.top + currentGround.m42 };
         const time = Number(playing?.body.currentTime);
-        plan = hopPlan(from.left - to.left, from.top - to.top, {
+        const path = groundBox({ left: Math.min(from.left, to.left), top: Math.min(from.top, to.top) - 44,
+          width: SLIME + Math.abs(from.left - to.left), height: SLIME + 44 + Math.abs(from.top - to.top) }, GROUND_INSET);
+        const blocked = next.mode === "step" && (path.top < 0 || [spot?.box, ...clear, ...controls].some(box => box && touches(path, box)));
+        plan = blocked ? hopPlan(0, 0, stillPose()) : hopPlan(from.left - to.left, from.top - to.top, {
           y: currentBody.m42, width: Math.hypot(currentBody.m11, currentBody.m12), height: Math.hypot(currentBody.m21, currentBody.m22),
           tilt: Math.atan2(currentBody.m12, currentBody.m11) * 180 / Math.PI, opacity: bodyStyle.opacity || 1,
           glowWidth: currentGlow.m11, glowOpacity: glowStyle.opacity || GLOW_OPACITY,
@@ -211,11 +257,11 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: () => 
         if (from) plan = popPlan(from, to);
       }
     }
-    if (canMove && celebrate && !placement.hideSlime) plan = happyPlan(plan);
-    if (!canMove || moved || placement.hideSlime || plan) cancelMotion();
-    const cut = next.mode === "step" && spot?.dim ? spot : null;
+    if (canMove && celebrate) plan = happyPlan(plan);
+    if (!canMove || moved || plan) cancelMotion();
+    const cut = next.mode === "step" && spot?.dim ? next.locate() : null;
     root.dataset.dim = next.mode !== "step" ? "none" : cut ? "spot" : "all";
-    dim.style.clipPath = cut ? dimClip(cut) : "";
+    dim.style.clipPath = cut ? dimClip(cut, extra ?? undefined) : "";
     spotEl.hidden = !cut;
     if (cut) {
       spotEl.style.left = `${cut.box.left}px`; spotEl.style.top = `${cut.box.top}px`;
@@ -225,7 +271,6 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: () => 
     bubble.style.left = `${Math.round(placement.bubble.left)}px`;
     bubble.style.top = `${Math.round(placement.bubble.top)}px`;
     bubble.dataset.side = placement.side;
-    ground.hidden = !!placement.hideSlime;
     if (moved) {
       ground.style.left = `${to.left - GROUND_INSET}px`;
       ground.style.top = `${to.top}px`;
@@ -242,36 +287,47 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: () => 
     render(next, { hop }) {
       clearTimeout(leaving);
       root.classList.remove("is-leaving");
+      if (root.inert) {
+        root.inert = false;
+        root.classList.remove("is-covered");
+        placed = null;
+        cancelMotion();
+      }
       const first = model === null;
       const celebrate = !!next.celebrate && model?.mode !== "bye";
       model = next;
       root.dataset.mode = next.mode;
       if (next.step) root.dataset.step = next.step; else delete root.dataset.step;
-      if (next.state) root.dataset.state = next.state; else delete root.dataset.state;
       bubble.setAttribute("aria-label", next.label);
       const active = document.activeElement;
       const focused = active instanceof HTMLElement && bubble.contains(active) ? active.dataset.tour : undefined;
       bubble.innerHTML = content(next);
       if (focused) {
         const again = bubble.querySelector<HTMLElement>('[data-tour="' + focused + '"]');
-        (again ?? bubble.querySelector<HTMLElement>(".tour-buttons button:last-child"))?.focus({ preventScroll: true });
+        (again ?? bubble.querySelector<HTMLElement>(".tour-buttons button:last-child") ?? bubble).focus({ preventScroll: true });
       }
       const delay = apply(next, hop, celebrate);
       // The words come once Raphael has landed.
       if (hop || first) { bubble.style.setProperty("--tour-in-delay", `${delay}ms`); replay(bubble, "is-arriving"); }
       return delay;
     },
+    hideOffer() {
+      root.inert = true;
+      root.classList.add("is-covered");
+    },
     reflow() { if (model) apply(model, false); },
     contains(node) { return !!node && root.contains(node); },
-    tab(target, backward) {
-      const order = [...(target ? [target] : []), ...buttons()];
+    tab(controls, backward) {
+      const focusable = "button:not(:disabled), input, textarea, [contenteditable]";
+      const order = [...controls.flatMap(control => control.matches(focusable) ? [control] :
+        [...control.querySelectorAll<HTMLElement>(focusable)].filter(el => el.checkVisibility())), ...buttons()];
       const index = order.findIndex(item => item === document.activeElement);
       const next = index < 0 ? (backward ? order.length - 1 : 0) : (index + (backward ? -1 : 1) + order.length) % order.length;
       (order[next] ?? bubble).focus({ preventScroll: true });
     },
-    keepFocus(target) {
+    keepFocus(controls) {
       const active = document.activeElement;
-      if (active instanceof Element && (target?.contains(active) || bubble.contains(active) || active.closest(CAPTION_CONTROLS))) return;
+      if (active instanceof Element && (controls.some(control => control.contains(active)) || bubble.contains(active) || active.closest(CAPTION_CONTROLS))) return;
       (bubble.querySelector<HTMLElement>(".tour-buttons button:last-child") ?? bubble).focus({ preventScroll: true });
     },
     setConfirmation(scrim) { confirmation = scrim; bubble.inert = !!scrim; },
@@ -281,7 +337,7 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: () => 
       root.classList.add("is-leaving");
       leaving = setTimeout(done, 220);
     },
-    destroy() { clearTimeout(leaving); cancelMotion(); for (const type of owned) window.removeEventListener(type, own, true); root.remove(); },
+    destroy() { clearTimeout(leaving); cancelMotion(); restoreLayer(); for (const type of owned) window.removeEventListener(type, own, true); root.remove(); },
   };
 }
 
@@ -321,6 +377,9 @@ interface CurrentPose {
   y: number; width: number; height: number; tilt: number; opacity: number | string;
   glowWidth: number; glowOpacity: number | string; falling: boolean;
 }
+
+const stillPose = (): CurrentPose => ({ y: 0, width: 1, height: 1, tilt: 0, opacity: 1,
+  glowWidth: 1, glowOpacity: GLOW_OPACITY, falling: false });
 
 /** Each hop travels one segment of the ground line while only the portrait rises. */
 function hopPlan(dx: number, dy: number, start: CurrentPose): MotionPlan {

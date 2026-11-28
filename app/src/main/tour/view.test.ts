@@ -4,7 +4,7 @@ import { createView, type TourView, type ViewModel } from "./view";
 
 const modelAt = (left: number, top: number): ViewModel => ({
   mode: "step", text: "Follow Raphael.", label: "Raphael's tour", buttons: [],
-  locate: () => ({ box: { left, top, width: 100, height: 80 }, radius: 8, dim: true }),
+  locate: () => null, anchor: () => ({ left, top, width: 100, height: 80 }),
   prefer: ["right"], align: "center", origin: () => null,
 });
 
@@ -108,6 +108,19 @@ test("the offer grows out of its origin and fades the glow in at touchdown", () 
   expect(ground[ground.length - 1]?.transform).toBe("translate(0px, 0px)");
   expect(find("ground").style.left).toMatch(/^\d+px$/);
   expect(find("ground").style.top).toMatch(/^\d+px$/);
+});
+
+test("an uncovered offer plays the same pop from the account button even at the same position", () => {
+  const offer: ViewModel = { ...modelAt(100, 250), mode: "offer", origin: () => ({ left: 30, top: 500, width: 36, height: 36 }) };
+  view.render(offer, { hop: true });
+  const first = motion("slime");
+  view.hideOffer();
+  view.render(offer, { hop: true });
+  expect(first.animation.cancel).toHaveBeenCalledOnce();
+  expect(motion("slime").frames).toEqual(first.frames);
+  expect(bubbleDelay()).toBe("430ms");
+  view.reflow();
+  expect(animate).toHaveBeenCalledTimes(6);
 });
 
 test("reduced motion puts the face and its static glow at the destination without animations", () => {

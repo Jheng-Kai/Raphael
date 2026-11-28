@@ -265,6 +265,7 @@ export function createAgent(app: AppContext, places?: {
   resolved(member: number, conversation: number): void;
 }): Page & {
   sidebar: HTMLElement; loadSidebar(): Promise<void>; memberFace(id: number, size: number): string; settingsOf(): number | null;
+  conversationShown(): boolean;
   keepNavigationPlace(): boolean;
   currentChatPlace(): ChatPlace; chatPlaceExists(place: ChatPlace): boolean; showChatPlace(place: ChatPlace): void;
 } {
@@ -3487,6 +3488,7 @@ export function createAgent(app: AppContext, places?: {
     loadSidebar: () => members.load(),
     memberFace: (id, size) => members.faceOf(id, size),
     settingsOf: () => members.settings.isOpen() ? members.current() : null,
+    conversationShown: () => !memberChat.hidden && !members.settings.isOpen() && !desktop.expanded() && !pagesHost.shown() && !peer,
     keepNavigationPlace,
     currentChatPlace,
     chatPlaceExists,

@@ -190,7 +190,6 @@ async function start(): Promise<void> {
     cleared: new Cleared(),
     closeSettings: () => closeSettings(),
   };
-  tour = createTour(ctx);
 
   bindMissing(document, go);
   const history = createHistory(ctx);
@@ -252,6 +251,7 @@ watchChipRows(document.body);
 
   let current: MainPageId | null = null;
   let settingsOpen = false;
+  tour = createTour({ ...ctx, isConversation: () => current === "agent" && guide.hidden && !settingsOpen && agent.conversationShown() });
   /** What had the focus before the settings opened: it gets it back when they close. */
   let opener: HTMLElement | null = null;
   let shownAt = 0;
@@ -263,6 +263,7 @@ watchChipRows(document.body);
    * question to Raphael is shown here alone, and the overlay at the bottom right stays empty.
    */
   function tellAgentPage(): void {
+    tour?.conversationChanged();
     const shown = current === "agent" && !settingsOpen && guide.hidden !== false && agent.settingsOf() === null;
     if (shown === agentPageTold) return;
     agentPageTold = shown;

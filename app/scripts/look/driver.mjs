@@ -1155,7 +1155,9 @@ export async function perform(page, step, evidenceDirectory) {
       const primary = step.ctrl ? await primaryKey(page) : null;
       if (primary) await page.keyboard.down(primary);
       if (step.shift) await page.keyboard.down("Shift");
+      if (step.altRight) await page.keyboard.down("AltRight");
       try { await page.keyboard.press(step.key); } finally {
+        if (step.altRight) await page.keyboard.up("AltRight");
         if (step.shift) await page.keyboard.up("Shift");
         if (primary) await page.keyboard.up(primary);
       }

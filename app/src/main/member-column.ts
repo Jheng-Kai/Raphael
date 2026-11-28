@@ -301,6 +301,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
   let suppressFold = false;
   el.addEventListener("pointerdown", () => { suppressFold = false; });
   addButton.addEventListener('click', () => {
+      if (document.querySelector('.tour[data-step="team"]')) { host.newMember(null); return; }
       openActions(
         addButton,
         [
