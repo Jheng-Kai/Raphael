@@ -60,6 +60,13 @@ export default [
   scene("settings-mic-denied", "A Mac whose microphone was refused: 聽寫 says where to allow it, its button opens that pane, and the meter stays closed", [...settings("dictation"), wait('.modal-scrim .missing-note [data-missing-pane]'), check("settings-mic-denied")], { microphone: "denied", mac: true }),
   // R-PRIV-AX-01: on a Mac without Accessibility no global key is heard, so no paste or tidy fails to say so; 聽寫 says it instead.
   scene("settings-accessibility-off", "A Mac without Accessibility: 聽寫 says so above the shortcuts, and its one button opens the pane", [...settings("dictation"), wait('.modal-scrim .missing-note [data-missing-pane]'), check("settings-accessibility-off")], { accessibility: false }),
+  {
+    // The card the note's button puts under System Settings (R-PRIV-AX-02), drawn by its own page as the passive window shows it.
+    ...scene("permission-guide-card", "The card under System Settings says to drag Raphael into the list above and turn it on, with the app's tile to drag it from", [check("permission-guide-card")], {
+      permissionGuide: [{ revision: 1, name: "Raphael", language: "zh-TW" }],
+    }),
+    entry: "permission-guide.html", ready: "#permission-guide:not([hidden])",
+  },
 
   scene("local-command-settings-gone", "Safety has no local commands row and no 電腦操作 section: only the vault and the rules are left", [...settings("safety"), scroll(".modal-scrim .modal-body .sgroup:last-of-type"), check("local-command-setting-gone")]),
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),

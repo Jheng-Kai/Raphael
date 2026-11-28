@@ -1280,6 +1280,7 @@ export const fr = {
   "settings.052": "Le cœur ne répond pas. Rouvrez bientôt les réglages ; s’ils restent indisponibles, redémarrez Raphael.",
   "settings.054": "Votre clavier utilise Alt droite comme AltGr. Choisissez un autre raccourci.",
   "settings.micUndecided": "Raphael n’a pas encore l’autorisation du microphone. Appuyez sur Tester le microphone et macOS la demandera une fois.",
+  "permissionGuide.drag": "Faites glisser {p0} ci-dessous dans la liste au-dessus, puis activez son interrupteur.",
   "settings.micAsk": "Tester le microphone",
   "settings.055": "Mode de dictée",
   "settings.059": "Langue de l’interface",

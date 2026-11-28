@@ -5717,6 +5717,24 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, top: scroll.scrollTop, height: scroll.scrollHeight };
   }
+  if (name === "permission-guide-card") {
+    // R-PRIV-AX-02: the sentence, the app's tile with its icon and name, the ×, and a window measured to the card with the
+    // tile's place in it, from which AppKit starts the drag.
+    const card = document.querySelector('#permission-guide'), tile = card?.querySelector('.guide-tile'), icon = tile?.querySelector('img');
+    const text = card?.querySelector('.guide-text'), close = card?.querySelector('.guide-close');
+    require(visible(card) && visible(tile), "the card and its app tile show");
+    require(!!icon && icon.complete && icon.naturalWidth > 0 && icon.getBoundingClientRect().width >= 24, "the app's icon is drawn on the tile");
+    require(text.textContent.includes('Raphael') && text.textContent.includes('開關') && tile.textContent.trim() === 'Raphael', "the card says to drag Raphael, named as System Settings lists it, and turn it on");
+    require(text.scrollWidth <= text.clientWidth + 1 && card.scrollWidth <= card.clientWidth + 1, "the sentence wraps inside the card");
+    require(visible(close) && !!close.getAttribute('aria-label'), "the × has its name");
+    const box = card.getBoundingClientRect(), place = tile.getBoundingClientRect();
+    const layouts = window.__look.calls.filter(call => call.command === 'permission_guide_layout');
+    require(layouts.length >= 1, "the card reports its size");
+    const last = layouts.at(-1);
+    require(last.revision === 1 && Math.abs(last.width - Math.ceil(box.right)) <= 1 && Math.abs(last.height - Math.ceil(box.bottom)) <= 1, `the window is the card's size (${JSON.stringify(last)})`);
+    require(Math.abs(last.tile.x - place.left) <= 1 && Math.abs(last.tile.y - place.top) <= 1 && Math.abs(last.tile.width - place.width) <= 1 && Math.abs(last.tile.height - place.height) <= 1, "the drag starts from the tile's place");
+    return { check: name, width: last.width, height: last.height };
+  }
   if (name === "learned-pill") {
     const pill = document.querySelector('#learned-pill');
     require(visible(pill) && !!pill.querySelector('img').getAttribute('src'), "one learned pill has Raphael's emblem");
