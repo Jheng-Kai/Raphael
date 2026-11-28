@@ -39,6 +39,15 @@ const MENU_OPENERS: Partial<Record<Layer, () => HTMLElement | null>> = {
   model: () => firstShown(MODEL_TRIGGER),
   account,
 };
+/**
+ * What is lit, with room round it; what reaches the window's edges (a page, the slime's panel, its settings) is framed just inside
+ * instead, so the whole ring shows and the window's corners stay dimmed.
+ */
+function framed(el: HTMLElement, pad: number): ReturnType<typeof spotOf> {
+  const box = boxOf(el), width = document.documentElement.clientWidth || innerWidth, height = document.documentElement.clientHeight || innerHeight;
+  const edge = box.left < pad || box.top < pad || box.left + box.width > width - pad || box.top + box.height > height - pad;
+  return spotOf(el, edge ? -6 : pad);
+}
 /** A menu opened while the window is in the background would close again at once (ui.ts closes menus of an unfocused window). */
 const windowFocused = (): boolean => typeof document.hasFocus !== "function" || document.hasFocus();
 
@@ -106,14 +115,7 @@ export function createTour(host: TourHost): Tour {
     const step = stepNow()!;
     const progress = { current: at + 1, total: STEPS.length, label: t("tour.progress", { current: at + 1, total: STEPS.length }) };
     if (seeing && step.seen) {
-      // What reaches the window's edges (a page, the slime's panel, its settings) is framed just inside, so the whole ring shows.
-      const looked = () => {
-        const el = lookAt();
-        if (!el) return null;
-        const box = boxOf(el), view = { width: document.documentElement.clientWidth || innerWidth, height: document.documentElement.clientHeight || innerHeight };
-        const edge = box.left < 6 || box.top < 6 || box.left + box.width > view.width - 6 || box.top + box.height > view.height - 6;
-        return spotOf(el, edge ? -6 : 6);
-      };
+      const looked = () => { const el = lookAt(); return el ? framed(el, 6) : null; };
       return {
         mode: "step", step: step.id, label, title: t(step.title), closeLabel: t("tour.close"),
         text: t(step.seen), progress, seeing: true,
@@ -143,7 +145,7 @@ export function createTour(host: TourHost): Tour {
         return el ? { ...spotOf(el, step.pad ?? 0), dim: true } : null;
       },
       // Inside a menu the whole menu stays lit, so the person sees where the framed row is.
-      ...(step.layer ? { lit: () => { const el = layer(step.layer); return el ? spotOf(el, 4) : null; } } : {}),
+      ...(step.layer ? { lit: () => { const el = layer(step.layer); return el ? framed(el, 4) : null; } } : {}),
       layer: openLayer,
       ...(step.id === "account" ? { anchor: () => anchorSpot()?.box ?? null } : {}),
       prefer: step.prefer, align: step.id === "account" ? "start" : "center", origin,

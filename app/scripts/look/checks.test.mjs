@@ -63,8 +63,8 @@ it.each(["keys", "apps"])("hit-tests the dim at the window edges of the %s step"
           <button class="btn icon close-button" data-tour="close" aria-label="End tour"><svg></svg></button>
         </div>
         <p class="tour-text">Raphael's guided tour</p>
-        <span class="tour-count" role="img" aria-label="Step ${highlightsSearch ? 4 : 11} of 11">${Array.from({ length: 11 }, (_, index) =>
-          `<span class="tour-dot"${index === (highlightsSearch ? 3 : 10) ? " data-current" : ""}></span>`).join("")}</span>
+        <span class="tour-count" role="img" aria-label="Step ${highlightsSearch ? 5 : 12} of 12">${Array.from({ length: 12 }, (_, index) =>
+          `<span class="tour-dot"${index === (highlightsSearch ? 4 : 11) ? " data-current" : ""}></span>`).join("")}</span>
         ${highlightsSearch ? '<div class="tour-foot"><div class="tour-buttons"><button class="btn sm pri" data-tour="gotIt">Got it</button></div></div>' : ""}
         <div class="tour-keys"><kbd>Alt</kbd><kbd>R</kbd></div>
       </div>
@@ -91,7 +91,7 @@ it.each(["keys", "apps"])("hit-tests the dim at the window edges of the %s step"
   const dim = doc.querySelector(".tour-catch");
   const captionGlyph = doc.querySelector(".window-button svg");
   const dragStrip = doc.querySelector(".window-drag");
-  const check = () => checkRendered(highlightsSearch ? "tour-step-4-seen" : "tour-step-11");
+  const check = () => checkRendered(highlightsSearch ? "tour-step-5-seen" : "tour-step-12");
   const hits = new Map(highlightsSearch ? [["0.25,38.5", doc.body], ["355,48", doc.querySelector(".modal")], ["355,243", doc.querySelector(".modal")]] : []);
   doc.elementFromPoint = (x, y) => {
     if (Math.round(x) >= doc.documentElement.clientWidth || Math.round(y) >= doc.documentElement.clientHeight) return null;

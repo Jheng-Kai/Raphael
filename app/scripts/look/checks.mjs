@@ -4585,14 +4585,14 @@ export function checkRendered(name, context = {}) {
     // A step of the walk: its action (tour-step-N), or what that action opened, lit and explained (tour-step-N-seen).
     const seen = name.endsWith('-seen');
     const number = Number(name.slice('tour-step-'.length).replace('-seen', ''));
-    const order = ["member", "computer", "member-settings", "apps", "model", "model-list", "account", "dictation", "calendar", "raphael", "keys"];
+    const order = ["team", "member", "computer", "member-settings", "apps", "model", "model-list", "account", "dictation", "calendar", "raphael", "keys"];
     const pages = ["dictation", "calendar", "raphael"];
     const id = order[number - 1];
     require(id && root.dataset.mode === 'step' && root.dataset.step === id && root.dataset.state === (seen ? 'see' : 'do'),
       `step ${number} of ${order.length} is active ${seen ? 'and explaining what it opened' : 'and waiting for its action'} (${root.dataset.step}, ${root.dataset.state})`);
     const composerTarget = '.page-agent:not([hidden]) .composer';
     const slimePanel = '.page-agent:not([hidden]) .mb-det:not([hidden])';
-    const targets = ['.page-agent:not([hidden]) .conversation-trigger', slimePanel + ' [data-det="tab"][data-tab="computer"]', slimePanel + ' [data-det="gear"]',
+    const targets = ['#nav [data-col="add"]', '.page-agent:not([hidden]) .conversation-trigger', slimePanel + ' [data-det="tab"][data-tab="computer"]', slimePanel + ' [data-det="gear"]',
       '#nav .sidebar-apps', composerTarget + ' .cmp-model .mp-trigger', '.cb-menu [data-cb-act="models"]', '#nav .sidebar-account',
       ...pages.map(row => `.account-menu [data-account="${row}"]`)];
     const progress = bubble.querySelector('.tour-count');
@@ -4677,7 +4677,7 @@ export function checkRendered(name, context = {}) {
       require(visible(target), `the target is on screen: ${selector}`);
       require(root.dataset.dim === 'spot' && !spot.hidden, "the dim leaves the action visible");
       const t = target.getBoundingClientRect(), p = spot.getBoundingClientRect();
-      const pad = ({ member: 4, computer: 2, 'member-settings': 2, apps: 4, model: 4, account: 4 }[id] ?? 0);
+      const pad = ({ team: 4, member: 4, computer: 2, 'member-settings': 2, apps: 4, model: 4, account: 4 }[id] ?? 0);
       require(Math.abs(p.left - (t.left - pad)) <= 3 && Math.abs(p.top - (t.top - pad)) <= 3 && Math.abs(p.width - (t.width + 2 * pad)) <= 4 && Math.abs(p.height - (t.height + 2 * pad)) <= 4,
         `the cut-out follows the target's box: ${[p.left, p.top, p.width, p.height].map(Math.round)} vs ${[t.left, t.top, t.width, t.height].map(Math.round)}`);
       require(parseFloat(getComputedStyle(spot).borderTopLeftRadius) >= 8, "the cut-out is rounded");

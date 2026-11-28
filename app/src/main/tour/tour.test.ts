@@ -272,8 +272,8 @@ test("the offer gives up quietly when the account button never appears", async (
 
 const stepId = () => find(".tour")?.dataset.step;
 const state = () => find(".tour")?.dataset.state;
-/** Without the slime's title (so none of its panel's steps) and Connect apps, the walk starts at the model chip. */
-const fromModel = () => { for (const selector of [".conversation-trigger", ".sidebar-apps"]) find(selector).remove(); };
+/** Without the sidebar's plus, the slime's title (so none of its panel's steps) and Connect apps, the walk starts at the model chip. */
+const fromModel = () => { for (const selector of ['[data-col="add"]', ".conversation-trigger", ".sidebar-apps"]) find(selector).remove(); };
 const line = (key: TourStep["text"]) => t(key, { name: t("agent.title") });
 
 function wireSteps(showConversation: (shown: boolean) => void) {
@@ -375,6 +375,7 @@ test("every step is one action, and what it opens is lit and explained until 好
   const { create, cancel } = wireSteps(showConversation);
   const row = (id: string) => () => find(`.account-menu [data-account="${id}"]`).click();
   const actions = [
+    () => find('[data-col="add"]').click(),
     () => find(".conversation-trigger").click(),
     () => find('.mb-det [data-tab="computer"]').click(),
     () => find('.mb-det [data-det="gear"]').click(),
@@ -387,11 +388,11 @@ test("every step is one action, and what it opens is lit and explained until 好
 
   await begin(tour);
   // What sets the app apart first: a slime's own panel, computer and settings, and the apps it works in; then the model, the avatar's tools and Raphael.
-  expect(STEPS.map(step => step.id)).toEqual(["member", "computer", "member-settings", "apps", "model", "model-list", "account", "dictation", "calendar", "raphael", "keys"]);
+  expect(STEPS.map(step => step.id)).toEqual(["team", "member", "computer", "member-settings", "apps", "model", "model-list", "account", "dictation", "calendar", "raphael", "keys"]);
   for (const [index, step] of STEPS.entries()) {
     expect(stepId()).toBe(step.id);
     expect(state()).toBe("do");
-    expect(count()).toBe(`${index + 1}/11`);
+    expect(count()).toBe(`${index + 1}/12`);
     expect(words()).toBe(line(step.text));
     // A row of the account menu is framed inside the menu, which the tour opened again after the last page was looked at.
     if (step.layer === "account") expect(find(".account-menu")).not.toBeNull();
@@ -430,7 +431,7 @@ test("every step is one action, and what it opens is lit and explained until 好
   expect(find(".cb-menu")).toBeNull();
   expect(find(".account-menu")).toBeNull();
   expect(find(".cr-dialog")).toBeNull();
-  expect(cancel).not.toHaveBeenCalled();
+  expect(cancel).toHaveBeenCalledOnce();
   expect(create).not.toHaveBeenCalled();
   expect(find(".modal-scrim")).toBeNull();
   expect(find(".tour-keys kbd")).not.toBeNull();
@@ -450,6 +451,7 @@ test("a slime's panel already open in a wide window is closed first, so the pers
   wireSteps(showConversation);
   find(".conversation-trigger").click();
   expect(find(".mb-det").hidden).toBe(false);
+  find('[data-col="add"]').remove();
   await begin(tour);
   expect(stepId()).toBe("member");
   expect(find(".mb-det").hidden).toBe(true);
@@ -458,49 +460,48 @@ test("a slime's panel already open in a wide window is closed first, so the pers
   expect(state()).toBe("see");
 });
 
-test("an attempted action with no reaction advances after four seconds", async () => {
+test("nothing moves the walk on by the clock: a press the app does not react to leaves the step for another press", async () => {
   const { tour } = harness();
   fromModel();
   await begin(tour);
   find(".mp-trigger").click();
-  await settle(3999);
+  await settle(60000);
   expect(stepId()).toBe("model");
-  await settle(1);
-  // No menu opened, so its model list has nothing to frame either: the walk reaches the avatar.
-  expect(stepId()).toBe("account");
+  expect(state()).toBe("do");
+  expect([...bubble().querySelectorAll("button")].map(el => el.dataset.tour)).toEqual(["close"]);
 });
 
 test("a missing target skips immediately and keeps the original progress count", async () => {
   const { tour } = harness();
-  find(".conversation-trigger").remove();
+  find('[data-col="add"]').remove();
   await begin(tour);
-  expect(stepId()).toBe("apps");
-  expect(count()).toBe("4/11");
+  expect(stepId()).toBe("member");
+  expect(count()).toBe("2/12");
 });
 
-test("an unavailable quick ask still offers Finish after eight seconds", async () => {
-  const { tour } = harness({ agent_keys: [] });
+test("the shortcut's keys are large caps that light while held, and Finish comes only once all are down together", async () => {
+  const { tour, emit } = harness();
   await offer(tour);
-  for (const selector of [".conversation-trigger", ".mp-trigger", ".sidebar-apps", ".sidebar-account"]) find(selector).remove();
+  for (const selector of ['[data-col="add"]', ".conversation-trigger", ".mp-trigger", ".sidebar-apps", ".sidebar-account"]) find(selector).remove();
   button("start").click();
   expect(stepId()).toBe("keys");
-  await settle(7999);
+  expect(words()).not.toContain("最後一招");
+  const caps = () => [...document.querySelectorAll<HTMLElement>(".tour-keys .tour-key")];
+  expect(caps().map(cap => cap.textContent)).toEqual(["右 Alt", "Space"]);
+  const keyAt = (type: string, code: string, key: string) => document.body.dispatchEvent(new KeyboardEvent(type, { code, key, bubbles: true, cancelable: true }));
+  await settle(60000);
   expect(button("done")).toBeNull();
-  await settle(1);
+  keyAt("keydown", "AltRight", "Alt");
+  expect(caps().map(cap => cap.hasAttribute("data-down"))).toEqual([true, false]);
+  keyAt("keyup", "AltRight", "Alt");
+  keyAt("keydown", "Space", " ");
+  expect(caps().map(cap => cap.hasAttribute("data-down"))).toEqual([false, true]);
+  expect(button("done")).toBeNull();
+  keyAt("keydown", "AltRight", "Alt");
   expect(button("done")?.classList.contains("pri")).toBe(true);
-});
-
-test("the action fallback timer waits for the confirmation to close", async () => {
-  const { tour } = harness();
-  fromModel();
-  await begin(tour);
-  find(".mp-trigger").click();
-  await press("close");
-  await settle(5000);
-  expect(stepId()).toBe("model");
-  cancelButton().click();
-  await settle(4000);
-  expect(stepId()).toBe("account");
+  expect(caps().map(cap => cap.hasAttribute("data-down"))).toEqual([true, true]);
+  emit({ type: "Dictation", phase: "listening", agent: true });
+  expect(button("done")).not.toBeNull();
 });
 
 async function reachModelList(tour: Tour): Promise<void> {
@@ -610,7 +611,7 @@ test("placement follows a resized target without a hop, and locale changes redra
 test("a dialog the tour lights keeps its place: nothing pads or moves the window's own layer", async () => {
   const { tour, showConversation } = harness();
   wireSteps(showConversation);
-  find(".conversation-trigger").remove();
+  for (const selector of ['[data-col="add"]', ".conversation-trigger"]) find(selector).remove();
   await begin(tour);
   expect(stepId()).toBe("apps");
   find(".sidebar-apps").click();

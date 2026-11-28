@@ -22,7 +22,9 @@ const ACCOUNT_MENU = "#app-popover.account-menu";
 const row = id => click(`${ACCOUNT_MENU} [data-account="${id}"]`);
 // [id, what the person does, the actions, whether what it opens is then lit and explained, what must hold once the tour moves on]
 const panel = ".page-agent:not([hidden]) .mb-det:not([hidden])";
+const maker = ".mb-scrim:not(.leaving) > .cr-dialog";
 const steps = [
+  ["team", "Open the member maker from the sidebar plus", [click('#nav [data-col="add"]'), wait(maker)], true, [waitGone(maker), check("tour-no-member-created")]],
   ["member", "Open the slime's panel from its name at the top", [click(".page-agent:not([hidden]) .conversation-trigger"), wait(panel)], true],
   ["computer", "Open the slime's computer in its panel", [click(panel + ' [data-det="tab"][data-tab="computer"]'), wait(panel + ' [data-tab="computer"][aria-selected="true"]')], true],
   ["member-settings", "Open the slime's settings from the panel's gear", [click(panel + ' [data-det="gear"]'), wait(".page-agent:not([hidden]) .ms-pane")], true,
@@ -72,7 +74,7 @@ export default [
     [wait(OFFER), key("Escape"), waitGone(".tour"), check("tour-closed"), check("tour-unanswered")], returning),
   ...steps.map(([, description], index) => ({
     ...scene("tour-step-" + (index + 1), description,
-      [...to(index), inspect(index), ...([0, 3].includes(index) ? [check("page-unshifted")] : [])], returning),
+      [...to(index), inspect(index), ...([0, 4].includes(index) ? [check("page-unshifted")] : [])], returning),
     afterCapture: act(index),
   })),
   // What a step opened, lit and explained, waiting for 好的.

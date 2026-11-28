@@ -48,55 +48,62 @@ test("the glow travels on the ground while the body rises and falls", () => {
   expect(find("slime").parentElement).toBe(ground);
 
   view.render(modelAt(430, 250), { hop: true });
-  // Three hops of 110 px each: the ground moves a third of the way during each flight and waits on every touch-down.
+  // One jump: the ground waits through the crouch, slides the whole way while Raphael is in the air, and rests on the landing.
   expect(motion("ground").frames.map(frame => frame.transform)).toEqual([
-    "translate(-330px, 0px)", "translate(-330px, 0px)", "translate(-220px, 0px)", "translate(-220px, 0px)",
-    "translate(-110px, 0px)", "translate(-110px, 0px)", "translate(0px, 0px)", "translate(0px, 0px)",
+    "translate(-330px, 0px)", "translate(-330px, 0px)", "translate(0px, 0px)", "translate(0px, 0px)",
   ]);
-  expect(times("ground")).toEqual([0, 80, 330, 400, 650, 720, 970, 1150]);
+  expect(times("ground")).toEqual([0, 80, 522, 702]);
   const glowFrames = motion("glow").frames;
   expect(glowFrames.every(frame => !String(frame.transform).includes("translate"))).toBe(true);
-  expect(glowFrames.filter(frame => frame.transform === "scaleX(0.65)").map(frame => frame.offset))
-    .toEqual([205 / 1150, 525 / 1150, 845 / 1150]);
-  expect(glowFrames.find(frame => frame.offset === 205 / 1150)?.opacity).toBe("calc(var(--tour-glow-opacity) * 0.5)");
-  expect(glowFrames.find(frame => frame.offset === 330 / 1150)).toMatchObject({ transform: "scaleX(1)", opacity: "var(--tour-glow-opacity)" });
+  expect(glowFrames.filter(frame => frame.transform === "scaleX(0.5)").map(frame => Math.round(frame.offset! * 702))).toEqual([301]);
+  expect(glowFrames.find(frame => frame.transform === "scaleX(0.5)")?.opacity).toBe("calc(var(--tour-glow-opacity) * 0.5)");
 });
 
-test("the hop chain anticipates, stretches, lands and settles before turning to idle", () => {
+test("the jump crouches, stretches at its top, lands and settles before turning to idle, its eyes to the side while in the air", () => {
   view.render(modelAt(100, 250), { hop: false });
   view.render(modelAt(430, 250), { hop: true });
   const body = motion("slime");
-  expect(body.duration).toBe(1150);
-  expect(times("slime")).toEqual([0, 80, 205, 330, 350, 400, 525, 650, 670, 720, 845, 970, 1005, 1070, 1150]);
+  expect(body.duration).toBe(702);
+  expect(times("slime")).toEqual([0, 80, 301, 522, 557, 622, 702]);
   expect(body.frames.map(frame => String(frame.transform).split("scale")[1])).toEqual([
-    "(1, 1)", "(1.12, 0.88)", "(0.94, 1.08)", "(1, 1)", "(1.1, 0.9)", "(1, 1)",
-    "(0.94, 1.08)", "(1, 1)", "(1.1, 0.9)", "(1, 1)",
-    "(0.94, 1.08)", "(1, 1)", "(1.16, 0.84)", "(0.97, 1.04)", "(1, 1)",
+    "(1, 1)", "(1.12, 0.88)", "(0.94, 1.08)", "(1, 1)", "(1.16, 0.84)", "(0.97, 1.04)", "(1, 1)",
   ]);
-  expect(body.frames[2]?.transform).toBe("translateY(-38.5px) rotate(3deg) scale(0.94, 1.08)");
-  expect(bubbleDelay()).toBe("1150ms");
-  expect(document.querySelector(".tour")?.classList.contains("is-idle")).toBe(false);
+  expect(body.frames[2]?.transform).toBe("translateY(-99px) rotate(3deg) scale(0.94, 1.08)");
+  expect(bubbleDelay()).toBe("702ms");
+  const root = document.querySelector<HTMLElement>(".tour")!;
+  expect(root.dataset.facing).toBe("right");
+  expect(root.classList.contains("is-idle")).toBe(false);
   view.reflow();
   expect(body.animation.cancel).not.toHaveBeenCalled();
   expect(calls).toHaveLength(3);
   body.animation.onfinish?.call(body.animation, new Event("finish") as AnimationPlaybackEvent);
-  expect(document.querySelector(".tour")?.classList.contains("is-idle")).toBe(true);
+  expect(root.classList.contains("is-idle")).toBe(true);
+  expect(root.dataset.facing).toBeUndefined();
 });
 
 test.each([
-  [30, 1, 510, 16], [100, 2, 830, 17.5], [330, 3, 1150, 38.5], [440, 4, 1470, 38.5], [800, 5, 1790, 40],
-])("a %i px move uses %i hops, lasts %i ms and waits for the landing to show the bubble", (distance, hops, duration, height) => {
+  [30, 560, 18], [100, 575, 30], [330, 702, 99], [800, 960, 150],
+])("a %i px move is one jump of %i ms, %i px high, and the bubble waits for its landing", (distance, duration, height) => {
   view.render(modelAt(100, 250), { hop: false });
   view.render(modelAt(100 + distance, 250), { hop: true });
   const body = motion("slime");
   expect(body.duration).toBe(duration);
-  // Every move is a visible walk of hops, never a jump in place, and a long one still ends in under two seconds.
-  expect(body.duration).toBeGreaterThanOrEqual(500);
-  expect(body.duration).toBeLessThanOrEqual(1800);
   const apexes = body.frames.filter(frame => String(frame.transform).endsWith("scale(0.94, 1.08)"));
-  expect(apexes).toHaveLength(hops);
-  for (const frame of apexes) expect(parseFloat(String(frame.transform).slice("translateY(".length))).toBeCloseTo(-height);
+  expect(apexes).toHaveLength(1);
+  expect(parseFloat(String(apexes[0]!.transform).slice("translateY(".length))).toBeCloseTo(-height);
   expect(bubbleDelay()).toBe(`${duration}ms`);
+});
+
+test("a move the layout forces is a jump too, and a nudge of a few pixels never cuts a jump short", () => {
+  view.render(modelAt(100, 250), { hop: false });
+  expect(calls).toHaveLength(0);
+  // A resize or a layer that opened moves the place without a new step: Raphael still jumps there, never appearing at once.
+  view.render(modelAt(430, 250), { hop: false });
+  const jump = motion("slime");
+  expect(jump.duration).toBe(702);
+  view.render(modelAt(433, 252), { hop: false });
+  expect(jump.animation.cancel).not.toHaveBeenCalled();
+  expect(calls).toHaveLength(3);
 });
 
 test("the offer grows out of its origin and fades the glow in at touchdown", () => {
@@ -143,11 +150,11 @@ test("reduced motion puts the face and its static glow at the destination withou
 test("the goodbye adds two 12 px hops in place as its words appear", () => {
   view.render(modelAt(100, 250), { hop: false });
   view.render({ ...modelAt(140, 250), mode: "bye", celebrate: true }, { hop: true });
-  expect(bubbleDelay()).toBe("510ms");
-  expect(motion("slime").duration).toBe(810);
-  expect(times("slime").slice(-5)).toEqual([510, 585, 660, 735, 810]);
+  expect(bubbleDelay()).toBe("560ms");
+  expect(motion("slime").duration).toBe(860);
+  expect(times("slime").slice(-5)).toEqual([560, 635, 710, 785, 860]);
   expect(motion("slime").frames.slice(-4).map(frame => parseFloat(String(frame.transform).slice("translateY(".length)))).toEqual([-12, 0, -12, 0]);
-  expect(motion("ground").frames.filter(frame => frame.offset! >= 510 / 810).map(frame => frame.transform))
+  expect(motion("ground").frames.filter(frame => frame.offset! >= 560 / 860).map(frame => frame.transform))
     .toEqual(["translate(0px, 0px)", "translate(0px, 0px)"]);
   expect(document.querySelector(".tour")?.getAttribute("data-dim")).toBe("none");
 });
