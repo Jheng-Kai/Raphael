@@ -192,6 +192,14 @@ pub enum MainEvent {
         done: u64,
         total: u64,
     },
+    /// What an import of Team skills is doing (`fetch`, `read` with `done` of `total` skills, `install`), by the id the window
+    /// gave the import.
+    SkillImportProgress {
+        import_id: String,
+        step: String,
+        done: Option<u64>,
+        total: Option<u64>,
+    },
     /// Learning from corrections cannot read what the user types in `app`, so it learns less
     /// there. Sent at most once per `app` and `reason` while the app runs, whenever the main
     /// window is listening (a window that subscribes later is told then). The identifiers are
@@ -624,6 +632,8 @@ const ALLOWED_METHODS: &[&str] = &[
     "members.skills.delete",
     "skills.library.list",
     "skills.library.import",
+    // Stops the import the window started under its own id (the core ends the clone or the download and keeps nothing).
+    "skills.library.cancel_import",
     "skills.library.update",
     "skills.library.delete",
     "members.commands.list",
@@ -981,8 +991,9 @@ pub async fn pick_output_folder(
     .map_err(|err| format!("a background task failed: {err}"))?
 }
 
-/// The file or folder the owner chose in one panel (macOS: the system's open panel takes both at once); cancelling changes
-/// nothing. Elsewhere the dialog plugin's panels take files or folders, never both, so the window asks for each.
+/// The file or folder the owner chose in one panel; cancelling changes nothing. macOS: the system's open panel takes both at
+/// once. Elsewhere the system's dialog takes files or folders, never both, so it takes a file: the core imports the folder that
+/// holds a SKILL.md (or any file of a skill's folder) and opens a ZIP, and a folder is dragged in.
 #[tauri::command]
 pub async fn pick_import_source(
     app: AppHandle,
@@ -1003,8 +1014,23 @@ pub async fn pick_import_source(
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = app;
-        Err("one panel for files and folders is a macOS panel".to_owned())
+        let window = webview.window();
+        tauri::async_runtime::spawn_blocking(move || {
+            use tauri_plugin_dialog::DialogExt;
+            app.dialog()
+                .file()
+                .set_parent(&window)
+                .blocking_pick_file()
+                .map(|chosen| {
+                    chosen
+                        .into_path()
+                        .map(|path| path.to_string_lossy().into_owned())
+                        .map_err(|_| "invalid file location".to_owned())
+                })
+                .transpose()
+        })
+        .await
+        .map_err(|err| format!("a background task failed: {err}"))?
     }
 }
 
@@ -1392,6 +1418,18 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
             done: whole(params.get("done")?)?,
             total: whole(params.get("total")?)?,
         }),
+        "skills.import_progress" => {
+            let step = params.get("step")?.as_str()?;
+            if !matches!(step, "fetch" | "read" | "install") {
+                return None;
+            }
+            Some(MainEvent::SkillImportProgress {
+                import_id: params.get("import_id")?.as_str()?.to_owned(),
+                step: step.to_owned(),
+                done: params.get("done").and_then(whole),
+                total: params.get("total").and_then(whole),
+            })
+        }
         "member.activity" => {
             let state = params.get("state")?.as_str()?;
             if !matches!(
@@ -3122,6 +3160,7 @@ mod tests {
             "members.skills.delete",
             "skills.library.list",
             "skills.library.import",
+            "skills.library.cancel_import",
             "skills.library.update",
             "skills.library.delete",
             "members.commands.list",
@@ -4078,6 +4117,31 @@ mod tests {
         );
         assert_eq!(main_event_from(&level(json!("loud")), true), None);
         assert_eq!(main_event_from(&level(json!(null)), true), None);
+    }
+
+    #[test]
+    fn an_imports_steps_reach_the_window_by_its_id() {
+        let step = notification(
+            "skills.import_progress",
+            json!({"import_id": "a1", "step": "read", "done": 3, "total": 7}),
+        );
+        assert_eq!(
+            serde_json::to_value(main_event_from(&step, false).unwrap()).unwrap(),
+            json!({"type": "SkillImportProgress", "import_id": "a1", "step": "read", "done": 3, "total": 7})
+        );
+        let fetch = notification(
+            "skills.import_progress",
+            json!({"import_id": "a1", "step": "fetch"}),
+        );
+        assert_eq!(
+            serde_json::to_value(main_event_from(&fetch, false).unwrap()).unwrap(),
+            json!({"type": "SkillImportProgress", "import_id": "a1", "step": "fetch", "done": null, "total": null})
+        );
+        let odd = notification(
+            "skills.import_progress",
+            json!({"import_id": "a1", "step": "launch"}),
+        );
+        assert_eq!(main_event_from(&odd, false), None);
     }
 
     #[test]

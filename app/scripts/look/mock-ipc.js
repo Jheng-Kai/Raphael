@@ -1199,6 +1199,8 @@ export function installMock(fixture, config = {}, target = window) {
     for (const turn of data.turns) if ((turn.pages ?? []).some(page => page.id === id)) notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
     notify("RoomsChanged", { room_id: 1 });
   };
+  // The import of Team skills that is held (`skillImportPending`) reaches a step: the core's `skills.import_progress`, as the shell passes it on.
+  state.importStep = (step, done, total) => state.emit({ type: "SkillImportProgress", import_id: state.pendingImport, step, done: done ?? null, total: total ?? null });
   // The member has made up its mind about the reaction it is analysing (`reactionAsk`): it asks what was wrong, or decides that no
   // words are needed and the turn is taken out of the thread, as the core does. The window is told as the core tells it.
   state.reactionEnds = () => {
@@ -1484,7 +1486,13 @@ export function installMock(fixture, config = {}, target = window) {
     // Settings reads the hidden list as it opens, before the list's section is drawn; the sidebar keeps the roster it already read.
     switch (method) {
       // Team skills (skill-library.ts, members/service.py skills.library.*).
-      case "skills.library.list": return { packages: data.skillLibrary, members: data.members.filter(m => m.id !== 0).map(m => ({ id: m.id, name: m.name })) };
+      case "skills.library.list": {
+        const team = data.members.filter(m => m.id !== 0).map(m => ({ id: m.id, name: m.name }));
+        // `skillMembers`: a team of this many characters (the access menu stays short however many there are).
+        const names = ["小晴", "小森", "小葵", "阿宏", "小米", "老周", "Mia", "Noah", "Ava", "小月", "阿德", "Leo"];
+        for (let at = team.length; at < (variant.skillMembers ?? 0); at++) team.push({ id: 100 + at, name: `${names[at % names.length]}${Math.floor(at / names.length) + 1}` });
+        return { packages: data.skillLibrary, members: team };
+      }
       case "skills.library.update": {
         const pack = data.skillLibrary.find(item => item.key === p.key);
         if (!pack) throw new Error("Invalid params: unknown package");
@@ -1495,20 +1503,33 @@ export function installMock(fixture, config = {}, target = window) {
         if (p.rename) pack.skills.find(skill => skill.id === p.rename.id).name = p.rename.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
         return { package: pack };
       }
+      case "skills.library.cancel_import": {
+        // The core ends the held import and keeps nothing; the import itself then answers `cancelled`.
+        if (!state.rejectImport || p.import_id !== state.pendingImport) return { cancelled: false };
+        const reject = state.rejectImport;
+        state.rejectImport = null;
+        reject(new Error("[-32602] Invalid params: cancelled: the import was stopped"));
+        return { cancelled: true };
+      }
       case "skills.library.import": {
+        const importId = p.import_id;
         // The one box sends a pasted link as text; the core says what it is (members/skill_intake.py `kind_of`).
         const typed = typeof p.text === "string" ? p.text.trim() : "";
         const asked = p.source ?? (typed && !/\s/.test(typed) ? typed : undefined);
         // What is no skill is handed over (`skillHandoff`: what the box was given, and the facts the core answers with), never made into one here.
         const handed = (variant.skillHandoff ?? []).find(item => [p.source, typed, p.file?.name, p.files?.[0]?.path].includes(item.match));
         if (handed) return { handoff: handed.handoff };
+        // Pasted text of a skill that sends the model to other files cannot bring them (members/service.py `_text_alone_is_a_skill`).
+        if (variant.needsFiles && typeof p.text === "string" && /actions\//.test(p.text) && !p.alone) {
+          throw new Error(`[-32602] Invalid params: source: this text names other files that pasted text cannot bring: choose the skill's folder instead [[${JSON.stringify({ reason: "needs_files", file: "actions/how.md", files: ["actions/how.md"] })}]]`);
+        }
         p = asked !== undefined && p.source === undefined ? { source: asked } : p;
         if (p.source === "nothing/here") throw new Error("[-32602] Invalid params: not_found: no SKILL.md found");
         // A cause the core names (members/skill_errors.py): its kind leads the message and its detail rides at the end. The
         // scene's fixture holds the refusal of each source it fails.
         const refusal = variant.importRefusal?.[p.source];
         if (refusal) throw new Error(`[-32602] Invalid params: ${refusal[0]}: the core's own words [[${JSON.stringify({ reason: refusal[1], ...refusal[2] })}]]`);
-        if (variant.skillImportPending) return new Promise(() => {});
+        if (variant.skillImportPending) return new Promise((resolve, reject) => { state.pendingImport = importId; state.rejectImport = reject; });
         if (variant.importMade?.[p.source]) {
           // What the import makes (a plugin of skills that share a name prefix, or a package that left some out), by source.
           const made = variant.importMade[p.source];
@@ -2942,6 +2963,8 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "open_library_file") { state.openedLibraryFile = { member_id: args.memberId, id: args.id }; return; }
       // A report saved as a file (report_save, which the core writes): in Downloads when the work folder cannot be used.
       if (command === "report_save") return { place: "downloads", folder: "Downloads" };
+      // The one panel of 選擇檔案 gives the path the owner chose (`pickedSource`), or none when they cancel.
+      if (command === "pick_import_source") return variant.pickedSource ?? null;
       if (command === "pick_output_folder") return variant.folderCancel ? null : data.colleagueSample.path;
       if (command === "member_template_file") {
         // `templateFile`: what the owner's file holds ("broken": cut short, "other": no template at all, "bom": saved by Notepad).

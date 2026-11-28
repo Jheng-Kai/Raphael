@@ -403,7 +403,12 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             for prefix, real in sorted(shown, key=lambda item: -len(item[0])):
                 if text.startswith(prefix + "/"):
                     return self._reference_parts(text[len(prefix) + 1:]), real
-        return self._reference_parts(reference), folder
+        parts = self._reference_parts(reference)
+        # A file the document names as the plugin lays it out (`actions/how.md` of a skill whose plugin keeps `actions/` at its
+        # root) is read there when the skill's own folder has none.
+        if root is not None and not folder.joinpath(*parts).exists() and root.joinpath(*parts).exists():
+            return parts, root
+        return parts, folder
 
     def read_skill_file(self, member_id: int, name: object, reference: object) -> str:
         """A text file that lies in the folder of an enabled skill (a page template, a data file, a script's source) by
@@ -523,7 +528,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
                 text += "\nFiles of this skill (a binary is run, never read):\n" + "\n".join(files)
             if plugin:
                 text += (f'\n\nThis skill belongs to the plugin "{plugin["plugin"]}", whose folder is {root}. What else it holds:\n'
-                         + "\n".join(plugin_entry_points(self.homes.safe(plugin["root"])))
+                         + "\n".join(plugin_entry_points(self.homes.safe(plugin["root"]), text))
                          + '\nRead a text file of the plugin with skill_read and reference "plugin:<path>" (such as plugin:actions/run.md).')
             text += ("\nRead the other text files of the skill (a page template, data) with skill_read and reference, not with a command. "
                      f"Run scripts and programs by their path through {runs} and its ordinary approval rules. "

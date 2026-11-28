@@ -920,6 +920,8 @@ export type MainEvent =
   | { type: "KeychainRefused" }
   | { type: "Level"; value: number }
   | { type: "ModelProgress"; name: string; done: number; total: number }
+  /** What an import of Team skills is doing, by the id the window gave it (skill-library.ts): `read` says skill `done` of `total`. */
+  | { type: "SkillImportProgress"; import_id: string; step: "fetch" | "read" | "install"; done: number | null; total: number | null }
   /** An editor hides its text from UI Automation, so corrections in it cannot be learned. */
   | { type: "LearnLimited"; app: string; reason: string }
   /** A tray menu item asks for a page, and perhaps one thing to do there (tray-open.ts). */

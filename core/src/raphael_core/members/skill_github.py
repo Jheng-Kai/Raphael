@@ -17,6 +17,7 @@ import httpx
 
 from .skill_errors import no_skill, oversized_package, too_many_files
 from .skill_library import MAX_ARCHIVE_ENTRIES, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, junk
+from .skill_progress import report
 from .skill_references import MemorySource, attach_shared
 from .store import MemberError
 
@@ -377,7 +378,8 @@ async def fetch(source, *, plugins=False):
             result = []
             loop = asyncio.get_running_loop()
             sources = {}
-            for own in folders:
+            for number, own in enumerate(folders, 1):
+                report("read", number, len(folders))
                 snapshot = await _skill_files(client, listed, own, used=used)
                 files = snapshot.finish()
                 files.folder = own

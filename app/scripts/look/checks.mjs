@@ -849,28 +849,104 @@ export function checkRendered(name, context = {}) {
       const anchor = rowOf('pack:2').querySelector('.skl-access').getBoundingClientRect(), frame = menu.getBoundingClientRect();
       require(frame.top >= anchor.bottom - 1 && frame.bottom <= innerHeight + 1, 'the menu stands under its button, inside the window');
     }
-    if (['skill-library-import', 'skill-library-import-link', 'skill-library-import-menu'].includes(name)) {
-      // One box that takes anything (R-SKILL-26): a field, one way to choose files, one 匯入 and one plain line; nothing else.
+    if (['skill-library-access', 'skill-library-access-many', 'skill-library-access-search', 'skill-library-access-clear'].includes(name)) {
+      // The menu of who may use a package is short however many characters there are (R-SKILL-17): the whole team, a search once there are
+      // more than six, at most six rows in view with the rest scrolling inside it, and 移除所有人 at the foot.
+      const menu = document.querySelector('.skl-access-menu'), list = menu.querySelector('.skl-access-list'), total = name === 'skill-library-access' ? 3 : 25;
+      const order = [...menu.children].map(part => part.className.replace('menu-sep', 'sep').split(' ')[0] || part.getAttribute('role')).join();
+      require(order === (total > 6 ? 'skl-access-top,sep,lang-search,skl-access-list,sep,skl-access-foot' : 'skl-access-top,sep,skl-access-list,sep,skl-access-foot'), `the menu is the whole team, ${total > 6 ? 'a search, ' : ''}the characters, 移除所有人 (${order})`);
+      require(!!menu.querySelector('[data-skl-search]') === (total > 6), `the search stands there once there are more than six characters (${total})`);
+      const box = list.getBoundingClientRect(), rows = [...list.querySelectorAll('[data-member]')];
+      const inView = rows.filter(row => { const r = row.getBoundingClientRect(); return r.top >= box.top - 1 && r.bottom <= box.bottom + 1; });
+      require(inView.length <= 6 && (total <= 6 || inView.length >= 4), `at most six rows are in view (${inView.length} of ${rows.length})`);
+      if (name === 'skill-library-access-search') require(rows.length > 0 && rows.length < total && rows.every(row => row.textContent.includes('小')), `the search keeps the names that match (${rows.length})`);
+      else require(rows.length === total, `every character is listed (${rows.length})`);
+      if (total > 6) require(list.scrollHeight > list.clientHeight + 1 || name === 'skill-library-access-search', 'the rest scrolls inside the menu');
+      const foot = menu.querySelector('.skl-access-foot [data-access="none"]'), frame = menu.getBoundingClientRect(), f = foot.getBoundingClientRect();
+      require(foot.textContent.trim() === '移除所有人' && f.top >= box.bottom - 1 && f.bottom <= frame.bottom + 1, '移除所有人 stands at the foot of the menu');
+      require(frame.height <= 28 * 9 + 40 && frame.top >= 0 && frame.bottom <= innerHeight + 1 && frame.right <= innerWidth + 1, `the whole menu is short and inside the window (${Math.round(frame.height)} px)`);
+      require(menu.scrollHeight <= menu.clientHeight + 1, 'the menu itself does not scroll: only its list does');
+      const anchor = rowOf('pack:2').querySelector('.skl-access span');
+      if (name === 'skill-library-access-clear') {
+        require(anchor.textContent.trim() === '還沒給任何人' && foot.getAttribute('aria-disabled') === 'true', 'the package is for nobody now, and there is nothing more to remove');
+        require([...menu.querySelectorAll('[data-member]')].every(row => row.getAttribute('aria-checked') === 'false') && menu.querySelector('[data-access="all"]').getAttribute('aria-checked') === 'false', 'no one is ticked');
+        const calls = window.__look.calls.filter(call => call.method === 'skills.library.update' && call.params.key === 'pack:2');
+        require(calls.length === 1 && Array.isArray(calls[0].params.access) && calls[0].params.access.length === 0, 'the core was told: nobody');
+        require(window.__look.calls.every(call => !/delete|members\.update|members\.remove/.test(call.method)), 'no character was touched');
+      } else require(foot.getAttribute('aria-disabled') === 'false' && anchor.textContent.trim() === '小晴、小森', 'the package is for the two it named, and 移除所有人 can take them away');
+    }
+    if (['skill-library-import', 'skill-library-import-link', 'skill-library-import-over'].includes(name)) {
+      // The importer, idle (R-SKILL-26): a dashed drop zone with ONE button and one line for an address; nothing else, no rule
+      // line, no lone button at the foot, no sign-in-like link to Raphael.
       const dlg = document.querySelector('.mb-dialog.skl-dlg'), panel = dlg?.querySelector('.skl-import'), field = panel?.querySelector('#skl-input');
       require(visible(dlg) && dlg.getAttribute('role') === 'dialog' && !document.querySelector('.modal-body .skl-import'), 'the importer is a dialog, and none stands in the page');
-      require(visible(panel) && visible(field) && panel.querySelectorAll('textarea, input:not([type="file"])').length === 1, 'the card is one box');
-      require([...dlg.querySelectorAll('[data-skl]')].map(button => button.dataset.skl).join() === 'pick,import-go', 'one way to choose files and one 匯入, no chips');
-      require(panel.querySelector('[data-skl="pick"]').textContent.trim() === '選擇檔案', 'the way to choose is a plain 選擇檔案');
-      require(!panel.querySelector('.skl-import-hint'), 'no separate line under the box: the field says what it takes itself');
-      require(field.placeholder === '把檔案、資料夾或連結丟進來，或貼上文字', 'the field carries its words as its placeholder');
-      const style = getComputedStyle(field), lines = Math.round(field.getBoundingClientRect().height / parseFloat(style.lineHeight));
-      require(style.resize === 'none' && lines >= 2 && lines <= 4, `a compact field with no resize grip (${lines} lines, resize ${style.resize})`);
-      require(!/\.zip|\.md|\.tgz|SKILL\.md|GitHub|skills\.sh/.test(panel.textContent), 'no format is named');
-      require(panel.querySelector('#skl-file').multiple && !panel.querySelector('#skl-file').accept, 'the file dialog takes any file');
-      const wide = dlg.getBoundingClientRect(), box = field.getBoundingClientRect(), go = dlg.querySelector('[data-skl="import-go"]').getBoundingClientRect();
-      require(box.left >= wide.left - 1 && box.right <= wide.right + 1 && wide.left >= 0 && wide.right <= innerWidth && wide.bottom <= innerHeight, 'the box fits the dialog and the dialog the window');
-      require(go.top >= box.bottom - 1 && go.right <= wide.right + 1, 'import is the dialog action, under the box');
-      if (name === 'skill-library-import-link') require(field.value === 'https://example.com/team-handbook', 'the link stands in the box');
-      if (name === 'skill-library-import-menu') {
-        const menu = document.querySelector('.skl-pick-menu'), anchor = panel.querySelector('[data-skl="pick"]').getBoundingClientRect(), frame = menu.getBoundingClientRect();
-        require([...menu.querySelectorAll('button')].map(button => button.textContent.trim()).join() === '檔案（zip、SKILL.md…）,資料夾', 'the menu offers the files (a zip plainly among them) or a folder');
-        require(frame.left >= 0 && frame.right <= innerWidth && frame.bottom <= innerHeight && (frame.top >= anchor.bottom - 1 || frame.bottom <= anchor.top + 1) && Math.abs(frame.left - anchor.left) <= 2, 'the menu stands against its button, at its left edge, inside the window');
-      }
+      require(dlg.querySelector('.mb-dlg-head h2').textContent.trim() === '匯入技能' && visible(dlg.querySelector('.mb-dlg-head .close-button')), 'it is titled 匯入技能 and has its ×');
+      const zone = panel.querySelector('.skl-zone');
+      require(visible(zone) && getComputedStyle(zone).borderTopStyle === 'dashed', 'the drop zone is dashed');
+      require(visible(zone.querySelector('.skl-zone-icon svg')) && zone.querySelector('.skl-zone-words').textContent.trim() === '拖到這裡，或', 'it shows an upload icon and says 拖到這裡，或');
+      require([...zone.querySelectorAll('button')].map(button => button.dataset.skl).join() === 'pick' && zone.querySelector('[data-skl="pick"]').textContent.trim() === '選擇檔案', 'ONE button in it: 選擇檔案');
+      require(!dlg.querySelector('.mb-dlg-act, .action-row, hr, .rule, .menu, [aria-haspopup]'), 'no footer, no rule line, no menu: nothing at the foot');
+      require(visible(field) && field.tagName === 'INPUT' && field.type === 'text' && field.placeholder === '或貼上網址' && panel.querySelectorAll('textarea, input').length === 1, 'one single-line field says 或貼上網址');
+      const go = panel.querySelector('[data-skl="import-go"]');
+      require(visible(go) && go.classList.contains('icon') && go.getAttribute('aria-label') === '匯入' && go.disabled === !field.value.trim(), 'a small inline action beside it waits for something to send');
+      require(!/拉斐爾/.test(panel.textContent), 'no permanent link to Raphael');
+      require(!/\.zip|SKILL\.md|GitHub|skills\.sh|Git/.test(panel.textContent), 'no format is named');
+      const wide = dlg.getBoundingClientRect(), z = zone.getBoundingClientRect(), box = field.closest('.skl-url').getBoundingClientRect();
+      require(z.left >= wide.left - 1 && z.right <= wide.right + 1 && box.right <= wide.right + 1 && z.bottom <= box.top + 1 && wide.left >= 0 && wide.right <= innerWidth && wide.bottom <= innerHeight, 'the zone, then the line, inside the dialog and the dialog inside the window');
+      if (name === 'skill-library-import-link') require(field.value === 'https://example.com/team-handbook' && !go.disabled, 'the address stands in the line and the arrow is ready');
+      if (name === 'skill-library-import-over') {
+        const lit = getComputedStyle(zone).backgroundColor, still = getComputedStyle(panel.querySelector('.skl-url .field')).backgroundColor;
+        require(zone.classList.contains('is-over') && lit !== 'rgba(0, 0, 0, 0)' && lit !== still, 'the zone is lit while a file is dragged over it');
+      } else require(!zone.classList.contains('is-over'), 'the zone is not lit');
+    }
+    if (['skill-library-importing', 'skill-library-fetching', 'skill-library-import-chosen', 'skill-library-importing-install'].includes(name)) {
+      // The import under way (R-SKILL-26): the content becomes progress, the title names the source, 取消 is the only way out.
+      const dlg = document.querySelector('.mb-dialog.skl-dlg'), panel = dlg?.querySelector('.skl-import.is-busy');
+      require(visible(dlg) && visible(panel), 'the dialog is showing the import under way');
+      const title = dlg.querySelector('.mb-dlg-head h2').textContent.trim();
+      const expected = { 'skill-library-importing': ['正在匯入 slow-import', '讀取技能 3 / 7', 47], 'skill-library-fetching': ['正在匯入 handbook', '取得檔案', 10],
+        'skill-library-import-chosen': ['正在匯入 pstack', '取得檔案', 10], 'skill-library-importing-install': ['正在匯入 slow-import', '安裝', 95] }[name];
+      require(title === expected[0], `the title names the source (${title})`);
+      const bar = panel.querySelector('.skl-bar'), fill = bar.querySelector('i'), step = panel.querySelector('.skl-step');
+      require(bar.getAttribute('role') === 'progressbar' && bar.getAttribute('aria-valuenow') === String(expected[2]) && visible(fill), `a progress bar at ${expected[2]} %`);
+      require(Math.abs(fill.getBoundingClientRect().width / bar.getBoundingClientRect().width * 100 - expected[2]) <= 1.5, 'its fill is as long as its value says');
+      require(step.getAttribute('role') === 'status' && step.textContent.trim() === expected[1], `one line says the step (${step.textContent.trim()})`);
+      require(!dlg.querySelector('.mb-dlg-head .close-button') || getComputedStyle(dlg.querySelector('.mb-dlg-head .close-button')).display === 'none', 'the × is gone while it works');
+      const cancel = [...dlg.querySelectorAll('button')].filter(visible);
+      require(cancel.length === 1 && cancel[0].dataset.skl === 'import-cancel' && cancel[0].textContent.trim() === '取消' && cancel[0].disabled === (name === 'skill-library-importing-install'), `取消 is the only control${name === 'skill-library-importing-install' ? ', and it waits while the library is written' : ''}`);
+      require(!dlg.querySelector('#skl-input, .skl-zone, .skl-error') && !document.querySelector('.toast'), 'nothing but the progress is on show');
+      const wide = dlg.getBoundingClientRect(), b = bar.getBoundingClientRect();
+      require(b.left >= wide.left - 1 && b.right <= wide.right + 1 && wide.right <= innerWidth && wide.bottom <= innerHeight, 'the bar fits the dialog and the dialog the window');
+      // Esc and the backdrop do nothing while it works: the dialog is still there after the scene pressed Esc.
+      if (name === 'skill-library-importing') require(window.__look.calls.filter(call => call.method === 'skills.library.cancel_import').length === 0, 'Esc stopped nothing and cancelled nothing');
+    }
+    if (['skill-library-notskill', 'skill-library-notskill-file'].includes(name)) {
+      // What is no skill (R-SKILL-28): one plain sentence that names what it is, with 換一個 and 請拉斐爾做; Raphael is not asked yet.
+      const dlg = document.querySelector('.mb-dialog.skl-dlg'), panel = dlg?.querySelector('.skl-import'), words = panel?.querySelector('.skl-notice');
+      require(visible(dlg) && visible(words), 'the dialog says what it found');
+      const text = words.textContent.trim();
+      require(text === (name === 'skill-library-notskill' ? '這是一個網頁，不是技能。拉斐爾可以讀完後幫你做成技能。' : '這是一份文件，不是技能。拉斐爾可以讀完後幫你做成技能。'), `the sentence names what it is (${text})`);
+      const buttons = [...dlg.querySelectorAll('button')].filter(visible).filter(button => !button.classList.contains('close-button'));
+      require(buttons.map(button => button.dataset.skl).join() === 'import-another,import-ask' && buttons.map(button => button.textContent.trim()).join() === '換一個,請拉斐爾做', 'two buttons: 換一個 and 請拉斐爾做');
+      require(buttons[1].classList.contains('pri') && !buttons[0].classList.contains('pri'), '請拉斐爾做 is the primary one');
+      require(window.__look.calls.filter(call => call.command === 'agent_ask_text').length === 0, 'nothing went to Raphael before the owner asked');
+      require(!dlg.querySelector('#skl-input, .skl-zone, .skl-bar'), 'the drop zone and the line give way to the sentence');
+      const wide = dlg.getBoundingClientRect(), r = words.getBoundingClientRect();
+      require(r.left >= wide.left - 1 && r.right <= wide.right + 1 && wide.bottom <= innerHeight, 'the words stay inside the dialog');
+    }
+    if (name === 'skill-library-import-cancelled') {
+      // 取消 really stops it (R-SKILL-38): the core was asked with this import's id, and the dialog is idle again with its address kept.
+      const dlg = document.querySelector('.mb-dialog.skl-dlg'), calls = window.__look.calls;
+      const asked = calls.find(call => call.method === 'skills.library.import'), stopped = calls.find(call => call.method === 'skills.library.cancel_import');
+      require(asked && stopped && stopped.params.import_id === asked.params.import_id && asked.params.import_id.length > 8, 'the cancel names the import it stops');
+      require(visible(dlg?.querySelector('.skl-zone')) && dlg.querySelector('.mb-dlg-head h2').textContent.trim() === '匯入技能' && visible(dlg.querySelector('.mb-dlg-head .close-button')), 'the dialog is idle again, titled and closable');
+      require(dlg.querySelector('#skl-input').value === 'owner/slow-import' && !dlg.querySelector('.skl-error, .skl-bar') && !document.querySelector('.toast'), 'what was typed is kept, and nothing says it failed');
+      require(document.querySelectorAll('.skl-pack').length === 3, 'nothing was imported');
+    }
+    if (name === 'skill-library-needs-files-alone') {
+      require(!document.querySelector('.skl-dlg') && rowOf('pack:13')?.querySelector('.skl-single .d')?.textContent === '依日期整理行程與訂位' && !document.querySelector('.toast'), 'the text imported as it is, and its package is the answer');
+      const calls = window.__look.calls.filter(call => call.method === 'skills.library.import');
+      require(calls.length === 2 && calls[1].params.alone === true && !('alone' in calls[0].params), 'the first try was refused and the second said the text is meant alone');
     }
     if (['skill-library', 'skill-library-empty'].includes(name)) {
       // The page starts with its lists; 匯入 is a small button in its header, before the close, as wide as its word.
@@ -906,18 +982,9 @@ export function checkRendered(name, context = {}) {
     if (name === 'skill-library-handoff-back') {
       // Back in Settings: the hand-off left nothing behind in Team skills.
       const field = document.querySelector('.skl-dlg #skl-input');
-      require(visible(field) && field.value === '', 'the box is empty again');
-      require(!document.querySelector('.skl-error') && !document.querySelector('.skl-progress')?.textContent && !document.querySelector('[data-skl="import-go"]').disabled, 'no error, no progress, 匯入 free');
+      require(visible(field) && field.value === '' && visible(document.querySelector('.skl-dlg .skl-zone')), 'the line is empty again, under the drop zone');
+      require(!document.querySelector('.skl-error, .skl-bar, .skl-notice') && document.querySelector('[data-skl="import-go"]').disabled, 'no error, no progress, no sentence, and nothing to send');
       require(document.querySelectorAll('.skl-pack').length === 3, 'no package was made by a hand-off');
-    }
-    if (name === 'skill-library-fetching') {
-      const row = document.querySelector('.skl-import-row'), status = row.querySelector('.skl-progress[role="status"]');
-      require(visible(status) && status.textContent.trim() === '正在從 gitlab.example.com 取得…', `the dialog says where it fetches from (${status?.textContent})`);
-      require(row.contains(document.querySelector('[data-skl="pick"]')) && getComputedStyle(status).whiteSpace === 'nowrap', 'it stands in the row of the choose button, on one line');
-      require(Math.abs(status.getBoundingClientRect().top - document.querySelector('[data-skl="pick"]').getBoundingClientRect().top) < 12, 'beside the button, not under it');
-      require(document.querySelector('[data-skl="import-go"]').disabled && document.querySelector('#skl-input').disabled && !document.querySelector('.skl-error, .toast'), 'the card holds still and says nothing else');
-      const box = document.querySelector('.skl-import').getBoundingClientRect(), r = status.getBoundingClientRect();
-      require(r.left >= box.left - 1 && r.right <= box.right + 1, 'the words stay inside the card');
     }
     if (name === 'skill-library-imported') {
       require(!document.querySelector('.skl-dlg, .skl-import'), 'a direct import closes the importer');
@@ -937,12 +1004,6 @@ export function checkRendered(name, context = {}) {
       require(pane.firstElementChild?.matches('.skl-empty') && visible(pane.querySelector('.skl-empty')) && pane.querySelector('.skl-empty').textContent.trim() === '還沒有技能。', 'the empty library says so, with no importer in the page');
       require(!pane.querySelector('.skl-list, .skl-section'), 'no list is drawn');
     }
-    if (name === 'skill-library-importing') {
-      const status = document.querySelector('.skl-import .skl-progress');
-      require(visible(status) && status.textContent.trim() === '匯入中…' && status.getAttribute('role') === 'status', 'the importer says it is importing');
-      require(document.querySelector('[data-skl="import-go"]').disabled && document.querySelector('#skl-input').disabled, 'the card holds still while it works');
-      require(!document.querySelector('.skl-error, .toast'), 'nothing else is said while it works');
-    }
     if (name === 'skill-library-plugin-imported') {
       const page = document.querySelector('.skl-page[data-skl-page="pack:desk"]');
       require(visible(page) && page.querySelector('h1.skl-page-name')?.textContent.trim() === 'desk-kit', 'the new plugin opens on its page');
@@ -961,11 +1022,13 @@ export function checkRendered(name, context = {}) {
       const expected = {
         'clash-single': ['pdf-read', 'pdf', '重新命名或刪除'], 'clash-package': ['tdd', 'pstack', 'office-kit', '重新命名或刪除'],
         'size': ['assets/demo-video.mp4', '256.0 MB'], 'repo': ['owner/missing'], 'network': ['GitHub', '網路'], 'document': ['skills/bad/SKILL.md', '第 4 行'],
+        'needs-files': ['actions/how.md', '改選技能所在的資料夾'],
         'git-sign-in': ['gitlab.example.com', 'SSH 金鑰'], 'git-host-key': ['gitlab.example.com', 'ssh gitlab.example.com', '終端機'],
         'git-network': ['gitlab.example.com', '公司 VPN'], 'git-missing': ['沒有安裝 Git', '安裝'],
       }[name.slice('skill-library-failed-'.length)];
       require(visible(said) && expected.every(part => words.includes(part)), `the cause is said with what it names (${words})`);
-      require(visible(document.querySelector('.skl-import #skl-input')) && document.querySelector('#skl-input').value && !document.querySelector('.toast'), 'the importer stays open with what was put in it, and nothing else is said');
+      require(visible(document.querySelector('.skl-import #skl-input')) && (!!document.querySelector('#skl-input').value || name.endsWith('needs-files')) && !document.querySelector('.toast'), 'the importer stays open with what was put in it, and nothing else is said');
+      if (name.endsWith('needs-files')) require(document.querySelector('#skl-input').value === '' && visible(document.querySelector('[data-skl="import-alone"]')), 'a pasted text is not poured into the line: it waits, and the way to import it alone stands under the cause');
       const box = document.querySelector('.skl-import').getBoundingClientRect(), r = said.getBoundingClientRect();
       require(r.left >= box.left - 1 && r.right <= box.right + 1, 'the words stay inside the card');
     }
