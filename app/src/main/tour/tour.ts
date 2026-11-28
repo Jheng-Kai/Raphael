@@ -2,6 +2,7 @@
 
 import { onLocaleChange, t } from "../i18n";
 import { confirmDelete } from "../member-dialogs";
+import { canonicalKey } from "../keys";
 import type { NavStep } from "../nav-history";
 import { raphaelName } from "../raphael";
 import type { AppContext, DeviceSettings } from "../types";
@@ -27,9 +28,9 @@ type Phase = "idle" | "waiting" | "offer" | "covered" | "step" | "bye";
 
 export const OFFER_DELAY_MS = 700;
 export const BYE_MS = 4500;
+/** How long a press stays watched for the app's reaction (a menu opening). It never moves the walk on by itself. */
 const ACTION_WAIT_MS = 4000;
 const REACTION_MS = 500;
-const KEYS_WAIT_MS = 8000;
 const COVERING_SCRIMS = ".modal-scrim, .mb-scrim:not(.tour-confirm), .cs-scrim";
 
 const account = (): HTMLElement | null => firstShown("#nav .sidebar-account");
@@ -59,7 +60,7 @@ export function createTour(host: TourHost): Tour {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let settle: ReturnType<typeof setTimeout> | undefined;
   let actionWait: ReturnType<typeof setTimeout> | undefined;
-  let wait: { kind: "action" | "advance" | "see" | "keys"; deadline: number } | null = null;
+  let wait: { kind: "action" | "advance" | "see"; deadline: number } | null = null;
   let confirmation: { scrim: HTMLElement; releaseMenu: () => void } | null = null;
   let unlisten: (() => void) | undefined;
   let frame = 0;
@@ -105,8 +106,14 @@ export function createTour(host: TourHost): Tour {
     const step = stepNow()!;
     const progress = { current: at + 1, total: STEPS.length, label: t("tour.progress", { current: at + 1, total: STEPS.length }) };
     if (seeing && step.seen) {
-      // A page fills the window to its edges: its frame stands just inside it, so the whole ring shows.
-      const looked = () => { const el = lookAt(); return el ? spotOf(el, step.page ? -6 : 6) : null; };
+      // What reaches the window's edges (a page, the slime's panel, its settings) is framed just inside, so the whole ring shows.
+      const looked = () => {
+        const el = lookAt();
+        if (!el) return null;
+        const box = boxOf(el), view = { width: document.documentElement.clientWidth || innerWidth, height: document.documentElement.clientHeight || innerHeight };
+        const edge = box.left < 6 || box.top < 6 || box.left + box.width > view.width - 6 || box.top + box.height > view.height - 6;
+        return spotOf(el, edge ? -6 : 6);
+      };
       return {
         mode: "step", step: step.id, label, title: t(step.title), closeLabel: t("tour.close"),
         text: t(step.seen), progress, seeing: true,
@@ -127,7 +134,7 @@ export function createTour(host: TourHost): Tour {
     return {
       mode: "step", step: step.id, label, title: t(step.title), closeLabel: t("tour.close"),
       text: t(step.text, { name: raphaelName() }),
-      ...(step.keys ? { keys: askKeys(host.device()) } : {}),
+      ...(step.keys ? { keys: askKeys(host.device()), keysDown: askCodes().map((_, at) => held.has(at)) } : {}),
       progress,
       buttons: step.keys && finishReady ? [{ id: "done", label: t("tour.done"), primary: true }] : [],
       controls,
@@ -245,14 +252,28 @@ export function createTour(host: TourHost): Tour {
     actionWait = setTimeout(() => {
       if (kind === "action") {
         check();
-        if (wait?.kind === "advance" || wait?.kind === "see") return;
+        // Nothing moves on by the clock: a press the app did not react to leaves the step as it was, ready for another press.
+        if (wait?.kind === "action") clearWait();
+        return;
       }
       clearWait();
-      if (kind === "keys") showFinish();
-      // A step whose reaction was seen shows what it opened; one that never reacted still explains, so nobody is stuck.
-      else if (stepNow().seen && (kind === "see" || lookAt())) see();
+      if (kind === "see") see();
       else advance();
     }, delay);
+  }
+
+  /** The keys that ask Raphael, as the settings name them (`AltRight+Space`). */
+  const askCodes = (): string[] => host.device().agent_keys[0]?.split("+").map(part => part.trim()).filter(Boolean) ?? [];
+  /** Which of those keys is held now: each lights up on screen, and all of them down together brings Finish. */
+  const held = new Set<number>();
+  function trackKeys(event: KeyboardEvent): void {
+    if (phase !== "step" || !stepNow().keys || confirmation) return;
+    const codes = askCodes();
+    const index = codes.findIndex(code => canonicalKey(code) === canonicalKey(event.code) || canonicalKey(code) === canonicalKey(event.key));
+    if (index < 0) return;
+    if (event.type === "keydown") held.add(index); else held.delete(index);
+    view?.pressKeys(codes.map((_, at) => held.has(at)));
+    if (codes.length && held.size === codes.length) showFinish();
   }
 
   function watchAction(): void {
@@ -334,9 +355,9 @@ export function createTour(host: TourHost): Tour {
     const already = step.opens ? layer(step.opens) : null;
     if (step.opens && already && step.opens !== step.layer) closeLayer(step.opens, already);
     priorLayer = layer(step.opens);
+    held.clear();
     draw(true);
     view?.keepFocus(controls());
-    if (step.keys) setWait("keys", KEYS_WAIT_MS);
   }
 
   function advance(): void {
@@ -352,6 +373,7 @@ export function createTour(host: TourHost): Tour {
     clearWait();
     finishReady = true;
     draw(false);
+    view?.pressKeys(askCodes().map((_, at) => held.has(at)));
   }
 
   function rememberAnswer(): void {
@@ -443,6 +465,7 @@ export function createTour(host: TourHost): Tour {
   }
 
   function walkKey(event: KeyboardEvent): void {
+    trackKeys(event);
     const modified = event.altKey || event.ctrlKey || event.metaKey;
     if (confirmation) {
       if (event.type === "keydown" && (event.key === "Escape" || event.key === "Tab" && !modified)) return;

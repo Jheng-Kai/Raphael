@@ -4543,7 +4543,8 @@ export function checkRendered(name, context = {}) {
       return { check: name, text, bubble: [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)] };
     }
     const pressable = 'button, a[href], input:not([type="hidden"]), select, textarea, summary, [contenteditable], [role="button"], [role="menuitem"], [role="tab"], [role="radio"], [role="switch"], [data-conn][data-row]';
-    const panel = [...document.querySelectorAll('.modal-scrim:not(.leaving) > .modal, .mb-scrim:not(.leaving) > .cr-dialog, .cb-menu, .account-menu')].find(visible);
+    const panel = [...document.querySelectorAll('.modal-scrim:not(.leaving) > .modal, .mb-scrim:not(.leaving) > .cr-dialog, .cb-menu, .account-menu, ' +
+      '.page-agent:not([hidden]) .ms-pane, .page-agent:not([hidden]) .mb-det:not([hidden])')].find(visible);
     const clipped = control => {
       if (!visible(control) || !control.checkVisibility({ visibilityProperty: true })) return null;
       let { left, right, top, bottom } = control.getBoundingClientRect();
@@ -4584,14 +4585,15 @@ export function checkRendered(name, context = {}) {
     // A step of the walk: its action (tour-step-N), or what that action opened, lit and explained (tour-step-N-seen).
     const seen = name.endsWith('-seen');
     const number = Number(name.slice('tour-step-'.length).replace('-seen', ''));
-    const order = ["permission", "model", "model-list", "apps", "team", "account", "dictation", "calendar", "raphael", "keys"];
+    const order = ["member", "computer", "member-settings", "apps", "model", "model-list", "account", "dictation", "calendar", "raphael", "keys"];
     const pages = ["dictation", "calendar", "raphael"];
     const id = order[number - 1];
     require(id && root.dataset.mode === 'step' && root.dataset.step === id && root.dataset.state === (seen ? 'see' : 'do'),
       `step ${number} of ${order.length} is active ${seen ? 'and explaining what it opened' : 'and waiting for its action'} (${root.dataset.step}, ${root.dataset.state})`);
     const composerTarget = '.page-agent:not([hidden]) .composer';
-    const targets = [composerTarget + ' .cmp-mode', composerTarget + ' .cmp-model .mp-trigger',
-      '.cb-menu [data-cb-act="models"]', '#nav .sidebar-apps', '#nav [data-col="add"]', '#nav .sidebar-account',
+    const slimePanel = '.page-agent:not([hidden]) .mb-det:not([hidden])';
+    const targets = ['.page-agent:not([hidden]) .conversation-trigger', slimePanel + ' [data-det="tab"][data-tab="computer"]', slimePanel + ' [data-det="gear"]',
+      '#nav .sidebar-apps', composerTarget + ' .cmp-model .mp-trigger', '.cb-menu [data-cb-act="models"]', '#nav .sidebar-account',
       ...pages.map(row => `.account-menu [data-account="${row}"]`)];
     const progress = bubble.querySelector('.tour-count');
     const dots = [...progress.querySelectorAll('.tour-dot')];
@@ -4613,7 +4615,7 @@ export function checkRendered(name, context = {}) {
     const opening = spot.hidden ? null : spot.getBoundingClientRect();
     const radius = opening ? parseFloat(getComputedStyle(spot).borderTopLeftRadius) : 0;
     // Inside a menu the whole menu is lit as well as its framed row: a sample point there is not dimmed by design.
-    const litMenu = !seen && (id === 'model-list' || pages.includes(id)) && panel ? panel.getBoundingClientRect() : null;
+    const litMenu = !seen && (id === 'model-list' || id === 'computer' || id === 'member-settings' || pages.includes(id)) && panel ? panel.getBoundingClientRect() : null;
     const outsideOpening = ([x, y]) => (!litMenu || x < litMenu.left - 6 || x > litMenu.right + 6 || y < litMenu.top - 6 || y > litMenu.bottom + 6) && (!opening || Math.hypot(
       Math.max(opening.left + radius - x, 0, x - (opening.right - radius)),
       Math.max(opening.top + radius - y, 0, y - (opening.bottom - radius)),
@@ -4644,7 +4646,7 @@ export function checkRendered(name, context = {}) {
     }
     if (seen) {
       // What the action opened stands lit inside a resting frame: the dialog or menu, or the whole page beside the dimmed sidebar.
-      const look = pages.includes(id) ? document.getElementById('main') : panel;
+      const look = pages.includes(id) ? document.getElementById('main') : id === 'member-settings' ? document.querySelector('.page-agent:not([hidden]) .ms-pane') : panel;
       require(visible(look), `what the step opened is on screen (${id})`);
       if (pages.includes(id)) {
         const shown = { dictation: '#main > .page-dictation', calendar: '#main > .au-page', raphael: '#main > .page-agent[data-raphael]' }[id];
@@ -4655,7 +4657,13 @@ export function checkRendered(name, context = {}) {
       }
       require(root.dataset.dim === 'spot' && !spot.hidden, "the dim leaves what was opened lit");
       const l = look.getBoundingClientRect(), p = spot.getBoundingClientRect();
-      require(p.left <= l.left + 1 && p.top <= l.top + 1 && p.right >= l.right - 1 && p.bottom >= l.bottom - 1, `the lit frame holds all of what was opened: ${[p.left, p.top, p.width, p.height].map(Math.round)} vs ${[l.left, l.top, l.width, l.height].map(Math.round)}`);
+      // Round it, or just inside it when it reaches the window's edges, so the whole ring shows.
+      const holds = p.left <= l.left + 1 && p.top <= l.top + 1 && p.right >= l.right - 1 && p.bottom >= l.bottom - 1;
+      const atEdge = l.left < 6 || l.top < 6 || l.right > view.w - 6 || l.bottom > view.h - 6;
+      const within = p.left >= l.left - 1 && p.top >= l.top - 1 && p.right <= l.right + 1 && p.bottom <= l.bottom + 1 &&
+        p.left - l.left <= 8 && p.top - l.top <= 8 && l.right - p.right <= 8 && l.bottom - p.bottom <= 8;
+      require(atEdge ? within && p.right <= view.w && p.bottom <= view.h : holds,
+        `the lit frame ${atEdge ? 'stands just inside' : 'holds all of'} what was opened: ${[p.left, p.top, p.width, p.height].map(Math.round)} vs ${[l.left, l.top, l.width, l.height].map(Math.round)}`);
       require(getComputedStyle(spot).animationName === 'none', "the frame rests while the person reads");
       require(document.elementFromPoint(l.left + l.width / 2, l.top + Math.min(l.height / 2, 40)) !== catcher, "what was opened is not dimmed");
     } else if (id === 'keys') {
@@ -4669,7 +4677,7 @@ export function checkRendered(name, context = {}) {
       require(visible(target), `the target is on screen: ${selector}`);
       require(root.dataset.dim === 'spot' && !spot.hidden, "the dim leaves the action visible");
       const t = target.getBoundingClientRect(), p = spot.getBoundingClientRect();
-      const pad = ({ apps: 4, permission: 4, model: 4, team: 4, account: 4 }[id] ?? 0);
+      const pad = ({ member: 4, computer: 2, 'member-settings': 2, apps: 4, model: 4, account: 4 }[id] ?? 0);
       require(Math.abs(p.left - (t.left - pad)) <= 3 && Math.abs(p.top - (t.top - pad)) <= 3 && Math.abs(p.width - (t.width + 2 * pad)) <= 4 && Math.abs(p.height - (t.height + 2 * pad)) <= 4,
         `the cut-out follows the target's box: ${[p.left, p.top, p.width, p.height].map(Math.round)} vs ${[t.left, t.top, t.width, t.height].map(Math.round)}`);
       require(parseFloat(getComputedStyle(spot).borderTopLeftRadius) >= 8, "the cut-out is rounded");

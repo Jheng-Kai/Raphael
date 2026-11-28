@@ -3,7 +3,7 @@
 
 import { RAPHAEL_ID, faceHTML } from "../members";
 import { bindNavLayer } from "../nav-layers";
-import { btn, esc, headerCloseButton, keys, reducedMotion, replay } from "../ui";
+import { btn, esc, headerCloseButton, reducedMotion, replay } from "../ui";
 import { dimClip } from "./dim";
 import { EDGE, GROUP_GAP, SPOT_GAP, placeAroundLayer, placeGroup, placeInside, type Box, type PlaceInput, type Placement, type Side } from "./place";
 import { boxOf, type Spot } from "./steps";
@@ -20,8 +20,9 @@ export interface ViewModel {
   title?: string;
   closeLabel?: string;
   text: string;
-  /** The caps drawn under the line (the keys that ask Raphael), as the window names them. */
+  /** The caps drawn under the line (the keys that ask Raphael), as the window names them, and which of them is held down. */
   keys?: string[];
+  keysDown?: boolean[];
   progress?: { current: number; total: number; label: string };
   buttons: { id: ButtonId; label: string; primary?: boolean }[];
   controls?: () => HTMLElement[];
@@ -52,6 +53,8 @@ export interface TourView {
   hideOffer(): void;
   /** The instruction is done with: its words fade out where they stand, and the bubble stays empty until the next words land. */
   hush(): void;
+  /** Lights each key cap that is held down. */
+  pressKeys(down: boolean[]): void;
   /** Measures the target and places the group again, without a hop. */
   reflow(): void;
   contains(node: Node | null): boolean;
@@ -74,11 +77,16 @@ const GHOST_MS = 220;
 const FOOT = 52;
 const BODY_HEIGHT = 40;
 const ANTICIPATION_MS = 80;
-// A chain of small hops along the way: one for about every 110 px, each with its own touch-down, so the travel reads as walking.
-const AIR_MS = 250;
-const CONTACT_MS = 70;
-const HOP_SPAN = 110;
-const MAX_HOPS = 5;
+// One jump all the way: a short move is a quick low hop, a long one flies higher and longer (under a second in the air).
+const AIR_BASE_MS = 260;
+const AIR_PER_PX = 0.55;
+const MIN_AIR_MS = 300;
+const MAX_AIR_MS = 820;
+const RISE_PER_PX = 0.3;
+const MIN_RISE = 18;
+const MAX_RISE = 150;
+/** A move smaller than this is a nudge of the layout, not a journey: it is not worth a jump. */
+const NUDGE_PX = 6;
 const LAND_MS = 180;
 const HAPPY_MS = 150;
 const RISE = "cubic-bezier(0.33, 0.67, 0.67, 1)";
@@ -111,14 +119,17 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
   let playing: { plan: MotionPlan; body: Animation; tracks: Animation[] } | null = null;
 
   function cancelMotion(): void {
+    delete root.dataset.facing;
     if (!playing) return;
     playing.body.onfinish = null;
     for (const track of playing.tracks) track.cancel();
     playing = null;
   }
 
-  function play(plan: MotionPlan): void {
+  function play(plan: MotionPlan, facing?: "left" | "right"): void {
     root.classList.remove("is-idle");
+    // In the air Raphael looks where it is going, turned to its side; it faces the person again once it lands.
+    if (facing) root.dataset.facing = facing; else delete root.dataset.facing;
     const animate = (element: HTMLElement, frames: TimedFrame[]) => element.animate(
       frames.map(({ time, ...frame }) => ({ ...frame, offset: time / plan.duration })),
       { duration: plan.duration, fill: "backwards" },
@@ -128,6 +139,7 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
     body.onfinish = () => {
       if (playing?.body !== body) return;
       playing = null;
+      delete root.dataset.facing;
       root.classList.add("is-idle");
     };
   }
@@ -171,7 +183,9 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
   for (const type of owned) window.addEventListener(type, own, { capture: true, passive: false });
 
   function content(next: ViewModel): string {
-    const caps = next.keys?.length ? `<div class="tour-keys">${keys(next.keys)}</div>` : "";
+    // Large keyboard keys, as a keyboard draws them: each lights up while it is held.
+    const caps = next.keys?.length ? `<div class="tour-keys" aria-hidden="false">${next.keys.map((label, index) =>
+      `<kbd class="tour-key"${next.keysDown?.[index] ? " data-down" : ""}>${esc(label)}</kbd>`).join('<span class="tour-plus">+</span>')}</div>` : "";
     const title = next.title ? `<h2 class="tour-title">${esc(next.title)}</h2>` : "";
     const progress = next.progress;
     const dots = progress ? Array.from({ length: progress.total }, (_, index) =>
@@ -237,7 +251,10 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
     const moved = placed?.left !== to.left || placed.top !== to.top;
     const canMove = !reducedMotion() && typeof slime.animate === "function";
     let plan: MotionPlan | undefined;
-    if (canMove && hop && (moved || next.mode === "step")) {
+    let facing: "left" | "right" | undefined;
+    // Raphael never appears somewhere else at once: a step jumps, and so does a move the layout forces (a resize, a layer that opened).
+    const journey = !!placed && Math.hypot(placed.left - to.left, placed.top - to.top) > NUDGE_PX;
+    if (canMove && (hop ? moved || next.mode === "step" : journey)) {
       if (placed) {
         // Read all three poses before cancelling or moving their common anchor.
         const currentGround = matrixOf(getComputedStyle(ground).transform);
@@ -246,19 +263,22 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
         const from = { ...placed, left: placed.left + currentGround.m41, top: placed.top + currentGround.m42 };
         const time = Number(playing?.body.currentTime);
         // Raphael always travels the whole way in hops, never jumping in place and reappearing elsewhere.
-        plan = hopPlan(from.left - to.left, from.top - to.top, {
+        const across = from.left - to.left;
+        if (Math.abs(across) > 24) facing = across > 0 ? "left" : "right";
+        plan = hopPlan(across, from.top - to.top, {
           y: currentBody.m42, width: Math.hypot(currentBody.m11, currentBody.m12), height: Math.hypot(currentBody.m21, currentBody.m22),
           tilt: Math.atan2(currentBody.m12, currentBody.m11) * 180 / Math.PI, opacity: bodyStyle.opacity || 1,
           glowWidth: currentGlow.m11, glowOpacity: glowStyle.opacity || GLOW_OPACITY,
           falling: playing?.plan.descents.some(([apex, ground]) => time >= apex && time < ground) ?? false,
-        });
+        }, Math.max(MIN_RISE, Math.min(MAX_RISE, Math.min(from.top, to.top) - 4)));
       } else {
         const from = next.origin();
         if (from) plan = popPlan(from, to);
       }
     }
     if (canMove && celebrate) plan = happyPlan(plan);
-    if (!canMove || moved || plan) cancelMotion();
+    // A nudge of the layout mid-jump only shifts where the jump lands; stopping it would show Raphael at the end at once.
+    if (!canMove || plan) cancelMotion();
     const ring = next.mode === "step" && spot?.dim ? spot : null;
     // The dim's opening is what is lit; the pulsing frame stays on what is to be pressed (or, while looking, round the lit thing).
     const cut = next.mode === "step" ? next.lit?.() ?? ring : null;
@@ -279,7 +299,7 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
       ground.style.top = `${to.top}px`;
     }
     placed = to;
-    if (plan) play(plan);
+    if (plan) play(plan, facing);
     else if (!playing) root.classList.toggle("is-idle", canMove);
     return playing ? Math.max(0, playing.plan.arrival - Number(playing.body.currentTime)) : 0;
   }
@@ -337,6 +357,9 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
     hush() {
       fadeWords();
       bubble.classList.add("is-hushed");
+    },
+    pressKeys(down) {
+      bubble.querySelectorAll<HTMLElement>(".tour-key").forEach((cap, index) => cap.toggleAttribute("data-down", !!down[index]));
     },
     reflow() { if (model) apply(model, false); },
     contains(node) { return !!node && root.contains(node); },
@@ -401,43 +424,35 @@ interface CurrentPose {
   glowWidth: number; glowOpacity: number | string; falling: boolean;
 }
 
-/** Each hop travels one segment of the ground line while only the portrait rises. */
-function hopPlan(dx: number, dy: number, start: CurrentPose): MotionPlan {
+/**
+ * One jump from where Raphael stands to where it goes: the farther, the higher and the longer it flies, never past the top of the
+ * window (`maxRise`). The ground light slides along the floor underneath while only the portrait rises.
+ */
+function hopPlan(dx: number, dy: number, start: CurrentPose, maxRise = MAX_RISE): MotionPlan {
   const distance = Math.hypot(dx, dy);
-  const hops = distance < 60 ? 1 : Math.min(MAX_HOPS, Math.max(2, Math.round(distance / HOP_SPAN)));
-  const rise = Math.min(40, Math.max(16, distance / hops * 0.35));
+  const air = Math.round(Math.min(MAX_AIR_MS, Math.max(MIN_AIR_MS, AIR_BASE_MS + distance * AIR_PER_PX)));
+  const rise = Math.round(Math.max(MIN_RISE, Math.min(maxRise, distance * RISE_PER_PX)) * 10) / 10;
   const tilt = -Math.sign(dx) * 3;
   const inFlight = start.y !== 0;
   const falling = inFlight && start.falling;
-  let time = inFlight ? 0 : ANTICIPATION_MS;
-  const ground = [shift(0, dx, dy)];
+  const time = inFlight ? 0 : ANTICIPATION_MS;
   const ease = falling ? FALL_IN_PROGRESS : inFlight ? RISE : "ease-in-out";
+  const ground = [shift(0, dx, dy)];
   const body = [pose(0, start.y, start.width, start.height, ease, start.tilt, start.opacity)];
   const glow = [pool(0, start.glowWidth, start.glowOpacity, ease)];
-  const descents: MotionPlan["descents"] = [];
   if (!inFlight) {
-    ground.push(shift(time, dx, dy));
+    ground.push(shift(time, dx, dy, "ease-in-out"));
     body.push(pose(time, 0, 1.12, 0.88, RISE));
     glow.push(pool(time, 1, GLOW_OPACITY, RISE));
   }
-  for (let hop = 0; hop < hops; hop++) {
-    const alreadyFalling = hop === 0 && falling;
-    const apex = time + (alreadyFalling ? 0 : AIR_MS / 2);
-    const contact = apex + AIR_MS / 2;
-    if (!alreadyFalling) {
-      body.push(pose(apex, hop === 0 ? Math.min(-rise, start.y) : -rise, 0.94, 1.08, FALL, tilt));
-      glow.push(pool(apex, 0.65, `calc(${GLOW_OPACITY} * 0.5)`, FALL));
-    }
-    descents.push([apex, contact]);
-    const remaining = (hops - hop - 1) / hops;
-    ground.push(shift(contact, dx * remaining, dy * remaining));
-    if (hop === hops - 1) { time = contact; break; }
-    time = contact + CONTACT_MS;
-    ground.push(shift(time, dx * remaining, dy * remaining));
-    body.push(pose(contact, 0, 1, 1, "ease-out"), pose(contact + 20, 0, 1.10, 0.90, "ease-out"), pose(time, 0, 1, 1, RISE));
-    glow.push(pool(contact), pool(time, 1, GLOW_OPACITY, RISE));
+  const apex = time + (falling ? 0 : air / 2);
+  const contact = time + (falling ? air / 2 : air);
+  if (!falling) {
+    body.push(pose(apex, Math.min(-rise, start.y), 0.94, 1.08, FALL, tilt));
+    glow.push(pool(apex, rise > 60 ? 0.5 : 0.65, `calc(${GLOW_OPACITY} * 0.5)`, FALL));
   }
-  return land({ ground, body, glow }, descents, time);
+  ground.push(shift(contact, 0, 0));
+  return land({ ground, body, glow }, [[apex, contact]], contact);
 }
 
 /** The goodbye's two hops share the last travel position and begin as its words appear. */

@@ -17,17 +17,19 @@ const guide = [click('[data-ob="next"]'), wait('#ob-first-name'), type('#ob-firs
   click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-ob="next"]'), wait(".page-agent:not([hidden]) .conversation-trigger")];
 
 const apps = '.modal-scrim[data-standalone="connections"]:not([hidden]):not(.leaving)';
-const maker = ".mb-scrim:not(.leaving) > .cr-dialog";
 const GOT_IT = '.tour [data-tour="gotIt"]';
 const ACCOUNT_MENU = "#app-popover.account-menu";
 const row = id => click(`${ACCOUNT_MENU} [data-account="${id}"]`);
 // [id, what the person does, the actions, whether what it opens is then lit and explained, what must hold once the tour moves on]
+const panel = ".page-agent:not([hidden]) .mb-det:not([hidden])";
 const steps = [
-  ["permission", "Open the permission menu", [click(agent + " .cmp-mode"), wait(".cb-menu .cb-modes")], true, [waitGone(".cb-menu")]],
+  ["member", "Open the slime's panel from its name at the top", [click(".page-agent:not([hidden]) .conversation-trigger"), wait(panel)], true],
+  ["computer", "Open the slime's computer in its panel", [click(panel + ' [data-det="tab"][data-tab="computer"]'), wait(panel + ' [data-tab="computer"][aria-selected="true"]')], true],
+  ["member-settings", "Open the slime's settings from the panel's gear", [click(panel + ' [data-det="gear"]'), wait(".page-agent:not([hidden]) .ms-pane")], true,
+    [waitGone(".page-agent:not([hidden]) .ms-pane"), waitGone(panel)]],
+  ["apps", "Open the Connect apps dialog", [click("#nav .sidebar-apps"), wait(apps + " #conn-search")], true, [waitGone(apps), check("page-unshifted")]],
   ["model", "Open the model menu", [click(agent + " .cmp-model .mp-trigger"), wait(".cb-menu .cb-now")], false],
   ["model-list", "Open the model list inside the model menu", [click('.cb-menu [data-cb-act="models"]'), wait('.cb-menu .cb-body[data-view="models"]')], true, [waitGone(".cb-menu")]],
-  ["apps", "Open the Connect apps dialog", [click("#nav .sidebar-apps"), wait(apps + " #conn-search")], true, [waitGone(apps), check("page-unshifted")]],
-  ["team", "Open the member maker from the sidebar plus", [click('#nav [data-col="add"]'), wait(maker)], true, [waitGone(maker), check("tour-no-member-created")]],
   ["account", "Open the account menu", [click("#nav .sidebar-account"), wait(ACCOUNT_MENU)], false],
   // Each page is looked at, and 好的 brings the conversation back with the account menu open again for the next row.
   ["dictation", "Press 聽寫 in the account menu", [row("dictation"), wait("#main > .page-dictation:not([hidden])")], true,

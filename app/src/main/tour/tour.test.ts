@@ -48,8 +48,10 @@ function harness(patch: Partial<DeviceSettings> = {}) {
   document.body.innerHTML =
     '<div class="window-chrome"><button class="window-drag">Drag</button><div class="window-controls"><button>Close window</button></div></div>' +
     '<nav id="nav"><div class="sidebar-conversations"><button data-col="add"></button></div><button class="sidebar-apps"></button><button class="sidebar-account"></button></nav>' +
-    '<main id="main"><div class="page-agent"><form class="composer"><textarea class="cmp-input"></textarea><button type="button" class="cmp-send"></button><button type="button" class="cmp-mode"></button>' +
+    '<main id="main"><div class="page-agent"><button type="button" class="conversation-trigger">Slime</button>' +
+    '<form class="composer"><textarea class="cmp-input"></textarea><button type="button" class="cmp-send"></button><button type="button" class="cmp-mode"></button>' +
     '<span class="cmp-model"><button type="button" class="mp-trigger" aria-expanded="false"></button></span></form></div></main>';
+  place(find(".conversation-trigger"), 680, 12, 110, 36);
   place(find(".sidebar-conversations"), 0, 32, 348, 780);
   place(find(".sidebar-apps"), 52, 856, 284, 36);
   place(find(".sidebar-account"), 12, 856, 36, 36);
@@ -67,7 +69,7 @@ function harness(patch: Partial<DeviceSettings> = {}) {
   const closeSettings = vi.fn(() => find(".modal-scrim")?.remove());
   let conversation = true;
   // Going back to the conversation takes the other pages away, as the app's own `go("agent")` hides them.
-  const go = vi.fn(() => { find("#main").querySelectorAll(".page-dictation, .au-page").forEach(page => page.remove()); conversation = true; });
+  const go = vi.fn(() => { find("#main").querySelectorAll(".page-dictation, .au-page, .ms-pane").forEach(page => page.remove()); conversation = true; });
   const listeners = new Set<(event: MainEvent) => void>();
   const emit = (event: MainEvent) => listeners.forEach(listener => listener(event));
   const tour = createTour({ device: () => device, setDevice, closeSettings, go, isConversation: () => conversation,
@@ -270,8 +272,8 @@ test("the offer gives up quietly when the account button never appears", async (
 
 const stepId = () => find(".tour")?.dataset.step;
 const state = () => find(".tour")?.dataset.state;
-/** Without the sidebar's plus and Connect apps, the walk starts at the permission chip. */
-const fromPermission = () => { for (const selector of ['[data-col="add"]', ".sidebar-apps"]) find(selector).remove(); };
+/** Without the slime's title (so none of its panel's steps) and Connect apps, the walk starts at the model chip. */
+const fromModel = () => { for (const selector of [".conversation-trigger", ".sidebar-apps"]) find(selector).remove(); };
 const line = (key: TourStep["text"]) => t(key, { name: t("agent.title") });
 
 function wireSteps(showConversation: (shown: boolean) => void) {
@@ -323,6 +325,30 @@ function wireSteps(showConversation: (shown: boolean) => void) {
     });
     maker.el.querySelector('[data-dlg="cancel"]')!.addEventListener("click", cancel);
   });
+  // The slime's title opens its panel, with its tabs and the gear that opens its settings in the page.
+  find(".conversation-trigger").addEventListener("click", () => {
+    const shown = find(".mb-det");
+    if (shown) { shown.hidden = !shown.hidden; return; }
+    {
+      find(".page-agent").insertAdjacentHTML("beforeend", '<aside class="mb-det"><button data-det="gear"></button><button data-det="close"></button>' +
+        '<div class="mb-tabs"><button role="tab" data-det="tab" data-tab="details" aria-selected="true"></button>' +
+        '<button role="tab" data-det="tab" data-tab="computer" aria-selected="false"></button></div></aside>');
+      const panel = find(".mb-det");
+      place(panel, 760, 0, 360, 900);
+      place(find('[data-det="gear"]'), 772, 12, 28, 28);
+      place(find('[data-det="close"]'), 1080, 12, 28, 28);
+      for (const [index, tab] of [...panel.querySelectorAll<HTMLElement>("[data-tab]")].entries()) place(tab, 800 + index * 90, 180, 80, 28);
+      panel.addEventListener("click", event => {
+        const button = (event.target as HTMLElement).closest<HTMLElement>("[data-det]");
+        if (button?.dataset.det === "tab") panel.querySelectorAll("[data-tab]").forEach(tab => tab.setAttribute("aria-selected", String(tab === button)));
+        if (button?.dataset.det === "close") panel.hidden = true;
+        if (button?.dataset.det === "gear") {
+          find(".page-agent").insertAdjacentHTML("beforeend", '<section class="ms-pane"><h2>Settings</h2></section>');
+          place(find(".ms-pane"), 348, 0, 772, 900);
+        }
+      });
+    }
+  });
   // The account menu's rows go to pages, as the app's do: dictation and the calendar take the conversation's place, Raphael's opens in it.
   const rows = ["dictation", "calendar", "raphael", "settings"];
   find(".sidebar-account").addEventListener("click", () => {
@@ -349,9 +375,10 @@ test("every step is one action, and what it opens is lit and explained until 好
   const { create, cancel } = wireSteps(showConversation);
   const row = (id: string) => () => find(`.account-menu [data-account="${id}"]`).click();
   const actions = [
-    () => find('[data-col="add"]').click(),
+    () => find(".conversation-trigger").click(),
+    () => find('.mb-det [data-tab="computer"]').click(),
+    () => find('.mb-det [data-det="gear"]').click(),
     () => find(".sidebar-apps").click(),
-    () => find(".cmp-mode").click(),
     () => find(".mp-trigger").click(),
     () => find('[data-cb-act="models"]').click(),
     () => find(".sidebar-account").click(),
@@ -359,12 +386,12 @@ test("every step is one action, and what it opens is lit and explained until 好
   ];
 
   await begin(tour);
-  // What sets the app apart first: making a slime and connecting its apps; then the conversation's controls, the avatar's tools and Raphael.
-  expect(STEPS.map(step => step.id)).toEqual(["team", "apps", "permission", "model", "model-list", "account", "dictation", "calendar", "raphael", "keys"]);
+  // What sets the app apart first: a slime's own panel, computer and settings, and the apps it works in; then the model, the avatar's tools and Raphael.
+  expect(STEPS.map(step => step.id)).toEqual(["member", "computer", "member-settings", "apps", "model", "model-list", "account", "dictation", "calendar", "raphael", "keys"]);
   for (const [index, step] of STEPS.entries()) {
     expect(stepId()).toBe(step.id);
     expect(state()).toBe("do");
-    expect(count()).toBe(`${index + 1}/10`);
+    expect(count()).toBe(`${index + 1}/11`);
     expect(words()).toBe(line(step.text));
     // A row of the account menu is framed inside the menu, which the tour opened again after the last page was looked at.
     if (step.layer === "account") expect(find(".account-menu")).not.toBeNull();
@@ -393,14 +420,17 @@ test("every step is one action, and what it opens is lit and explained until 好
     expect(stepId()).toBe(step.id);
     await press("gotIt");
   }
-  // Dictation and the calendar each gave the conversation back for the next row; Raphael's own conversation stays open.
-  expect(go.mock.calls).toEqual([["agent"], ["agent"]]);
+  // The slime's settings and then its panel were closed for Connect apps; dictation and the calendar each gave the conversation back
+  // for the next row; Raphael's own conversation stays open.
+  expect(go.mock.calls).toEqual([["agent"], ["agent"], ["agent"]]);
+  expect(find(".ms-pane")).toBeNull();
+  expect(find(".mb-det")?.hidden).toBe(true);
   expect(find(".page-agent").hasAttribute("data-raphael")).toBe(true);
   expect(closeSettings).toHaveBeenCalledTimes(1);
   expect(find(".cb-menu")).toBeNull();
   expect(find(".account-menu")).toBeNull();
   expect(find(".cr-dialog")).toBeNull();
-  expect(cancel).toHaveBeenCalledOnce();
+  expect(cancel).not.toHaveBeenCalled();
   expect(create).not.toHaveBeenCalled();
   expect(find(".modal-scrim")).toBeNull();
   expect(find(".tour-keys kbd")).not.toBeNull();
@@ -415,29 +445,43 @@ test("every step is one action, and what it opens is lit and explained until 好
   expect(mode()).toBeUndefined();
 });
 
+test("a slime's panel already open in a wide window is closed first, so the person opens it", async () => {
+  const { tour, showConversation } = harness();
+  wireSteps(showConversation);
+  find(".conversation-trigger").click();
+  expect(find(".mb-det").hidden).toBe(false);
+  await begin(tour);
+  expect(stepId()).toBe("member");
+  expect(find(".mb-det").hidden).toBe(true);
+  find(".conversation-trigger").click();
+  await settle();
+  expect(state()).toBe("see");
+});
+
 test("an attempted action with no reaction advances after four seconds", async () => {
   const { tour } = harness();
-  fromPermission();
+  fromModel();
   await begin(tour);
-  find(".cmp-mode").click();
+  find(".mp-trigger").click();
   await settle(3999);
-  expect(stepId()).toBe("permission");
-  await settle(1);
   expect(stepId()).toBe("model");
+  await settle(1);
+  // No menu opened, so its model list has nothing to frame either: the walk reaches the avatar.
+  expect(stepId()).toBe("account");
 });
 
 test("a missing target skips immediately and keeps the original progress count", async () => {
   const { tour } = harness();
-  find('[data-col="add"]').remove();
+  find(".conversation-trigger").remove();
   await begin(tour);
   expect(stepId()).toBe("apps");
-  expect(count()).toBe("2/10");
+  expect(count()).toBe("4/11");
 });
 
 test("an unavailable quick ask still offers Finish after eight seconds", async () => {
   const { tour } = harness({ agent_keys: [] });
   await offer(tour);
-  for (const selector of [".cmp-input", ".cmp-mode", ".mp-trigger", ".sidebar-apps", '[data-col="add"]', ".sidebar-account"]) find(selector).remove();
+  for (const selector of [".conversation-trigger", ".mp-trigger", ".sidebar-apps", ".sidebar-account"]) find(selector).remove();
   button("start").click();
   expect(stepId()).toBe("keys");
   await settle(7999);
@@ -448,39 +492,74 @@ test("an unavailable quick ask still offers Finish after eight seconds", async (
 
 test("the action fallback timer waits for the confirmation to close", async () => {
   const { tour } = harness();
-  fromPermission();
+  fromModel();
   await begin(tour);
-  find(".cmp-mode").click();
+  find(".mp-trigger").click();
   await press("close");
   await settle(5000);
-  expect(stepId()).toBe("permission");
+  expect(stepId()).toBe("model");
   cancelButton().click();
   await settle(4000);
-  expect(stepId()).toBe("model");
+  expect(stepId()).toBe("account");
 });
+
+async function reachModelList(tour: Tour): Promise<void> {
+  fromModel();
+  await begin(tour);
+  find(".mp-trigger").click();
+  await settle();
+  find('[data-cb-act="models"]').click();
+  await settle();
+}
 
 test.each(["Cancel", "Escape", "outside press"])("%s from End tour resumes the same step and open layer", async method => {
   const { tour, showConversation } = harness();
   wireSteps(showConversation);
-  fromPermission();
-  await begin(tour);
-  find(".cmp-mode").click();
-  await settle();
+  await reachModelList(tour);
+  expect([stepId(), state()]).toEqual(["model-list", "see"]);
   await press("close");
   expect(confirmation()).not.toBeNull();
   dismissConfirmation(method);
   await settle();
-  expect(stepId()).toBe("permission");
+  expect(stepId()).toBe("model-list");
   expect(state()).toBe("see");
   expect(find(".cb-menu")).not.toBeNull();
   expect(document.activeElement).toBe(button("close"));
 });
 
+test("a resize that closes the lit menu opens it again where it now belongs, with its model list", async () => {
+  const { tour, showConversation } = harness();
+  wireSteps(showConversation);
+  vi.spyOn(document, "hasFocus").mockReturnValue(true);
+  await reachModelList(tour);
+  const before = find(".cb-menu");
+  window.dispatchEvent(new Event("resize"));
+  expect(find(".cb-menu")).toBeNull();
+  await settle();
+  expect([stepId(), state()]).toEqual(["model-list", "see"]);
+  expect(find(".cb-menu")).not.toBeNull();
+  expect(find(".cb-menu")).not.toBe(before);
+  expect(find('.cb-menu .cb-body[data-view="models"]')?.hidden).toBe(false);
+});
+
+test("what is lit can be used while it is explained, and closing it by its use moves the walk on", async () => {
+  const { tour, showConversation } = harness();
+  wireSteps(showConversation);
+  await reachModelList(tour);
+  const pick = vi.fn();
+  const row = find(".cb-menu .cb-body");
+  row.addEventListener("click", pick);
+  row.click();
+  expect(pick).toHaveBeenCalledOnce();
+  closeMenu();
+  await settle();
+  expect(stepId()).toBe("account");
+});
+
 test("confirming End tour closes its layer and removes the tour immediately without a goodbye", async () => {
   const { tour, showConversation } = harness();
   wireSteps(showConversation);
-  fromPermission();
-  find(".cmp-mode").remove();
+  fromModel();
   await begin(tour);
   find(".mp-trigger").click();
   await settle();
@@ -494,9 +573,9 @@ test("confirming End tour closes its layer and removes the tour immediately with
 
 test("Tab cycles through the framed control and the close button while outside presses are blocked", async () => {
   const { tour } = harness();
-  fromPermission();
+  fromModel();
   await begin(tour);
-  const mode = find(".cmp-mode");
+  const trigger = find(".mp-trigger");
   const outside = vi.fn(), caption = vi.fn();
   find(".sidebar-account").addEventListener("click", outside);
   find(".window-controls button").addEventListener("click", caption);
@@ -507,19 +586,20 @@ test("Tab cycles through the framed control and the close button while outside p
 
   button("close").focus();
   key("Tab", button("close"));
-  expect(document.activeElement).toBe(mode);
-  key("Tab", mode);
+  expect(document.activeElement).toBe(trigger);
+  key("Tab", trigger);
   expect(document.activeElement).toBe(button("close"));
   expect(key("Escape").defaultPrevented).toBe(true);
   expect(tour.navigate("back")).toBe(true);
-  expect(stepId()).toBe("permission");
+  expect(stepId()).toBe("model");
 });
 
 test("placement follows a resized target without a hop, and locale changes redraw the line", async () => {
   const { tour } = harness();
+  fromModel();
   await begin(tour);
-  expect(spot().style.left).toBe("436px");
-  place(find(".cmp-mode"), 160, 832, 60, 26);
+  expect(spot().style.left).toBe("896px");
+  place(find(".mp-trigger"), 160, 832, 120, 26);
   window.dispatchEvent(new Event("resize"));
   await settle();
   expect(spot().style.left).toBe("156px");
@@ -530,9 +610,8 @@ test("placement follows a resized target without a hop, and locale changes redra
 test("a dialog the tour lights keeps its place: nothing pads or moves the window's own layer", async () => {
   const { tour, showConversation } = harness();
   wireSteps(showConversation);
+  find(".conversation-trigger").remove();
   await begin(tour);
-  for (const selector of [".cmp-mode", ".mp-trigger"]) find(selector).remove();
-  await settle();
   expect(stepId()).toBe("apps");
   find(".sidebar-apps").click();
   await settle();

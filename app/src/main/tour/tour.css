@@ -49,8 +49,23 @@
 .tour-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin-bottom: var(--sp-1); }
 .tour-head .tour-title { margin: 0; }
 .tour-text { margin: 0; word-break: keep-all; overflow-wrap: anywhere; text-wrap: balance; }
-.tour-keys { margin-top: var(--sp-2); }
-.tour-keys .keys { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--text-3); }
+/* The keys that ask Raphael, drawn as large keyboard keys: each one sinks and lights in Raphael's blue while it is held. */
+.tour-keys { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); margin-top: var(--sp-3); color: var(--text-3); }
+.tour-key {
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 64px; height: 44px; padding: 0 var(--sp-3);
+  border: 1px solid var(--float-ctl-edge); border-bottom-width: 4px; border-radius: var(--r-md); background: var(--float-ctl); color: var(--text);
+  font: inherit; font-size: var(--fs-md); font-weight: 600; transition: transform 90ms ease-out, background-color 90ms ease-out, border-color 90ms ease-out;
+}
+.tour-key[data-down] {
+  transform: translateY(3px); border-bottom-width: 1px; border-color: var(--raphael-color);
+  background: color-mix(in srgb, var(--raphael-color) 28%, var(--float-ctl)); color: var(--text);
+}
+.tour-plus { font-size: var(--fs-md); }
+/* In the air Raphael turns to its side: its eyes move toward where it goes and draw closer, as a face seen from the side. */
+.tour .tour-slime .slime-follow, .tour .tour-slime .slime-gaze { transition: translate 140ms ease-out, scale 140ms ease-out; }
+.tour[data-facing="left"] .tour-slime .slime-follow { translate: -7px 0; }
+.tour[data-facing="right"] .tour-slime .slime-follow { translate: 7px 0; }
+.tour[data-facing] .tour-slime .slime-gaze { scale: 0.72 1; }
 .tour-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin-top: var(--sp-3); }
 .tour-count > span { display: flex; align-items: center; gap: var(--sp-1); }
 .tour-dot { box-sizing: border-box; width: 6px; height: 6px; border-radius: var(--r-pill); border: 1px solid color-mix(in srgb, var(--text-3) 65%, transparent); }

@@ -4,10 +4,10 @@ import { bindingLabels } from "../keys";
 import type { DeviceSettings } from "../types";
 import type { Box, Side } from "./place";
 
-type StepId = "member" | "computer" | "member-settings" | "apps" | "model" | "model-list" | "account" | "dictation" | "calendar" | "raphael" | "keys";
-type Line = "member" | "computer" | "memberSettings" | "apps" | "model" | "modelList" | "account" | "dictation" | "calendar" | "raphael" | "keys";
-type Seen = "memberSeen" | "computerSeen" | "memberSettingsSeen" | "appsSeen" | "modelListSeen" | "dictationSeen" | "calendarSeen" | "raphaelSeen";
-type Title = "member" | "computer" | "memberSettings" | "apps" | "model" | "account" | "dictation" | "calendar" | "raphael" | "keys";
+type StepId = "team" | "member" | "computer" | "member-settings" | "apps" | "model" | "model-list" | "account" | "dictation" | "calendar" | "raphael" | "keys";
+type Line = "team" | "member" | "computer" | "memberSettings" | "apps" | "model" | "modelList" | "account" | "dictation" | "calendar" | "raphael" | "keys";
+type Seen = "teamSeen" | "memberSeen" | "computerSeen" | "memberSettingsSeen" | "appsSeen" | "modelListSeen" | "dictationSeen" | "calendarSeen" | "raphaelSeen";
+type Title = "team" | "member" | "computer" | "memberSettings" | "apps" | "model" | "account" | "dictation" | "calendar" | "raphael" | "keys";
 export type Layer = keyof typeof LAYERS;
 
 /** The target's box with the room round it and the corner radius of the cut-out. */
@@ -111,9 +111,13 @@ export function pressableBoxes(layer: HTMLElement): Box[] {
   });
 }
 
-// What sets this app apart comes first: each slime is someone of its own, with its panel, its own computer and its settings, and it
-// works in the owner's apps. Then the model that thinks, the tools behind the avatar, and Raphael itself last.
+// What sets this app apart comes first: each slime is someone of its own, with its panel, the computer it works on and its settings
+// (tools, skills, personality, notifications; no computer choice there yet), and it works in the owner's apps. Then the model that
+// thinks, the tools behind the avatar, and Raphael itself last.
 export const STEPS: readonly TourStep[] = [
+  // A new slime first, from the sidebar's plus: it can really be made here.
+  { id: "team", title: "tour.teamTitle", text: "tour.team", seen: "tour.teamSeen",
+    target: '#nav [data-col="add"]', opens: "team", prefer: ["right", "below"], pad: 4 },
   { id: "member", title: "tour.memberTitle", text: "tour.member", seen: "tour.memberSeen",
     target: ".page-agent:not([hidden]) .conversation-trigger", opens: "details", prefer: ["below", "left"], pad: 4 },
   { id: "computer", title: "tour.computerTitle", text: "tour.computer", seen: "tour.computerSeen",
