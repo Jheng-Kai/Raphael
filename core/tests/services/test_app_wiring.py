@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from raphael_core.app import App
+from raphael_core.brain.providers.clients import model_info
 from raphael_core.services.attachments import checked
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
@@ -27,6 +28,34 @@ async def test_the_services_methods_are_registered(app):
     status = await app.call("services.status", {})
     brave = next(o for o in status["search"]["options"] if o["id"] == "brave")
     assert brave["has_key"] is True and "a-key" not in str(status)
+
+
+async def test_new_members_skip_a_disconnected_saved_model(app):
+    app.keys.clear()
+    app.providers.cli_brains.commands = {}
+    app.providers.settings.set("agent_model", "openai/gpt-6-luna")
+    without_source = (await app.call("members.create", {"name": "Without a source"}))["member"]
+    assert without_source["model"] == ""
+    assert app.agent._read_settings(app.members.speaker(without_source["id"])).model == ""
+
+    source = (await app.call("providers.add", {"kind": "ollama"}))["provider"]["id"]
+    app.providers._models[source] = [
+        model_info({"id": "eligible-first"}, kind="ollama"),
+        model_info({"id": "recommended", "is_default": True}, kind="ollama"),
+    ]
+    chosen = (await app.call("members.create", {"name": "Connected source"}))["member"]
+    assert chosen["model"] == f"@{source}:recommended"
+    assert app.providers.settings.get("agent_model") == "openai/gpt-6-luna"
+
+    app.providers.settings.set("agent_model", f"@{source}:eligible-first?effort=high")
+    inherited = (await app.call("members.create", {"name": "Inherits the answer model"}))["member"]
+    assert inherited["model"] == f"@{source}:eligible-first?effort=high"
+
+    app.providers.settings.set("agent_model", "@disconnected:old")
+    app.keys.set("connected")
+    app.providers._models["openrouter"] = [{"id": "media-only", "media": ["image"]}]
+    fallback = (await app.call("members.create", {"name": "OpenRouter source"}))["member"]
+    assert fallback["model"] == "openai/gpt-6-luna"
 
 
 async def test_the_assistant_and_the_worker_stand_on_the_same_services(app):

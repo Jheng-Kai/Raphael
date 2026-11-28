@@ -128,8 +128,8 @@ async def test_live_prompt_keeps_narration_and_replies_independent_of_ui_languag
     assert system.count("Final content must be ONLY one JSON object") == 1
     assert "no code fences, no prose before or after" in system
     assert "no separate thinking object" in system
-    assert "Thinking, progress and replies follow the speaker's own language instructions" in system
-    assert "The interface language never selects the language of authored speech" in system
+    assert "Use the same reply-language rule for public thinking and progress as for replies." in system
+    assert "The interface language is" not in user
     assert "in the owner's UI language" not in system
     assert "at most 2 sentences (about 60 CJK characters)" in system
     assert "25 CJK characters or 25 words" in system
@@ -137,7 +137,7 @@ async def test_live_prompt_keeps_narration_and_replies_independent_of_ui_languag
     assert '"messages": the complete reply as chat messages in order' in system
     assert '"text": the reply as one line' not in system
     assert "Owner's UI language:" not in user
-    assert "Use the language specified in your own persona and the owner's instructions" in user
+    assert "Use the language specified in your own persona or the owner's instructions" in user
     if speaker == "member":
         assert "Teach and reply in Japanese." in system
         assert "Reply ONLY in" not in system

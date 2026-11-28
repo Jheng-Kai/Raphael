@@ -40,7 +40,7 @@ async def test_an_expired_confirmation_declines_only_its_call(monkeypatch, swept
         result = await asyncio.wait_for(loop.run(), 2)
         assert result.final == "Finished the rest."
         assert not replies[0].ok and replies[0].kind == "expired"
-        # The model is told the same words on every interface language: the interface language goes to no model.
+        # The model's approval result is the same in every interface locale.
         assert replies[0].content == EXPIRED_NOTE
         assert replies[1].ok and calls == ["routine_create", "local_time"]
         assert not loop.task.cancelled()
@@ -59,5 +59,5 @@ async def test_an_expired_claude_permission_names_the_unanswered_action(language
         language=language, plain=True, system="", user="", tools=[], progress=lambda _: None,
         thinking=lambda _: None, event=lambda _: None, execute=execute, wait_timeout_s=0)
     result = await loop._tool("one", "approve", {"tool_name": "Write", "input": {"path": "lesson.txt"}})
-    # The CLI model is told the same words on every interface language: the interface language goes to no model.
+    # The CLI model's approval result is the same in every interface locale.
     assert json.loads(result.content) == {"behavior": "deny", "message": EXPIRED_NOTE}

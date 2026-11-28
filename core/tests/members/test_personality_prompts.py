@@ -31,7 +31,7 @@ async def test_narrated_prompt_contains_only_its_own_persona_and_thread(setup, c
         # Raphael is the guide, not a slime: the roster lists the slimes only.
         assert '"name": "Raphael"' not in team_now and "拉斐爾" not in team_now and '"coordination_duty": "primary_contact"' in team_now
     assert "ask_member" in system and "another member's thread" in system
-    assert "The interface language never selects" in system
+    assert "Without one, use the interface language." in system
     assert "By default use" not in system
     assert "ask_member" in {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
     if who:
