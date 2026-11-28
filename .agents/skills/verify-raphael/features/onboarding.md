@@ -124,45 +124,55 @@ persist. Keep sanitized readback and stop the owned dev process.
 ## Raphael's guided tour of the window
 
 Raphael's blue slime offers a tour after the first-run guide or on an ordinary launch
-with an unanswered offer. Start and Skip save `tour_offered`; Escape leaves it unanswered.
-`app/src/main/tour/` contains the controller, placement and view. The text comes from the
-fifteen `tour.*` catalogues. The tour observes the app's own controls as the person tries them.
+with an unanswered offer. Start and confirmed Skip save `tour_offered`. Escape on
+the offer leaves it unanswered. The account menu has no route to relaunch the tour.
+`app/src/main/tour/` contains the controller, placement and view. Titles, short spoken
+lines, progress labels and confirmation copy come from fifteen `tour.*` catalogues.
 
 - **The offer** (`tour-offer`, `tour-offer-returning`, `tour-offer-skip`, `tour-offer-escape`):
-  Raphael grows from the account button, overshoots by 14 px at 180 ms and touches down at
-  250 ms, revealing the pool of blue light. The bubble appears after the 80 ms landing at
-  330 ms. The pose settles at 450 ms.
+  Raphael grows from the account button and touches down at 250 ms, revealing its blue light.
+  The bubble appears after the landing settles, at 430 ms. Start begins immediately.
+  `tour-offer-skip-ask` shows the Skip confirmation over the unanswered offer.
+  Cancel, Escape or a press beside it returns focus to Skip. Confirming saves the answer
+  and dismisses the offer in `tour-offer-skip`.
 - **The walk**: `tour-composer`, `tour-permission`, `tour-model`, `tour-apps` and `tour-account`
-  show the highlighted controls while Raphael waits. `tour-composer-done`, `tour-permission-done`,
-  `tour-model-done`, `tour-apps-done` and `tour-account-done` focus or press the same controls
-  and wait for the follow-up and primary Next. The model chip opens its ordinary menu. The
-  icon on the left switches providers, and pressing the model name opens the model list.
-  Connect apps opens its standalone dialog. `tour-back` goes forward from that dialog,
-  checks that it closes, and goes back to the waiting step. `tour-team` and `tour-keys`
-  show the two read-only steps. The last step draws the configured shortcut as key caps.
-  The bubble starts each sentence on a new line and wraps within sentences at up to 300 px.
-  The account step stands above the sidebar foot while highlighting the avatar or its menu.
-- **The motion** (`tour-hop`): the scene enables motion and waits for the offer and the hop
-  to settle. A long hop has 100 ms anticipation, 300 ms in the air, an 80 ms landing and a
-  120 ms settle. A short hop has 35 ms anticipation and 220 ms in the air. Only Raphael arcs
-  up. The glow follows the line between the two ground points, narrowing and dimming at the
-  top of the arc. At rest the shared portrait is 64 px on whole-pixel coordinates. Only the
-  blue light breathes in width and opacity over 2.6 s. Reduced motion places both immediately.
-- **The goodbye** (`tour-end`, `tour-end-closed`, `tour-escape`, `tour-close`): the dim clears,
-  Raphael returns to the sidebar foot, and the group fades.
-- **The checks** in `checks.mjs` verify the settled light is centered just below the foot
-  and stays in its ground box. Every checked tour step samples the dim at all four window
-  corners and at the window centre when outside the cut-out. The portrait, its light and
-  the bubble clear the composer and the sidebar foot controls. The portrait and light
-  also clear the target and any opened surface.
-  On narrow windows where the Connect apps dialog leaves room for the portrait alone, the
-  portrait stands clear of the dialog while the bubble sits over its body. If there is no
-  room for the portrait, the bubble remains available on its own.
-  `tour/view.test.ts` checks keyframes, the bubble's delay, reduced motion and retargeting
-  from the current pose. `tour/tour.test.ts` covers target changes and skipped steps.
+  show the real controls with a 2 px blue outline, a 1.6 s pulsing glow and a dim that
+  catches outside presses. The composer and model scenes press the dim over the sidebar
+  account button and verify the action stays pending and the account menu stays closed.
+  Their done scenes, and `tour-permission-done`, `tour-apps-done` and `tour-account-done`,
+  operate the highlighted control and wait for the follow-up and primary Next. The cut-out
+  exposes the opened layer for viewing. Moving on uses the window's own close path.
+  `tour-back` checks that the standalone Connect apps dialog closes and Back returns to its
+  action prompt. `tour-team` and `tour-keys` are read-only with primary actions. The key caps
+  show the configured binding. Each bubble has a title and dots with a localized progress label.
+  When a control is missing or a press produces no layer within four seconds, primary Next appears.
+  `tour-escape` verifies Escape and both mouse side buttons leave the walk and open menu in place.
+- **Ending early** (`tour-end-ask`, `tour-close`): every step has the shared round End tour
+  button at the top right and in the Tab order. End tour and Skip use the compact shared
+  confirmation with the ordinary primary button and shared Cancel. The confirmation
+  catches presses above the dim and takes keyboard focus. Cancel, Escape and a press
+  beside it preserve the same step and open layer, return focus to End tour and resume
+  the action fallback timer. Confirm closes the step's layer and removes the tour
+  immediately. The saved answer stands. The farewell and its hops belong to Finish.
+- **The motion** (`tour-hop`): the scene enables motion and waits for the chain to settle.
+  The travel uses 70 ms of anticipation, one to three 190 ms airborne hops, 45 ms between
+  hops and a 180 ms final landing. Distances below 120 px use one hop, distances below
+  360 px use two, and the remaining moves use three. Each hop rises by 30% of its own
+  distance, clamped to 14–36 px. Its blue light follows the ground and narrows and dims
+  at the top. At rest the shared portrait sits on whole pixels, and only the light breathes
+  over 2.6 s. The bubble appears after landing. Reduced motion places both immediately.
+- **The goodbye** (`tour-end`, `tour-end-closed`): Finish clears the dim, Raphael returns to
+  the sidebar foot and hops twice as the farewell appears. Each hop is 12 px high and
+  takes 150 ms. The farewell fades 4.5 s after it appears. Reduced motion skips both hops.
+- **The checks**: the dim covers all four corner pixels and other samples outside the opening.
+  The light fits its ground box. The portrait, light and bubble clear the composer and
+  sidebar foot controls. The portrait and light clear the active target and any opened
+  layer. In a tight Connect apps layout the bubble may sit over the body of the dialog
+  while the portrait stays beside it or hides when it cannot fit. Unit tests cover focus,
+  the four-second fallback, timing, interruption from the current pose and reduced motion.
 
 ```powershell
-npm run look -- tour-offer tour-offer-returning tour-offer-skip tour-offer-escape tour-composer tour-composer-done tour-permission tour-permission-done tour-model tour-model-done tour-apps tour-apps-done tour-team tour-account tour-account-done tour-keys tour-back tour-hop tour-end tour-end-closed tour-escape tour-close --theme both --width 1120,720,1920x1080
+npm run look -- tour-offer tour-offer-returning tour-offer-skip-ask tour-offer-skip tour-offer-escape tour-composer tour-composer-done tour-permission tour-permission-done tour-model tour-model-done tour-apps tour-apps-done tour-team tour-account tour-account-done tour-keys tour-back tour-hop tour-end tour-end-closed tour-escape tour-end-ask tour-close --theme both --width 1120,720,1920x1080
 ```
 
 Native verification still needs the real window. Look exercises the app with fixture data.

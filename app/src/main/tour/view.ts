@@ -2,30 +2,31 @@
 // says what to show; this measures, places and moves. Nothing here knows what a step means.
 
 import { RAPHAEL_ID, faceHTML } from "../members";
-import type { NavStep } from "../nav-history";
 import { bindNavLayer } from "../nav-layers";
-import { btn, esc, iconButton, keys, reducedMotion, replay } from "../ui";
+import { btn, esc, headerCloseButton, keys, reducedMotion, replay } from "../ui";
 import { dimClip } from "./dim";
-import { groundBox, placeGroup, touches, type Box, type Placement, type Side } from "./place";
+import { placeGroup, type Box, type Placement, type Side } from "./place";
 import type { Spot } from "./steps";
 import "./tour.css";
 
 export type ButtonId = "start" | "skip" | "back" | "next" | "done";
-/** What the view tells the controller: a button, the ×, or a press on the bubble that only says goodbye. */
 export type Pressed = ButtonId | "close" | "dismiss";
+export const CAPTION_CONTROLS = ".window-chrome .window-controls";
 
 export interface ViewModel {
   /** `offer`: the question at the bottom left; `step`: the dim, the cut-out and the walk; `bye`: the last line, nothing dimmed. */
   mode: "offer" | "step" | "bye";
   step?: string;
-  state?: "ask" | "done" | "look";
+  state?: "ask" | "done" | "look" | "fallback";
+  title?: string;
+  closeLabel?: string;
   text: string;
   /** The caps drawn under the line (the keys that ask Raphael), as the window names them. */
   keys?: string[];
-  progress?: { shown: string; label: string };
+  progress?: { current: number; total: number; label: string };
   buttons: { id: ButtonId; label: string; primary?: boolean }[];
-  /** The × that ends the tour, with its name; step mode only. */
-  closeLabel?: string;
+  control?: () => HTMLElement | null;
+  celebrate?: boolean;
   /** What the dialog is called for a reader. */
   label: string;
   /** What is pointed at, measured again whenever the window or the layout moves; `dim: false` only stands beside it. */
@@ -42,10 +43,14 @@ export interface ViewModel {
 }
 
 export interface TourView {
-  render(model: ViewModel, options: { hop: boolean }): void;
+  render(model: ViewModel, options: { hop: boolean }): number;
   /** Measures the target and places the group again, without a hop. */
   reflow(): void;
   contains(node: Node | null): boolean;
+  tab(target: HTMLElement | null, backward: boolean): void;
+  keepFocus(target: HTMLElement | null): void;
+  setConfirmation(scrim: HTMLElement | null): void;
+  focusButton(id: "skip" | "close"): void;
   /** Fades the group out and then removes it (at once when nothing may move). */
   leave(done: () => void): void;
   destroy(): void;
@@ -56,21 +61,24 @@ const GROUND_INSET = 16;
 // The 64 px portrait has padding around its drawing. Anchor the pose and light at the drawn foot.
 const FOOT = 52;
 const BODY_HEIGHT = 40;
-const LAND_MS = 80;
-const SETTLE_MS = 120;
+const ANTICIPATION_MS = 70;
+const AIR_MS = 190;
+const CONTACT_MS = 45;
+const LAND_MS = 180;
+const HAPPY_MS = 150;
 const RISE = "cubic-bezier(0.33, 0.67, 0.67, 1)";
 const FALL = "cubic-bezier(0.33, 0, 0.67, 0.33)";
 const FALL_IN_PROGRESS = "cubic-bezier(0.33, 0.16, 0.67, 0.5)";
 const GLOW_OPACITY = "var(--tour-glow-opacity)";
 
-export function createView(on: (pressed: Pressed) => void, move: (direction: NavStep) => void): TourView {
+export function createView(on: (pressed: Pressed) => void, onTargetPress: () => void): TourView {
   const root = document.createElement("div");
   root.className = "tour";
   root.dataset.tourRoot = "";
   root.innerHTML = `<div class="tour-catch"></div><div class="tour-spot" hidden></div>` +
     `<div class="tour-ground" style="--tour-foot:${FOOT}px;--tour-ground-inset:${GROUND_INSET}px" aria-hidden="true"><span class="tour-glow"></span>` +
     `<span class="tour-slime">${faceHTML({ id: RAPHAEL_ID, name: "" }, SLIME)}</span></div>` +
-    `<div class="tour-bubble" role="dialog"></div>`;
+    `<div class="tour-bubble" role="dialog" tabindex="-1"></div>`;
   document.body.append(root);
   const dim = root.querySelector<HTMLElement>(".tour-catch")!;
   const spotEl = root.querySelector<HTMLElement>(".tour-spot")!;
@@ -80,11 +88,9 @@ export function createView(on: (pressed: Pressed) => void, move: (direction: Nav
   const bubble = root.querySelector<HTMLElement>(".tour-bubble")!;
 
   let model: ViewModel | null = null;
-  // The window can navigate the focused bubble once its own layers are clear.
-  bindNavLayer(bubble, () => move("back"), {
-    active: () => model?.mode === "step" && bubble.contains(document.activeElement),
-    step: direction => { move(direction); return true; },
-  });
+  let confirmation: HTMLElement | null = null;
+  // The walk owns layer navigation and consumes both directions until Finish.
+  bindNavLayer(bubble, () => {}, { active: () => model?.mode === "step", step: () => true });
   let placed: Box | null = null;
   let leaving: ReturnType<typeof setTimeout> | undefined;
   let playing: { plan: MotionPlan; body: Animation; tracks: Animation[] } | null = null;
@@ -111,26 +117,54 @@ export function createView(on: (pressed: Pressed) => void, move: (direction: Nav
     };
   }
 
-  // A press on the tour is the tour's alone. The window's dismissals (Settings close on a press outside them, menus too) listen at the
-  // document in the capture phase, so the tour takes its events one step earlier, at the window, and lets nothing past.
+  // Catch presses before the document's outside-press dismissals. The clip supplies pointer hit-testing;
+  // this guard also keeps the look-only openings and the margin around a control from taking input.
   const own = (event: Event): void => {
-    if (!(event.target instanceof Node) || !bubble.contains(event.target)) return;
-    event.stopPropagation();
+    if (!(event.target instanceof Element)) return;
+    const target = event.target;
+    if (confirmation) {
+      if (!confirmation.contains(target)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+      return;
+    }
+    if (model?.mode === "step") {
+      const sideButton = event instanceof MouseEvent && (event.button === 3 || event.button === 4);
+      const inBubble = bubble.contains(target);
+      if (!sideButton && !inBubble && target !== dim) {
+        if (target.closest(CAPTION_CONTROLS)) return;
+        if (model.control?.()?.contains(target)) {
+          if (event.type === "click") onTargetPress();
+          return;
+        }
+      }
+      if (sideButton || !inBubble) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+    } else if (!bubble.contains(target)) return;
+    event.stopImmediatePropagation();
     if (event.type !== "click") return;
-    const target = event.target as Element;
     const button = target.closest<HTMLElement>("[data-tour]");
     if (button) { if (!(button as HTMLButtonElement).disabled) on(button.dataset.tour as Pressed); return; }
-    if (model?.mode === "bye" && target.closest(".tour-bubble")) on("dismiss");
+    if (model?.mode === "bye") on("dismiss");
   };
   const owned = ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "contextmenu", "dblclick", "auxclick", "wheel"];
   for (const type of owned) window.addEventListener(type, own, { capture: true, passive: false });
 
   function content(next: ViewModel): string {
     const caps = next.keys?.length ? `<div class="tour-keys">${keys(next.keys)}</div>` : "";
-    const close = next.closeLabel ? iconButton("x", next.closeLabel, ' data-tour="close"', "row tour-x") : "";
-    const progress = next.progress ? `<span class="tour-count" aria-label="${esc(next.progress.label)}">${esc(next.progress.shown)}</span>` : "";
+    const title = next.title ? `<h2 class="tour-title">${esc(next.title)}</h2>` : "";
+    const progress = next.progress;
+    const dots = progress ? Array.from({ length: progress.total }, (_, index) =>
+      `<span class="tour-dot"${index + 1 === progress.current ? ' data-current=""' : ""}></span>`).join("") : "";
+    const count = progress ? `<span class="tour-count" role="img" aria-label="${esc(progress.label)}"><span aria-hidden="true">${dots}</span></span>` : "";
     const buttons = next.buttons.map(button => btn(esc(button.label), `sm${button.primary ? " pri" : ""}`, ` data-tour="${button.id}"`)).join("");
-    return close + `<p class="tour-text">${sentences(next.text)}</p>${caps}` + (progress || buttons ? `<div class="tour-foot">${progress}<div class="tour-buttons">${buttons}</div></div>` : "");
+    const head = next.closeLabel ? `<div class="tour-head">${title}${headerCloseButton(next.closeLabel, ' data-tour="close"')}</div>` : title;
+    return `${head}<p class="tour-text">${esc(next.text)}</p>${caps}` +
+      (count || buttons ? `<div class="tour-foot">${count}<div class="tour-buttons">${buttons}</div></div>` : "");
   }
 
   function place(next: ViewModel, anchor: Box | null, clear: readonly Box[], controls: readonly Box[]): Placement {
@@ -148,7 +182,7 @@ export function createView(on: (pressed: Pressed) => void, move: (direction: Nav
     });
   }
 
-  function apply(next: ViewModel, hop: boolean): number {
+  function apply(next: ViewModel, hop: boolean, celebrate = false): number {
     const spot = next.locate();
     const anchor = next.anchor?.() ?? null;
     const clear = [...(next.keepClear?.() ?? []), ...(anchor && spot ? [spot.box] : [])];
@@ -165,17 +199,20 @@ export function createView(on: (pressed: Pressed) => void, move: (direction: Nav
         const bodyStyle = getComputedStyle(slime), glowStyle = getComputedStyle(glow);
         const currentBody = matrixOf(bodyStyle.transform), currentGlow = matrixOf(glowStyle.transform);
         const from = { ...placed, left: placed.left + currentGround.m41, top: placed.top + currentGround.m42 };
-        if (clearHop(from, to, currentBody.m42, [...clear, ...controls])) plan = hopPlan(from.left - to.left, from.top - to.top, {
-          y: currentBody.m42, width: currentBody.m11, height: currentBody.m22, opacity: bodyStyle.opacity || 1,
+        const time = Number(playing?.body.currentTime);
+        plan = hopPlan(from.left - to.left, from.top - to.top, {
+          y: currentBody.m42, width: Math.hypot(currentBody.m11, currentBody.m12), height: Math.hypot(currentBody.m21, currentBody.m22),
+          tilt: Math.atan2(currentBody.m12, currentBody.m11) * 180 / Math.PI, opacity: bodyStyle.opacity || 1,
           glowWidth: currentGlow.m11, glowOpacity: glowStyle.opacity || GLOW_OPACITY,
-          falling: !!playing && Number(playing.body.currentTime) >= playing.plan.apex,
+          falling: playing?.plan.descents.some(([apex, ground]) => time >= apex && time < ground) ?? false,
         });
       } else {
         const from = next.origin();
         if (from) plan = popPlan(from, to);
       }
     }
-    if (!canMove || moved || placement.hideSlime) cancelMotion();
+    if (canMove && celebrate && !placement.hideSlime) plan = happyPlan(plan);
+    if (!canMove || moved || placement.hideSlime || plan) cancelMotion();
     const cut = next.mode === "step" && spot?.dim ? spot : null;
     root.dataset.dim = next.mode !== "step" ? "none" : cut ? "spot" : "all";
     dim.style.clipPath = cut ? dimClip(cut) : "";
@@ -196,14 +233,17 @@ export function createView(on: (pressed: Pressed) => void, move: (direction: Nav
     placed = to;
     if (plan) play(plan);
     else if (!playing) root.classList.toggle("is-idle", canMove);
-    return playing ? Math.max(0, playing.plan.landed - Number(playing.body.currentTime)) : 0;
+    return playing ? Math.max(0, playing.plan.arrival - Number(playing.body.currentTime)) : 0;
   }
+
+  const buttons = () => [...bubble.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
 
   return {
     render(next, { hop }) {
       clearTimeout(leaving);
       root.classList.remove("is-leaving");
       const first = model === null;
+      const celebrate = !!next.celebrate && model?.mode !== "bye";
       model = next;
       root.dataset.mode = next.mode;
       if (next.step) root.dataset.step = next.step; else delete root.dataset.step;
@@ -216,12 +256,26 @@ export function createView(on: (pressed: Pressed) => void, move: (direction: Nav
         const again = bubble.querySelector<HTMLElement>('[data-tour="' + focused + '"]');
         (again ?? bubble.querySelector<HTMLElement>(".tour-buttons button:last-child"))?.focus({ preventScroll: true });
       }
-      const delay = apply(next, hop);
+      const delay = apply(next, hop, celebrate);
       // The words come once Raphael has landed.
       if (hop || first) { bubble.style.setProperty("--tour-in-delay", `${delay}ms`); replay(bubble, "is-arriving"); }
+      return delay;
     },
     reflow() { if (model) apply(model, false); },
     contains(node) { return !!node && root.contains(node); },
+    tab(target, backward) {
+      const order = [...(target ? [target] : []), ...buttons()];
+      const index = order.findIndex(item => item === document.activeElement);
+      const next = index < 0 ? (backward ? order.length - 1 : 0) : (index + (backward ? -1 : 1) + order.length) % order.length;
+      (order[next] ?? bubble).focus({ preventScroll: true });
+    },
+    keepFocus(target) {
+      const active = document.activeElement;
+      if (active instanceof Element && (target?.contains(active) || bubble.contains(active) || active.closest(CAPTION_CONTROLS))) return;
+      (bubble.querySelector<HTMLElement>(".tour-buttons button:last-child") ?? bubble).focus({ preventScroll: true });
+    },
+    setConfirmation(scrim) { confirmation = scrim; bubble.inert = !!scrim; },
+    focusButton(id) { bubble.querySelector<HTMLElement>(`[data-tour="${id}"]`)?.focus({ preventScroll: true }); },
     leave(done) {
       if (reducedMotion()) { done(); return; }
       root.classList.add("is-leaving");
@@ -231,14 +285,9 @@ export function createView(on: (pressed: Pressed) => void, move: (direction: Nav
   };
 }
 
-/** Start each sentence on its own line. The browser wraps within a sentence. */
-function sentences(text: string): string {
-  return esc(text).replace(/([。！？])(?!$)/g, "$1<br>").replace(/([.!?])\s+/g, "$1 <br>");
-}
-
 type TimedFrame = Keyframe & { time: number };
 type Tracks = { ground: TimedFrame[]; body: TimedFrame[]; glow: TimedFrame[] };
-type MotionPlan = Tracks & { apex: number; landed: number; duration: number };
+type MotionPlan = Tracks & { descents: [apex: number, ground: number][]; arrival: number; duration: number };
 
 function matrixOf(transform: string): DOMMatrixReadOnly {
   return new DOMMatrixReadOnly(transform && transform !== "none" ? transform : undefined);
@@ -248,70 +297,87 @@ function shift(time: number, x: number, y: number, easing = "linear"): TimedFram
   return { time, transform: `translate(${x}px, ${y}px)`, easing };
 }
 
-function pose(time: number, y: number, width = 1, height = 1, easing = "linear", opacity: number | string = 1): TimedFrame {
-  return { time, transform: `translateY(${y}px) scale(${width}, ${height})`, easing, opacity };
+function pose(time: number, y: number, width = 1, height = 1, easing = "linear", tilt = 0, opacity: number | string = 1): TimedFrame {
+  return { time, transform: `translateY(${y}px) rotate(${tilt}deg) scale(${width}, ${height})`, easing, opacity };
 }
 
 function pool(time: number, width = 1, opacity: number | string = GLOW_OPACITY, easing = "linear"): TimedFrame {
   return { time, transform: `scaleX(${width})`, opacity, easing };
 }
 
-/** The pop and hop share the contact, squash and single settling rebound. */
-function land(tracks: Tracks, apex: number, contact: number): MotionPlan {
+/** A landing has one squash and one rebound before the portrait comes to rest. */
+function land(tracks: Tracks, descents: MotionPlan["descents"], contact: number): MotionPlan {
   const squash = contact + 35;
-  const landed = contact + LAND_MS;
-  const duration = landed + SETTLE_MS;
+  const duration = contact + LAND_MS;
   tracks.ground.push(shift(duration, 0, 0));
   tracks.body.push(pose(contact, 0, 1, 1, "ease-out"), pose(squash, 0, 1.16, 0.84, "ease-out"),
-    pose(landed, 0, 1.03, 0.97, "ease-out"), pose(landed + 48, 0, 0.97, 1.04, "ease-in-out"), pose(duration, 0));
+    pose(contact + 100, 0, 0.97, 1.04, "ease-in-out"), pose(duration, 0));
   tracks.glow.push(pool(contact, 1, GLOW_OPACITY, "ease-out"), pool(squash, 1, `calc(${GLOW_OPACITY} * 1.16)`, "ease-out"),
-    pool(landed), pool(duration));
-  return { ...tracks, apex, landed, duration };
+    pool(duration));
+  return { ...tracks, descents, arrival: duration, duration };
 }
 
 interface CurrentPose {
-  y: number; width: number; height: number; opacity: number | string;
+  y: number; width: number; height: number; tilt: number; opacity: number | string;
   glowWidth: number; glowOpacity: number | string; falling: boolean;
 }
 
-const hopRise = (distance: number): number => Math.round(Math.min(90, Math.max(28, distance / 5)));
-
-function clearHop(from: Box, to: Box, currentY: number, clear: readonly Box[]): boolean {
-  const left = Math.min(from.left, to.left);
-  const rise = Math.max(-currentY, hopRise(Math.hypot(from.left - to.left, from.top - to.top)));
-  const top = Math.min(from.top, to.top) - rise - 6;
-  const sweep = groundBox({ left, top, width: Math.max(from.left, to.left) + SLIME - left, height: Math.max(from.top, to.top) + SLIME - top }, GROUND_INSET);
-  return clear.every(box => !touches(sweep, box));
-}
-
-/** The two surfaces travel together along the ground line. Only the portrait has a vertical arc. */
+/** Each hop travels one segment of the ground line while only the portrait rises. */
 function hopPlan(dx: number, dy: number, start: CurrentPose): MotionPlan {
   const distance = Math.hypot(dx, dy);
-  const rise = hopRise(distance);
-  const short = distance < 80;
+  const hops = distance < 120 ? 1 : distance < 360 ? 2 : 3;
+  const rise = Math.min(36, Math.max(14, distance / hops * 0.3));
+  const tilt = -Math.sign(dx) * 3;
   const inFlight = start.y !== 0;
   const falling = inFlight && start.falling;
-  const anticipation = inFlight ? 0 : short ? 35 : 100;
-  const air = falling ? 155 : inFlight ? 240 : short ? 220 : 300;
-  const apex = falling ? 0 : anticipation + air / 2;
-  const contact = anticipation + air;
+  let time = inFlight ? 0 : ANTICIPATION_MS;
   const ground = [shift(0, dx, dy)];
-  const body = [pose(0, start.y, start.width, start.height, falling ? FALL_IN_PROGRESS : inFlight ? RISE : "ease-in-out", start.opacity)];
-  const glow = [pool(0, start.glowWidth, start.glowOpacity, falling ? FALL_IN_PROGRESS : RISE)];
+  const ease = falling ? FALL_IN_PROGRESS : inFlight ? RISE : "ease-in-out";
+  const body = [pose(0, start.y, start.width, start.height, ease, start.tilt, start.opacity)];
+  const glow = [pool(0, start.glowWidth, start.glowOpacity, ease)];
+  const descents: MotionPlan["descents"] = [];
   if (!inFlight) {
-    ground.push(shift(anticipation, dx, dy));
-    // The stretch lies 24% into the ascent, on the same eased arc as the top of the hop.
-    const stretch = anticipation + (apex - anticipation) * 0.24;
-    body.push(pose(anticipation, 0, 1.12, 0.88, "cubic-bezier(0.33, 0.38, 0.67, 0.71)"),
-      pose(stretch, -rise * 0.4224, 0.92, 1.1, RISE));
-    glow.push(pool(anticipation, 1, GLOW_OPACITY, RISE));
+    ground.push(shift(time, dx, dy));
+    body.push(pose(time, 0, 1.12, 0.88, RISE));
+    glow.push(pool(time, 1, GLOW_OPACITY, RISE));
   }
-  ground.push(shift(contact, 0, 0));
-  if (!falling) {
-    body.push(pose(apex, Math.min(-rise, start.y), 1, 1, FALL));
-    glow.push(pool(apex, 0.65, `calc(${GLOW_OPACITY} * 0.5)`, FALL));
+  for (let hop = 0; hop < hops; hop++) {
+    const alreadyFalling = hop === 0 && falling;
+    const apex = time + (alreadyFalling ? 0 : AIR_MS / 2);
+    const contact = apex + AIR_MS / 2;
+    if (!alreadyFalling) {
+      body.push(pose(apex, hop === 0 ? Math.min(-rise, start.y) : -rise, 0.94, 1.08, FALL, tilt));
+      glow.push(pool(apex, 0.65, `calc(${GLOW_OPACITY} * 0.5)`, FALL));
+    }
+    descents.push([apex, contact]);
+    const remaining = (hops - hop - 1) / hops;
+    ground.push(shift(contact, dx * remaining, dy * remaining));
+    if (hop === hops - 1) { time = contact; break; }
+    time = contact + CONTACT_MS;
+    ground.push(shift(time, dx * remaining, dy * remaining));
+    body.push(pose(contact, 0, 1, 1, "ease-out"), pose(contact + 20, 0, 1.10, 0.90, "ease-out"), pose(time, 0, 1, 1, RISE));
+    glow.push(pool(contact), pool(time, 1, GLOW_OPACITY, RISE));
   }
-  return land({ ground, body, glow }, apex, contact);
+  return land({ ground, body, glow }, descents, time);
+}
+
+/** The goodbye's two hops share the last travel position and begin as its words appear. */
+function happyPlan(travel?: MotionPlan): MotionPlan {
+  const plan = travel ?? { ground: [shift(0, 0, 0)], body: [pose(0, 0, 1, 1, RISE)], glow: [pool(0, 1, GLOW_OPACITY, RISE)],
+    descents: [], arrival: 0, duration: 0 };
+  const start = plan.duration;
+  plan.body[plan.body.length - 1]!.easing = RISE;
+  plan.glow[plan.glow.length - 1]!.easing = RISE;
+  for (let hop = 0; hop < 2; hop++) {
+    const apex = start + (hop + 0.5) * HAPPY_MS;
+    const contact = apex + HAPPY_MS / 2;
+    plan.body.push(pose(apex, -12, 1, 1, FALL), pose(contact, 0, 1, 1, RISE));
+    plan.glow.push(pool(apex, 0.8, `calc(${GLOW_OPACITY} * 0.7)`, FALL), pool(contact, 1, GLOW_OPACITY, RISE));
+    plan.descents.push([apex, contact]);
+  }
+  plan.duration += 2 * HAPPY_MS;
+  plan.ground.push(shift(plan.duration, 0, 0));
+  return plan;
 }
 
 /** Raphael grows from the button's centre and overshoots the ground before touching down. */
@@ -322,7 +388,7 @@ function popPlan(from: Box, to: Box): MotionPlan {
   const apex = 180;
   return land({
     ground: [shift(0, dx, 0, RISE), shift(apex, 0, 0)],
-    body: [pose(0, dy, scale, scale, RISE, 0.2), pose(apex, -14, 0.92, 1.1, FALL)],
+    body: [pose(0, dy, scale, scale, RISE, 0, 0.2), pose(apex, -14, 0.94, 1.08, FALL)],
     glow: [pool(0, 0.65, 0), pool(apex, 0.65, 0, FALL)],
-  }, apex, 250);
+  }, [[apex, 250]], 250);
 }

@@ -162,7 +162,10 @@ describe("the main window's actions", () => {
     for (const file of sources) {
       // The shared card exit is a real button with an explicit quiet treatment.
       const text = read(file).replace(/\bcard-quiet\b/g, "card-exit");
-      expect(text, file).not.toMatch(/["'`][^"'`\n]*\bquiet\b[^"'`\n]*["'`]/);
+      // The confirmation modifier belongs to the dialog; its action is an ordinary primary button.
+      const actionText = file === path.join(root, "member-dialogs.ts")
+        ? text.replace('"mb-confirm mb-delete is-quiet"', '"mb-confirm mb-delete"') : text;
+      expect(actionText, file).not.toMatch(/["'`][^"'`\n]*\bquiet\b[^"'`\n]*["'`]/);
       // `class=\"link\"` in the catalogs, `class="link"` in the pages, `.link` in the styles
       // (`.link` itself, not a class that only begins with it, such as a link chip's `.link-chip`)
       expect(text, file).not.toMatch(/\.btn\.quiet|class=\\?"link\\?"|\.link(?![\w-])/);

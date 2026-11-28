@@ -1,4 +1,4 @@
-import { scene, click, type, wait, waitGone, check, key, waitCall } from "./steps.mjs";
+import { scene, click, type, wait, waitGone, check, key, pressAt, sideButton, waitCall } from "./steps.mjs";
 
 const returning = { start: "app", tourUnanswered: true };
 const firstRun = { onboarding: true, tourUnanswered: true };
@@ -7,7 +7,11 @@ const BYE = '.tour[data-mode="bye"]';
 const NEXT = '.tour [data-tour="next"]';
 const BACK = '.tour [data-tour="back"]';
 const START = '.tour [data-tour="start"]';
+const SKIP = '.tour [data-tour="skip"]';
+const CLOSE = '.tour [data-tour="close"]';
 const FINISH = '.tour [data-tour="done"]';
+const CONFIRM = '.tour-confirm > .mb-confirm';
+const CONFIRM_ACTION = CONFIRM + ' [data-dlg="delete"]';
 const SAVE = waitCall("device_settings_set", "tour_offered");
 const agent = ".page-agent:not([hidden]) .composer";
 const pickFirstSlime = [click('.ob-first-picker [data-slime-tab="red"]'), click('.ob-first-picker [data-slime-character="horns-red"]')];
@@ -22,12 +26,17 @@ const targets = {
   apps: "#nav .sidebar-apps",
   account: "#nav .sidebar-account",
 };
-const modelMenu = '.cb-menu:has(.cb-now)';
 const appsDialog = '.modal-scrim[data-standalone="connections"]:not([hidden]) > .modal';
-const step = (id, state) => wait('.tour[data-step="' + id + '"]' + (state ? '[data-state="' + state + '"]' : ""));
+const stepSelector = (id, state) => '.tour[data-step="' + id + '"]' + (state ? '[data-state="' + state + '"]' : "");
+const step = (id, state) => wait(stepSelector(id, state));
 const assert = (id, state) => check("tour-step-" + id + "-" + state);
 const begin = [wait(OFFER), click(START), SAVE, step("composer", "ask")];
-const to = id => [...begin, ...steps.slice(1, steps.indexOf(id) + 1).flatMap(next => [click(NEXT), step(next)])];
+const tryStep = id => targets[id] ? [click(targets[id]), step(id, "done")] : [];
+const to = id => [...begin, ...steps.slice(0, steps.indexOf(id)).flatMap((current, index) => [...tryStep(current), click(NEXT), step(steps[index + 1])])];
+const blocked = id => ["composer", "model"].includes(id) ? [
+  pressAt("#nav .sidebar-account", 0.5, 0.5, stepSelector(id, "ask")),
+  check("tour-blocks-outside-" + id),
+] : [];
 const answer = id => [click(targets[id]), step(id, "done"), assert(id, "done")];
 const goodbye = [wait(BYE), check("tour-bye")];
 
@@ -36,16 +45,19 @@ export default [
     [...guide, wait(OFFER), check("tour-offer")], firstRun),
   scene("tour-offer-returning", "An ordinary onboarded launch still offers the unanswered tour",
     [wait(OFFER), check("tour-offer")], returning),
-  scene("tour-offer-skip", "Skip remembers the answer and shows the goodbye",
-    [wait(OFFER), click('.tour [data-tour="skip"]'), SAVE, ...goodbye], returning),
+  scene("tour-offer-skip-ask", "Skip asks before saving an answer, with the offer still in place",
+    [wait(OFFER), click(SKIP), wait(CONFIRM), check("tour-confirm-skip")], returning),
+  scene("tour-offer-skip", "Confirming Skip remembers the answer and dismisses the offer",
+    [wait(OFFER), click(SKIP), wait(CONFIRM), pressAt(".tour-confirm", 0.05, 0.2, OFFER), waitGone(CONFIRM),
+      check("tour-offer"), click(SKIP), wait(CONFIRM), click(CONFIRM_ACTION), SAVE, waitGone(".tour"), check("tour-closed")], returning),
   scene("tour-offer-escape", "Escape dismisses the offer without saving an answer",
-    [wait(OFFER), key("Escape"), ...goodbye, waitGone(".tour"), check("tour-closed"), check("tour-unanswered")], returning),
+    [wait(OFFER), key("Escape"), waitGone(".tour"), check("tour-closed"), check("tour-unanswered")], returning),
 
   ...Object.keys(targets).flatMap(id => [
-    scene("tour-" + id, "Raphael asks you to try the " + id + " control while it is highlighted", [...to(id), step(id, "ask"), assert(id, "ask")], returning),
+    scene("tour-" + id, "Raphael asks you to try the " + id + " control while it is highlighted", [...to(id), step(id, "ask"), ...blocked(id), assert(id, "ask")], returning),
     scene("tour-" + id + "-done", "Press the " + id + " control to see the follow-up and primary Next", [...to(id), step(id, "ask"), ...answer(id)], returning),
   ]),
-  scene("tour-team", "The team list has one slime per job and memory; the plus adds a helper",
+  scene("tour-team", "Raphael points out the team and the plus that adds another slime",
     [...to("team"), assert("team", "look")], returning),
   scene("tour-keys", "The last step shows the real shortcut as key caps and offers Finish",
     [...to("keys"), assert("keys", "look")], returning),
@@ -56,12 +68,16 @@ export default [
     [...to("keys"), click(FINISH), ...goodbye], returning),
   scene("tour-end-closed", "The goodbye fades and the window is ready for input",
     [...to("keys"), click(FINISH), wait(BYE), waitGone(".tour"), check("tour-closed")], returning),
-  scene("tour-escape", "Escape closes the composer model menu first; another Escape ends the walk",
-    [...to("model"), ...answer("model"), key("Escape"), waitGone(modelMenu), step("model", "ask"),
-      key("Escape"), ...goodbye], returning),
-  scene("tour-close", "The close button ends the walk",
-    [...to("permission"), click('.tour [data-tour="close"]'), ...goodbye], returning),
-  { ...scene("tour-hop", "Raphael lands beside the next step with its grounded blue light",
+  scene("tour-escape", "Escape and the mouse side buttons leave the tour and its open layer in place",
+    [...to("model"), key("Escape"), assert("model", "ask"), ...answer("model"), key("Escape"),
+      sideButton("back"), sideButton("forward"), assert("model", "done")], returning),
+  scene("tour-end-ask", "The shared End tour confirmation takes input above the dim and the open model menu",
+    [...to("model"), ...answer("model"), click(CLOSE), wait(CONFIRM), check("tour-confirm-end")], returning),
+  scene("tour-close", "Escape resumes the same step, then confirming End tour clears the tour and its open menu",
+    [...to("model"), ...answer("model"), click(CLOSE), wait(CONFIRM), key("Escape"), waitGone(CONFIRM),
+      assert("model", "done"), click(CLOSE), wait(CONFIRM), click(CONFIRM_ACTION), waitGone(".tour"),
+      waitGone(".cb-menu"), check("tour-closed"), check("tour-saved-once")], returning),
+  { ...scene("tour-hop", "Raphael lands beside the next step after a series of small hops with its grounded blue light",
     [wait(OFFER), { action: "settle-motion" }, check("tour-offer"), ...begin.slice(1), { action: "settle-motion" },
-      click(NEXT), step("permission", "ask"), { action: "settle-motion" }, assert("permission", "ask")], returning), motion: true },
+      ...tryStep("composer"), click(NEXT), step("permission", "ask"), { action: "settle-motion" }, assert("permission", "ask")], returning), motion: true },
 ];

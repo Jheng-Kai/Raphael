@@ -4418,7 +4418,50 @@ export function checkRendered(name, context = {}) {
     require(box.width <= cell.width + 1 && box.height <= cell.height + 1, "and fits the icon's cell");
     return { check: name, rows: rows.length };
   }
-  // Raphael's guided tour (tour/): the offer at the bottom left, the seven-step walk with its visual dim and cut-out, and the goodbye.
+  if (name.startsWith("tour-blocks-outside-")) {
+    const id = name.slice("tour-blocks-outside-".length);
+    const root = document.querySelector('.tour[data-mode="step"]');
+    const account = document.querySelector("#nav .sidebar-account").getBoundingClientRect();
+    const x = account.left + account.width / 2, y = account.top + account.height / 2;
+    require(document.elementFromPoint(x, y) === root.querySelector(".tour-catch"), "a press outside the cut-out hits the dim");
+    require(root.dataset.step === id && root.dataset.state === "ask" && !document.querySelector(".account-menu"), "the press changes nothing");
+    const close = document.querySelector('.window-chrome .window-controls [data-window-action="close"]');
+    if (visible(close)) {
+      const { left, top, width, height } = close.getBoundingClientRect();
+      require(close.contains(document.elementFromPoint(left + width / 2, top + height / 2)), "the caption close button stays above the dim");
+    }
+    return { check: name, x, y, step: root.dataset.step, state: root.dataset.state };
+  }
+  if (name === "tour-confirm-end" || name === "tour-confirm-skip") {
+    const skip = name === "tour-confirm-skip";
+    const root = document.querySelector('.tour');
+    const scrim = document.querySelector('.tour-confirm');
+    const dialog = scrim?.querySelector('.mb-confirm.mb-delete.is-quiet');
+    require(visible(dialog) && dialog.getAttribute('aria-modal') === 'true', "the shared quiet confirmation is modal");
+    require(skip ? root.dataset.mode === 'offer' : root.dataset.step === 'model' && root.dataset.state === 'done' && visible(document.querySelector('.cb-menu')), "the offer or the completed step and its menu stay in place");
+    require(root.querySelector('.tour-bubble').inert, "the underlying bubble waits for the answer");
+    const cancel = dialog.querySelector('[data-dlg="cancel"]');
+    const action = dialog.querySelector('[data-dlg="delete"]');
+    require(document.activeElement === cancel, "the shared Cancel button gets focus");
+    for (const button of [cancel, action]) {
+      const { left, top, width, height } = button.getBoundingClientRect();
+      require(button.contains(document.elementFromPoint(left + width / 2, top + height / 2)), "the dialog button is pressable above the dim");
+    }
+    require(document.elementFromPoint(2, 2) === scrim, "the confirmation's scrim catches outside presses above the tour");
+    const primary = document.createElement('span');
+    primary.style.backgroundColor = action.matches(':active') ? 'var(--accent-pressed)' : action.matches(':hover') ? 'var(--accent-hover)' : 'var(--accent)';
+    dialog.append(primary);
+    const primaryColor = getComputedStyle(primary).backgroundColor;
+    primary.remove();
+    require(action.classList.contains('pri') && getComputedStyle(action).backgroundColor === primaryColor, "the action has the ordinary primary colour");
+    if (skip) require(!window.__look.calls.some(call => call.command === 'device_settings_set' && call.patch?.tour_offered), "opening Skip has not saved an answer");
+    return { check: name, title: dialog.querySelector('h2').textContent, action: action.textContent };
+  }
+  if (name === "tour-saved-once") {
+    require(window.__look.calls.filter(call => call.command === 'device_settings_set' && call.patch?.tour_offered).length === 1, "the answer saved at Start remains the only write");
+    return { check: name };
+  }
+  // Raphael's guided tour (tour/): the offer, the blocking spotlight and the goodbye.
   if (name === "tour-offer" || name === "tour-bye" || name === "tour-closed" || name === "tour-unanswered" || name.startsWith("tour-step-")) {
     const roots = [...document.querySelectorAll('.tour')];
     if (name === "tour-unanswered") {
@@ -4426,7 +4469,7 @@ export function checkRendered(name, context = {}) {
       return { check: name };
     }
     if (name === "tour-closed") {
-      require(roots.length === 0, "nothing of the tour is left on screen");
+      require(roots.length === 0 && !document.querySelector('.tour-confirm'), "nothing of the tour is left on screen");
       require(!document.getElementById('nav').inert && !document.getElementById('main').inert, "the window works again: neither the sidebar nor the page is inert");
       require(!document.querySelector('.modal-scrim:not([hidden])'), "the Settings the tour opened are closed again");
       return { check: name };
@@ -4457,14 +4500,14 @@ export function checkRendered(name, context = {}) {
       "the ground light is a low, wide ellipse below the body");
     require(lightStyle.backgroundImage.startsWith("radial-gradient(") &&
       Number(lightStyle.opacity) >= 0.5 && Number(lightStyle.opacity) <= 0.67, "the ground light has a soft, visible fade");
-    require(bubble.getAttribute('role') === 'dialog' && bubble.getAttribute('aria-label') && !bubble.hasAttribute('aria-modal'), "the bubble is a named non-modal dialog");
+    require(bubble.getAttribute('role') === 'dialog' && bubble.getAttribute('aria-label'), "the bubble is named for assistive technology");
     const text = bubble.querySelector('.tour-text').textContent.trim();
-    require(text.length > 8 && !/主人|老闆|master/i.test(text), `the spoken line has no title for the person: ${text}`);
+    require(text.length > 8 && !/管家|butler|主人|老闆|master/i.test(text), `the bubble uses a plain spoken line: ${text}`);
     require(b.width <= 301, `the bubble is as narrow as its words allow, never past 300 px (${Math.round(b.width)})`);
     const probe = document.createElement('span'); probe.style.backgroundColor = 'var(--float)'; document.body.append(probe);
     const float = getComputedStyle(probe).backgroundColor; probe.remove();
     require(getComputedStyle(bubble).backgroundColor === float, "the bubble stands on the floating surface");
-    const buttons = [...bubble.querySelectorAll('button')];
+    const buttons = [...bubble.querySelectorAll('button:not(.close-button)')];
     require(buttons.every(button => visible(button) && button.getBoundingClientRect().height <= 26.5), "every control hugs its words: no taller than the control tokens");
     for (const button of buttons.filter(button => button.textContent.trim())) require(button.scrollWidth <= button.clientWidth + 1, `the words of ${button.textContent} show whole`);
     const ids = buttons.map(button => button.dataset.tour);
@@ -4483,27 +4526,30 @@ export function checkRendered(name, context = {}) {
       if (name === "tour-offer") {
         require(ids.join() === 'skip,start' && !buttons[0].classList.contains('pri') && buttons[1].classList.contains('pri'), "two buttons, the primary last: 跳過, 開始");
         require(!window.__look.calls.some(call => call.command === "device_settings_set" && call.patch?.tour_offered), "an unanswered offer has not been saved");
-        require(/\d/.test(text), `it says roughly how long the tour takes: ${text}`);
-      } else require(ids.length === 0 && !bubble.querySelector('.tour-x'), "the goodbye has no button: it fades on its own");
+      } else require(ids.length === 0, "the goodbye has no button: it fades on its own");
       return { check: name, text, bubble: [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)] };
     }
     // A step of the walk.
     const order = ["composer", "permission", "model", "apps", "team", "account", "keys"];
     const [id, state] = name.slice('tour-step-'.length).split('-'), number = order.indexOf(id) + 1;
     require(number > 0, `a known step: ${id}`);
-    const targets = { composer: '.page-agent:not([hidden]) .composer', team: '#nav .sidebar-conversations', apps: '#nav .sidebar-apps',
-      permission: '.page-agent:not([hidden]) .composer .cmp-mode', model: '.page-agent:not([hidden]) .composer .cmp-model', account: '#nav .sidebar-account' };
+    const targets = { composer: '.page-agent:not([hidden]) .composer .cmp-input', team: '#nav .sidebar-conversations', apps: '#nav .sidebar-apps',
+      permission: '.page-agent:not([hidden]) .composer .cmp-mode', model: '.page-agent:not([hidden]) .composer .cmp-model .mp-trigger', account: '#nav .sidebar-account' };
     const panels = { permission: '.cb-menu:has(.cb-modes)', model: '.cb-menu:has(.cb-now)', apps: '.modal-scrim[data-standalone="connections"] > .modal', account: '.account-menu' };
-    const counted = bubble.querySelector('.tour-count').textContent.trim();
-    require(root.dataset.mode === 'step' && root.dataset.step === id && root.dataset.state === state && counted === number + '/7', `step ${number} of 7 is ${state}: ${counted}`);
-    require(bubble.querySelector('[data-tour="close"]')?.getAttribute('aria-label'), "a named close button ends the tour");
+    const progress = bubble.querySelector('.tour-count');
+    const dots = [...progress.querySelectorAll('.tour-dot')];
+    require(root.dataset.mode === 'step' && root.dataset.step === id && root.dataset.state === state, `step ${number} of 7 is ${state}`);
+    require(dots.length === 7 && dots.findIndex(dot => dot.hasAttribute('data-current')) === number - 1 &&
+      progress.querySelectorAll('[data-current]').length === 1 && progress.getAttribute('aria-label'),
+    "seven steps appear as dots with just the current one filled and a readable progress label");
+    require(bubble.querySelector('.tour-title')?.textContent.trim(), "the step has a short title above the spoken line");
+    const close = bubble.querySelector('.tour-head > button.close-button[data-tour="close"]');
+    require(visible(close) && close.getAttribute('aria-label') && close.tabIndex === 0, "the heading has the shared round End tour button in the Tab order");
     const next = buttons.find(button => button.dataset.tour === (id === 'keys' ? 'done' : 'next'));
-    require(next && ids.includes('back') === (number > 1), "the foot has the expected navigation buttons");
-    require(next.classList.contains('pri') === (state !== 'ask'), "Next is quiet while waiting and primary after the action");
-    require(!document.getElementById('nav').inert && !document.getElementById('main').inert, "the tour keeps the page and sidebar interactive");
+    require(ids.includes('back') === (number > 1), "only steps after the first have Back");
+    require(state === 'ask' ? !next : next?.classList.contains('pri'), "ask has no Next; other states have a primary Next or Finish");
     const dim = getComputedStyle(catcher);
-    require(dim.pointerEvents === 'none' && getComputedStyle(spot).pointerEvents === 'none', "the dim and the cut-out pass pointer presses through");
-    require(!document.elementFromPoint(view.w - 6, 60)?.closest(".tour"), "the dim does not take an outside press");
+    require(dim.pointerEvents === 'auto' && getComputedStyle(spot).pointerEvents === 'none', "the dim takes presses and the ring leaves the cut-out clear");
     const footControls = [...document.querySelectorAll('#nav .side-foot :is(button, a[href], input, select, textarea, [role="button"])')].filter(visible);
     for (const [label, rect] of [["Raphael and its light", floor], ["the bubble", b]]) {
       require(!composer || !touches(rect, composer), `${label} clears the composer`);
@@ -4533,12 +4579,11 @@ export function checkRendered(name, context = {}) {
     const center = [view.w / 2, view.h / 2];
     if (outsideOpening(center)) points.push(center);
     require(visible(catcher) && Number(dim.opacity) > 0 && dim.backgroundColor === dim.getPropertyValue('--scrim').trim(), "the dim layer paints the window's scrim colour");
-    // Hit-test the painted clip with the dim temporarily enabled and raised above the bubble and menus.
+    // Raise the dim for the corner samples so caption controls and the bubble cannot hide a gap in its clip.
     const rootStyle = root.style.cssText, dimStyle = catcher.style.cssText;
     try {
       root.style.zIndex = '2147483647';
       catcher.style.zIndex = '1';
-      catcher.style.pointerEvents = 'auto';
       for (const [x, y] of points) {
         require(document.elementFromPoint(x, y) === catcher, `the dim covers window point (${x}, ${y})`);
       }
@@ -4570,6 +4615,17 @@ export function checkRendered(name, context = {}) {
       require(Math.abs(p.left - (t.left - pad)) <= 3 && Math.abs(p.top - (t.top - pad)) <= 3 && Math.abs(p.width - (t.width + 2 * pad)) <= 4 && Math.abs(p.height - (t.height + 2 * pad)) <= 4,
         `the cut-out follows the target's box: ${[p.left, p.top, p.width, p.height].map(Math.round)} vs ${[t.left, t.top, t.width, t.height].map(Math.round)}`);
       require(parseFloat(getComputedStyle(spot).borderTopLeftRadius) >= 8, "the cut-out is rounded");
+      if (state === 'ask') {
+        const ring = getComputedStyle(spot);
+        const color = document.createElement('span');
+        color.style.color = 'var(--raphael-color)';
+        document.body.append(color);
+        const blue = getComputedStyle(color).color;
+        color.remove();
+        require(ring.outlineWidth === '2px' && ring.outlineStyle === 'solid' && ring.outlineColor === blue &&
+          ring.outlineOffset === '0px' && ring.boxShadow !== 'none', "a blue 2 px ring and soft glow sit outside the opening");
+        require(target.contains(document.elementFromPoint(t.left + t.width / 2, t.top + t.height / 2)), "a press in the cut-out reaches the real control");
+      }
       const side = bubble.dataset.side;
       require(!touches(floor, t), `Raphael and its light clear the target or opened layer (${side})`);
       if (side !== 'inside') require(!touches(b, p), `the bubble stands beside the cut-out (${side})`);

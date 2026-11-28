@@ -1,11 +1,21 @@
-/* The guided tour (tour/): a dim with one cut-out, Raphael's slime and its bubble. Flat, the window's own tokens in both
-   themes. The guide can speak over dialogs (110), with menus and window controls above it. */
+/* The guided tour (tour/): a dim with one cut-out, Raphael's slime and its bubble. */
 .tour { position: fixed; inset: 0; z-index: 120; overflow: hidden; pointer-events: none; }
-.tour-catch { position: absolute; inset: 0; display: none; pointer-events: none; background: var(--scrim); transition: clip-path 300ms ease; }
-.tour[data-mode="step"] .tour-catch { display: block; }
-.tour-spot { position: absolute; box-shadow: inset 0 0 0 1px var(--line-lit); pointer-events: none; transition: left 300ms ease, top 300ms ease, width 300ms ease, height 300ms ease, border-radius 300ms ease; }
-.tour[data-state="ask"] .tour-spot::after { content: ""; position: absolute; inset: 0; border-radius: inherit; border: 2px solid var(--focus); opacity: 0.5; animation: tour-pulse 1.8s ease-in-out infinite; }
-@keyframes tour-pulse { 0%, 100% { opacity: 0.35; transform: scale(1); } 50% { opacity: 0.65; transform: scale(1.02); } }
+.tour[data-mode="step"] { z-index: 145; }
+.mb-scrim.tour-confirm { z-index: 165; }
+.tour-catch { position: absolute; inset: 0; display: none; background: var(--scrim); }
+.tour[data-mode="step"] .tour-catch { display: block; pointer-events: auto; }
+:root:has(.tour[data-mode="step"]) .window-chrome { visibility: hidden; }
+:root:has(.tour[data-mode="step"]) .window-chrome .window-controls { visibility: visible; }
+:root:has(.tour[data-mode="step"]) .window-resize { pointer-events: none; }
+.tour-spot { position: absolute; pointer-events: none; }
+.tour:is([data-state="ask"], [data-state="done"]) .tour-spot {
+  outline: 2px solid var(--raphael-color); box-shadow: 0 0 8px 2px color-mix(in srgb, var(--raphael-color) 55%, transparent);
+}
+.tour[data-state="ask"] .tour-spot { animation: tour-pulse 1.6s ease-in-out infinite; }
+@keyframes tour-pulse {
+  0%, 100% { box-shadow: 0 0 6px 2px color-mix(in srgb, var(--raphael-color) 45%, transparent); }
+  50% { box-shadow: 0 0 14px 2px color-mix(in srgb, var(--raphael-color) 75%, transparent); }
+}
 .tour-ground, .tour-slime { position: absolute; height: 64px; pointer-events: none; }
 .tour-ground { width: calc(64px + 2 * var(--tour-ground-inset)); }
 /* Keep the inline avatar's baseline from adding a line box below the portrait. */
@@ -33,13 +43,16 @@
 }
 /* As narrow as its words allow, never wider than 300 px or than the window less Raphael's room. */
 .tour-bubble { position: absolute; box-sizing: border-box; width: max-content; max-width: min(300px, calc(100% - 136px)); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--float-edge); border-radius: var(--r-md); background: var(--float); color: var(--text); box-shadow: var(--pop); font-size: var(--fs-sm); line-height: 1.5; pointer-events: auto; }
+.tour-title { margin: 0 0 var(--sp-1); font-size: var(--fs-md); }
+.tour-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin-bottom: var(--sp-1); }
+.tour-head .tour-title { margin: 0; }
 .tour-text { margin: 0; word-break: keep-all; overflow-wrap: anywhere; text-wrap: balance; }
-.tour[data-mode="step"] .tour-text { padding-inline-end: var(--sp-4); }
-.tour-bubble .tour-x { position: absolute; top: var(--sp-1); inset-inline-end: var(--sp-1); }
 .tour-keys { margin-top: var(--sp-2); }
 .tour-keys .keys { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--text-3); }
 .tour-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin-top: var(--sp-3); }
-.tour-count { color: var(--text-3); font-size: var(--fs-2xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tour-count > span { display: flex; align-items: center; gap: var(--sp-1); }
+.tour-dot { box-sizing: border-box; width: 6px; height: 6px; border-radius: var(--r-pill); border: 1px solid color-mix(in srgb, var(--text-3) 65%, transparent); }
+.tour-dot[data-current] { border-color: var(--raphael-color); background: var(--raphael-color); }
 .tour-buttons { display: flex; align-items: center; gap: var(--sp-2); margin-inline-start: auto; }
 .tour[data-mode="bye"] .tour-bubble { cursor: default; }
 
@@ -48,7 +61,7 @@
 @keyframes tour-bubble-in { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
 .tour.is-leaving { opacity: 0; transition: opacity 200ms ease; }
 @media (prefers-reduced-motion: reduce) {
-  .tour, .tour *, .tour-spot::after { transition: none !important; animation: none !important; }
+  .tour, .tour * { transition: none !important; animation: none !important; }
   .tour-ground, .tour-slime, .tour-glow { transform: none !important; }
   .tour-slime { opacity: 1 !important; }
   .tour-glow { opacity: var(--tour-glow-opacity) !important; }

@@ -19,16 +19,22 @@ it.each(["keys", "team"])("hit-tests the dim at the window edges of the %s step"
       <div class="window-controls"><button class="window-button"><svg></svg></button></div>
     </div>
     <div class="tour" data-mode="step" data-step="${step}" data-state="look" data-dim="${highlightsTeam ? "spot" : "all"}">
-      <div class="tour-catch" style="--scrim: rgba(0, 0, 0, 0.5); background-color: rgba(0, 0, 0, 0.5); opacity: 1; pointer-events: none"></div>
+      <div class="tour-catch" style="--scrim: rgba(0, 0, 0, 0.5); background-color: rgba(0, 0, 0, 0.5); opacity: 1; pointer-events: auto"></div>
       <div class="tour-spot" style="pointer-events: none; border-radius: 12px" ${highlightsTeam ? "" : "hidden"}></div>
       <div class="tour-ground">
         <div class="tour-slime"><div class="slime-surface" style="--slime-color: #3db5ff"><div class="slime-body"></div></div></div>
         <div class="tour-glow" style="background-image: radial-gradient(black, transparent); opacity: 0.5"></div>
       </div>
       <div class="tour-bubble" role="dialog" aria-label="Tour" style="background-color: var(--float)">
+        <div class="tour-head">
+          <h2 class="tour-title">${highlightsTeam ? "Your team" : "Call me anytime"}</h2>
+          <button class="btn icon close-button" data-tour="close" aria-label="End tour"><svg></svg></button>
+        </div>
         <p class="tour-text">Raphael's guided tour.</p>
-        <span class="tour-count">${highlightsTeam ? 5 : 7}/7</span><div class="tour-keys"><kbd>Alt</kbd><kbd>R</kbd></div>
-        <button data-tour="close" aria-label="Close"></button><button data-tour="back">Back</button>
+        <span class="tour-count" role="img" aria-label="Step ${highlightsTeam ? 5 : 7} of 7">${Array.from({ length: 7 }, (_, index) =>
+          `<span class="tour-dot"${index === (highlightsTeam ? 4 : 6) ? " data-current" : ""}></span>`).join("")}</span>
+        <div class="tour-keys"><kbd>Alt</kbd><kbd>R</kbd></div>
+        <button data-tour="back">Back</button>
         <button class="pri" data-tour="${highlightsTeam ? "next" : "done"}">${highlightsTeam ? "Next" : "Done"}</button>
       </div>
     </div>`;
@@ -55,7 +61,6 @@ it.each(["keys", "team"])("hit-tests the dim at the window edges of the %s step"
   const hits = new Map(highlightsTeam ? [["0.25,38.5", doc.body], ["44,108", doc.body]] : []);
   doc.elementFromPoint = (x, y) => {
     if (Math.round(x) >= doc.documentElement.clientWidth || Math.round(y) >= doc.documentElement.clientHeight) return null;
-    if (dim.style.pointerEvents === "none") return doc.body;
     return hits.get(`${x},${y}`) ?? dim;
   };
   vi.stubGlobal("document", doc);

@@ -262,8 +262,8 @@
 .mb-confirm.mb-delete .mb-dlg-body { padding: 0; line-height: 1.5; color: var(--text); text-wrap: pretty; }
 .mb-confirm.mb-delete .mb-dlg-act { flex-wrap: nowrap; gap: var(--sp-2); margin-top: calc(var(--sp-5) - var(--sp-2)); padding: 0; border-top: 0; }
 .mb-confirm.mb-delete .mb-dlg-act .btn { flex: 1 1 0; min-width: 0; padding-inline: var(--sp-3); border-radius: var(--r-pill); font-size: var(--fs-sm); }
-.mb-confirm.mb-delete .mb-dlg-act .btn.pri { border-color: var(--close); background: var(--close); color: var(--on-close); }
-.mb-confirm.mb-delete .mb-dlg-act .btn.pri:hover:not(:disabled), .mb-confirm.mb-delete .mb-dlg-act .btn.pri:active:not(:disabled) { border-color: var(--close); background: var(--close); filter: brightness(0.9); }
+.mb-confirm.mb-delete:not(.is-quiet) .mb-dlg-act .btn.pri { border-color: var(--close); background: var(--close); color: var(--on-close); }
+.mb-confirm.mb-delete:not(.is-quiet) .mb-dlg-act .btn.pri:hover:not(:disabled), .mb-confirm.mb-delete:not(.is-quiet) .mb-dlg-act .btn.pri:active:not(:disabled) { border-color: var(--close); background: var(--close); filter: brightness(0.9); }
 /* A dialog's footer buttons are the field height, as a card's are. */
 .mb-dlg-act .btn:not(.icon) { min-height: var(--h-field); padding-block: 0; line-height: calc(var(--h-field) - 2px); }
 .mb-addrow { display: flex; gap: var(--sp-2); }

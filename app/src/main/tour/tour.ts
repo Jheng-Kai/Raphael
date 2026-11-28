@@ -1,15 +1,12 @@
-// Raphael's guided tour. The tour observes the window while the person uses its ordinary controls.
+// Raphael's guided tour. The spotlight admits one of the window's own controls at a time.
 
-import { hasOpenLayer, stepOpenLayer } from "../dismissals";
 import { onLocaleChange, t } from "../i18n";
-import type { MessageKey } from "../i18n/zh-TW";
+import { confirmDelete } from "../member-dialogs";
 import type { NavStep } from "../nav-history";
 import type { AppContext, DeviceSettings } from "../types";
-import { closeMenu } from "../ui";
-import { createView, type Pressed, type TourView, type ViewModel } from "./view";
-import { COMPOSER, COMPOSER_FIELD, STEPS, askKeys, boxOf, firstShown, spotOf, tourMinutes, type TourStep } from "./steps";
-
-const say = t as unknown as (key: MessageKey, values?: Record<string, string | number>) => string;
+import { closeMenu, holdMenuOpen } from "../ui";
+import { CAPTION_CONTROLS, createView, type Pressed, type TourView, type ViewModel } from "./view";
+import { COMPOSER, STEPS, askKeys, boxOf, firstShown, spotOf, type TourStep } from "./steps";
 
 export type TourHost = Pick<AppContext, "closeSettings"> & {
   device(): DeviceSettings;
@@ -27,6 +24,7 @@ type Phase = "idle" | "offer" | "step" | "bye";
 
 export const OFFER_DELAY_MS = 700;
 export const BYE_MS = 4500;
+const ACTION_WAIT_MS = 4000;
 
 const account = (): HTMLElement | null => firstShown("#nav .sidebar-account");
 
@@ -36,11 +34,14 @@ export function createTour(host: TourHost): Tour {
   let list: TourStep[] = [];
   let at = 0;
   let answered = false;
-  let done = false;
+  let state: NonNullable<ViewModel["state"]> = "ask";
   let openedAtEntry: HTMLElement | null = null;
   let completedField: Element | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let settle: ReturnType<typeof setTimeout> | undefined;
+  let actionWait: ReturnType<typeof setTimeout> | undefined;
+  let actionDeadline = 0;
+  let confirmation: { scrim: HTMLElement; releaseMenu: () => void } | null = null;
   let unlisten: (() => void) | undefined;
 
   const sidebarFoot = () => firstShown("#nav .side-foot", { includeInert: true });
@@ -58,6 +59,7 @@ export function createTour(host: TourHost): Tour {
   const keepClear = () => [stepNow()?.target?.(), opened()]
     .flatMap(element => element ? [boxOf(element)] : []);
   const stepNow = () => list[at];
+  const operable = () => state === "ask" || stepNow()?.id === "composer" ? stepNow()?.target?.() ?? null : null;
   const opened = (): HTMLElement | null => {
     const panel = stepNow()?.opened?.() ?? null;
     if (!panel) openedAtEntry = null;
@@ -68,25 +70,24 @@ export function createTour(host: TourHost): Tour {
     const label = t("tour.label");
     if (phase === "offer") {
       return {
-        mode: "offer", text: t("tour.offer", { minutes: tourMinutes(STEPS.length) }), label,
+        mode: "offer", text: t("tour.offer"), label,
         buttons: [{ id: "skip", label: t("tour.skip") }, { id: "start", label: t("tour.start"), primary: true }],
         locate: anchorSpot, prefer: ["above"], align: "start", origin, keepControlsClear,
       };
     }
-    if (phase === "bye") return { mode: "bye", text: t("tour.bye"), label, buttons: [], locate: anchorSpot, prefer: ["above"], align: "start", origin, keepControlsClear };
+    if (phase === "bye") return { mode: "bye", text: t("tour.bye"), label, buttons: [], celebrate: true, locate: anchorSpot, prefer: ["above"], align: "start", origin, keepControlsClear };
     const step = stepNow()!;
     const last = at === list.length - 1;
     const buttons: ViewModel["buttons"] = [];
     if (at > 0) buttons.push({ id: "back", label: t("tour.back") });
-    const state = step.followup ? (done ? "done" : "ask") : "look";
-    const readyToFinish = last && state !== "ask";
-    buttons.push({ id: readyToFinish ? "done" : "next", label: t(readyToFinish ? "tour.done" : "tour.next"), primary: state !== "ask" });
+    if (state !== "ask") buttons.push({ id: last ? "done" : "next", label: t(last ? "tour.done" : "tour.next"), primary: true });
+    const line = state === "done" && step.followup ? step.followup : step.text;
     return {
-      mode: "step", step: step.id, state, label,
-      text: say(done && step.followup ? step.followup : step.text, { ask: t("chat.modeAsk") }),
+      mode: "step", step: step.id, state, label, title: t(step.title), closeLabel: t("tour.close"),
+      text: line === "tour.permissionDone" ? t(line, { ask: t("chat.modeAsk") }) : t(line),
       ...(step.keys ? { keys: askKeys(host.device()) } : {}),
-      progress: { shown: (at + 1) + "/" + list.length, label: t("tour.progress", { current: at + 1, total: list.length }) },
-      buttons, closeLabel: t("tour.close"),
+      progress: { current: at + 1, total: list.length, label: t("tour.progress", { current: at + 1, total: list.length }) },
+      buttons, control: operable,
       locate: () => {
         const panel = opened();
         const target = panel ?? step.target?.();
@@ -97,26 +98,32 @@ export function createTour(host: TourHost): Tour {
     };
   }
 
-  function draw(hop: boolean): void {
-    view ??= createView(pressed, move);
-    view.render(model(), { hop });
+  function draw(hop: boolean): number {
+    view ??= createView(pressed, watchAction);
+    const delay = view.render(model(), { hop });
     clearTimeout(settle);
     if (phase === "step") settle = setTimeout(check, 260);
+    return delay;
   }
 
   function check(): void {
+    if (confirmation) return;
     if (phase === "step") {
-      const step = stepNow();
-      if (step?.id === "composer") {
-        if (document.activeElement?.matches(COMPOSER_FIELD)) completedField = document.activeElement;
-        if (!completedField?.isConnected || !step.target?.()?.contains(completedField)) completedField = null;
+      const step = stepNow()!;
+      const target = step.target?.() ?? null;
+      if (step.id === "composer") {
+        if (target && document.activeElement === target) completedField = target;
+        if (completedField !== target) completedField = null;
       }
-      const complete = !!completedField || !!opened();
-      if (complete !== done) {
-        done = complete;
-        draw(true);
+      const next = !step.followup ? "look" : completedField || opened() ? "done" : !target || state === "fallback" ? "fallback" : "ask";
+      if (next !== state) {
+        clearActionWait();
+        state = next;
+        draw(next === "done" || next === "ask");
+        view?.keepFocus(operable());
         return;
       }
+      view?.keepFocus(operable());
     }
     view?.reflow();
   }
@@ -137,17 +144,32 @@ export function createTour(host: TourHost): Tour {
     }
   }
 
-  function arrive(direction: 1 | -1): void {
-    while (list[at]?.target && !list[at]!.target!()) {
-      list.splice(at, 1);
-      if (direction < 0) at = Math.max(0, at - 1);
-    }
-    const step = stepNow();
-    if (!step) { finish(); return; }
-    done = false;
+  function clearActionWait(): void {
+    clearTimeout(actionWait);
+    actionWait = undefined;
+  }
+
+  function watchAction(delay = ACTION_WAIT_MS): void {
+    if (state !== "ask" || actionWait !== undefined) return;
+    actionDeadline = Date.now() + delay;
+    actionWait = setTimeout(() => {
+      actionWait = undefined;
+      check();
+      if (state !== "ask") return;
+      state = "fallback";
+      draw(false);
+      view?.keepFocus(operable());
+    }, delay);
+  }
+
+  function arrive(): void {
+    const step = stepNow()!;
+    clearActionWait();
+    state = !step.followup ? "look" : step.target?.() ? "ask" : "fallback";
     completedField = null;
     openedAtEntry = step.opened?.() ?? null;
     draw(true);
+    view?.keepFocus(operable());
   }
 
   function closeOpened(): void {
@@ -166,35 +188,77 @@ export function createTour(host: TourHost): Tour {
     closeOpened();
     const delta = direction === "back" ? -1 : 1;
     at += delta;
-    arrive(delta);
+    arrive();
+  }
+
+  function rememberAnswer(): void {
+    answered = true;
+    void host.setDevice({ tour_offered: true }).catch(error => console.warn("tour: the answer could not be remembered", error));
+  }
+
+  async function askToLeave(button: "skip" | "close"): Promise<void> {
+    const skip = button === "skip";
+    const remaining = actionWait === undefined ? undefined : Math.max(0, actionDeadline - Date.now());
+    clearActionWait();
+    const words = {
+      title: t(skip ? "tour.skipTitle" : "tour.closeTitle"),
+      hint: t(skip ? "tour.skipHint" : "tour.closeHint"),
+      action: t(skip ? "tour.skip" : "tour.close"),
+    };
+    const releaseMenu = holdMenuOpen();
+    const answer = confirmDelete("", { words, quiet: true });
+    // The shared confirmation mounts synchronously and focuses Cancel.
+    const scrims = document.querySelectorAll<HTMLElement>(".mb-scrim:has(> .mb-confirm.mb-delete.is-quiet)");
+    const scrim = scrims[scrims.length - 1]!;
+    scrim.classList.add("tour-confirm");
+    const pending = { scrim, releaseMenu };
+    confirmation = pending;
+    view?.setConfirmation(scrim);
+    const confirmed = await answer;
+    if (confirmation !== pending) return;
+    confirmation = null;
+    releaseMenu();
+    view?.setConfirmation(null);
+    if (confirmed) {
+      if (skip) rememberAnswer();
+      stop();
+      return;
+    }
+    view?.focusButton(button);
+    if (remaining !== undefined) watchAction(remaining);
+    check();
   }
 
   function pressed(button: Pressed): void {
-    if (phase === "offer" && (button === "start" || button === "skip")) {
-      answered = true;
-      void host.setDevice({ tour_offered: true }).catch(error => console.warn("tour: the answer could not be remembered", error));
-      if (button === "skip") { finish(); return; }
-      list = STEPS.filter(step => (!step.target || !!step.target()) && (!step.keys || askKeys(host.device()).length > 0));
+    if (confirmation) return;
+    if (phase === "offer" && button === "start") {
+      rememberAnswer();
+      list = STEPS.filter(step => !step.keys || askKeys(host.device()).length > 0);
       at = 0;
       phase = "step";
-      arrive(1);
+      arrive();
       return;
     }
-    if (button === "dismiss") close();
-    else if (button === "close" || button === "done" || button === "next" && at === list.length - 1) finish();
-    else if (button === "back" || button === "next") move(button === "back" ? "back" : "forward");
+    if (phase === "offer" && button === "skip" || phase === "step" && button === "close") void askToLeave(button);
+    else if (button === "dismiss") close();
+    else if (phase === "step" && button === "back") move("back");
+    else if (phase === "step" && state !== "ask") {
+      if (button === "done") finish();
+      else if (button === "next") move("forward");
+    }
   }
 
   function finish(): void {
-    if (phase === "step") closeOpened();
+    closeOpened();
+    clearActionWait();
     phase = "bye";
-    draw(true);
-    timer = setTimeout(close, BYE_MS);
+    timer = setTimeout(close, BYE_MS + draw(true));
   }
 
   function clear(): TourView | null {
     clearTimeout(timer);
     clearTimeout(settle);
+    clearActionWait();
     timer = undefined;
     unlisten?.();
     unlisten = undefined;
@@ -210,31 +274,45 @@ export function createTour(host: TourHost): Tour {
   }
 
   function stop(): void {
+    if (confirmation) {
+      confirmation.scrim.querySelector<HTMLElement>('[data-dlg="cancel"]')?.click();
+      confirmation.releaseMenu();
+      confirmation = null;
+    }
     if (phase === "step") closeOpened();
     clear()?.destroy();
   }
 
   function walkKey(event: KeyboardEvent): void {
-    if (phase !== "step" || event.isComposing || event.defaultPrevented) return;
-    if (event.key === "Escape" && !hasOpenLayer()) {
-      event.preventDefault();
+    const modified = event.altKey || event.ctrlKey || event.metaKey;
+    if (confirmation) {
+      if (event.type === "keydown" && (event.key === "Escape" || event.key === "Tab" && !modified)) return;
+      const activatesButton = !modified && (event.key === "Enter" || event.key === " ") &&
+        event.target instanceof Node && confirmation.scrim.contains(event.target);
+      if (!activatesButton) event.preventDefault();
       event.stopImmediatePropagation();
-      finish();
       return;
     }
-    if (!(event.target instanceof Node) || !view?.contains(event.target) || event.altKey || event.ctrlKey || event.metaKey) return;
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    if (phase !== "step" || event.isComposing) return;
+    const target = operable();
+    if (event.key === "Tab" && event.type === "keydown" && !modified) {
+      view?.tab(target, event.shiftKey);
+    } else if (event.key !== "Escape" && event.key !== "Tab" && event.target instanceof Element) {
+      if (target?.contains(event.target)) return;
+      if (view?.contains(event.target) || event.target.closest(CAPTION_CONTROLS)) {
+        // Keep native button activation while keeping keys out of other open surfaces.
+        event.stopImmediatePropagation();
+        return;
+      }
+    }
     event.preventDefault();
     event.stopImmediatePropagation();
-    move(event.key === "ArrowLeft" ? "back" : "forward");
   }
 
   /** The window's own layer handlers get the key first. */
   function quietKey(event: KeyboardEvent): void {
-    if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return;
-    if (phase === "step" && opened() && stepOpenLayer("back")) return;
-    if (phase === "offer" || phase === "step") finish();
-    else if (phase === "bye") close();
+    if (confirmation || event.key !== "Escape" || event.isComposing || event.defaultPrevented) return;
+    if (phase === "offer" || phase === "bye") close();
   }
 
   function listen(): void {
@@ -251,6 +329,7 @@ export function createTour(host: TourHost): Tour {
     window.addEventListener("resize", schedule);
     window.addEventListener("scroll", schedule, true);
     window.addEventListener("keydown", walkKey, true);
+    window.addEventListener("keyup", walkKey, true);
     window.addEventListener("keydown", quietKey);
     const language = onLocaleChange(() => draw(false));
     unlisten = () => {
@@ -260,18 +339,11 @@ export function createTour(host: TourHost): Tour {
       window.removeEventListener("resize", schedule);
       window.removeEventListener("scroll", schedule, true);
       window.removeEventListener("keydown", walkKey, true);
+      window.removeEventListener("keyup", walkKey, true);
       window.removeEventListener("keydown", quietKey);
       language();
     };
   }
 
-  function navigate(direction: NavStep): boolean {
-    if (phase !== "step") return false;
-    if (opened()) return stepOpenLayer("back");
-    if (hasOpenLayer() && stepOpenLayer(direction)) return true;
-    move(direction);
-    return true;
-  }
-
-  return { offerOnce, active: () => phase !== "idle", navigate, stop };
+  return { offerOnce, active: () => phase !== "idle", navigate: () => phase === "step" || !!confirmation, stop };
 }

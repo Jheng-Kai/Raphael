@@ -189,14 +189,14 @@ export interface ConfirmWords { title: string; hint: string; action: string }
  * A member's own says that the member and its conversation go for good. Nothing is asked about what the deletion also clears
  * (a member's computer is the app's to remove, without a word to the owner). The focus starts on Cancel, so Enter never deletes.
  */
-export function confirmDelete(name: string, options: { member?: boolean; words?: ConfirmWords } = {}): Promise<boolean> {
+export function confirmDelete(name: string, options: { member?: boolean; words?: ConfirmWords; quiet?: boolean } = {}): Promise<boolean> {
   return new Promise((resolve) => {
     let answer = false;
     openDialog({
       title: options.words?.title ?? t("members.deleteConfirm", { p0: name }),
       body: `<p>${esc(options.words?.hint ?? t(options.member ? "members.deleteForever" : "members.deleteHint"))}</p>`,
       describedByBody: true,
-      cls: "mb-confirm mb-delete",
+      cls: options.quiet ? "mb-confirm mb-delete is-quiet" : "mb-confirm mb-delete",
       noClose: true,
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(options.words?.action ?? t("members.delete")), attrs: ' data-dlg="delete"' } },
       onAct(act, _target, dialog) {

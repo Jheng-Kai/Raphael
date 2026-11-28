@@ -1,7 +1,6 @@
 // Targets and results of the guided tour, in the order Raphael introduces them.
 
 import { bindingLabels } from "../keys";
-import type { MessageKey } from "../i18n/zh-TW";
 import type { DeviceSettings } from "../types";
 import type { Box, Side } from "./place";
 
@@ -12,8 +11,9 @@ export interface Spot { box: Box; radius: number }
 
 export interface TourStep {
   id: StepId;
-  text: MessageKey;
-  followup?: MessageKey;
+  title: `tour.${StepId}Title`;
+  text: `tour.${StepId}`;
+  followup?: `tour.${Exclude<StepId, "team" | "keys">}Done`;
   target?: () => HTMLElement | null;
   opened?: () => HTMLElement | null;
   prefer: readonly Side[];
@@ -52,23 +52,21 @@ export const COMPOSER = ".page-agent:not([hidden]) .composer";
 export const COMPOSER_FIELD = COMPOSER + " .cmp-input";
 
 export const STEPS: readonly TourStep[] = [
-  { id: "composer", text: "tour.composer", followup: "tour.composerDone", target: () => firstShown(COMPOSER), prefer: ["above", "right"], pad: 6 },
-  { id: "permission", text: "tour.permission", followup: "tour.permissionDone", target: () => firstShown(COMPOSER + " .cmp-mode"),
+  { id: "composer", title: "tour.composerTitle", text: "tour.composer", followup: "tour.composerDone",
+    target: () => firstShown(COMPOSER_FIELD), prefer: ["above", "right"], pad: 6 },
+  { id: "permission", title: "tour.permissionTitle", text: "tour.permission", followup: "tour.permissionDone", target: () => firstShown(COMPOSER + " .cmp-mode:not(:disabled)"),
     opened: () => firstShown(".cb-menu:has(.cb-modes)"), prefer: ["above"], pad: 4 },
-  { id: "model", text: "tour.model", followup: "tour.modelDone", target: () => firstShown(COMPOSER + " .cmp-model:has(.mp-trigger:not(:disabled))"),
+  { id: "model", title: "tour.modelTitle", text: "tour.model", followup: "tour.modelDone", target: () => firstShown(COMPOSER + " .cmp-model .mp-trigger:not(:disabled)"),
     opened: () => firstShown(".cb-menu:has(.cb-now)"),
     prefer: ["above"], pad: 4 },
-  { id: "apps", text: "tour.apps", followup: "tour.appsDone", target: () => firstShown("#nav .sidebar-apps"),
+  { id: "apps", title: "tour.appsTitle", text: "tour.apps", followup: "tour.appsDone", target: () => firstShown("#nav .sidebar-apps"),
     opened: () => firstShown('.modal-scrim[data-standalone="connections"] > .modal'),
     prefer: ["right", "above"], pad: 4 },
-  { id: "team", text: "tour.team", target: () => firstShown("#nav .sidebar-conversations"), prefer: ["right"] },
-  { id: "account", text: "tour.account", followup: "tour.accountDone", target: () => firstShown("#nav .sidebar-account"),
+  { id: "team", title: "tour.teamTitle", text: "tour.team", target: () => firstShown("#nav .sidebar-conversations"), prefer: ["right"] },
+  { id: "account", title: "tour.accountTitle", text: "tour.account", followup: "tour.accountDone", target: () => firstShown("#nav .sidebar-account"),
     opened: () => firstShown(".account-menu"), prefer: ["above"], pad: 4 },
-  { id: "keys", text: "tour.keys", prefer: ["inside"], keys: true },
+  { id: "keys", title: "tour.keysTitle", text: "tour.keys", prefer: ["inside"], keys: true },
 ];
-
-export const SECONDS_PER_STEP = 15;
-export const tourMinutes = (steps: number): number => Math.max(1, Math.round(steps * SECONDS_PER_STEP / 60));
 
 /** The first shortcut that asks Raphael, in the words of the window. */
 export function askKeys(device: Pick<DeviceSettings, "agent_keys">): string[] {
