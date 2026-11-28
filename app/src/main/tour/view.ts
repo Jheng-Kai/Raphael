@@ -50,6 +50,8 @@ export interface ViewModel {
 export interface TourView {
   render(model: ViewModel, options: { hop: boolean }): number;
   hideOffer(): void;
+  /** The instruction is done with: its words fade out where they stand, and the bubble stays empty until the next words land. */
+  hush(): void;
   /** Measures the target and places the group again, without a hop. */
   reflow(): void;
   contains(node: Node | null): boolean;
@@ -66,6 +68,8 @@ const SLIME = 64;
 const GROUND_INSET = 16;
 /** The narrowest the bubble gets to stand beside an open layer. */
 const MIN_BUBBLE = 200;
+/** How long the words being left fade out in place (tour.css `tour-words-out`, with a little room). */
+const GHOST_MS = 220;
 // The 64 px portrait has padding around its drawing. Anchor the pose and light at the drawn foot.
 const FOOT = 52;
 const BODY_HEIGHT = 40;
@@ -282,17 +286,33 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
 
   const buttons = () => [...bubble.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
 
+  /** A copy of the words on screen fades out in place, so moving on never makes them vanish at once. */
+  function fadeWords(): void {
+    if (reducedMotion() || bubble.classList.contains("is-hushed") || !bubble.childElementCount) return;
+    const ghost = bubble.cloneNode(true) as HTMLElement;
+    ghost.classList.remove("is-arriving");
+    ghost.classList.add("tour-ghost");
+    for (const name of ["role", "tabindex", "aria-label"]) ghost.removeAttribute(name);
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.inert = true;
+    root.append(ghost);
+    setTimeout(() => ghost.remove(), GHOST_MS);
+  }
+
   return {
     render(next, { hop }) {
       clearTimeout(leaving);
       root.classList.remove("is-leaving");
-      if (root.inert) {
+      const covered = root.inert;
+      if (covered) {
         root.inert = false;
         root.classList.remove("is-covered");
         placed = null;
         cancelMotion();
       }
       const first = model === null;
+      if (hop && !first && !covered) fadeWords();
+      bubble.classList.remove("is-hushed");
       const celebrate = !!next.celebrate && model?.mode !== "bye";
       model = next;
       root.dataset.mode = next.mode;
@@ -313,6 +333,10 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
     hideOffer() {
       root.inert = true;
       root.classList.add("is-covered");
+    },
+    hush() {
+      fadeWords();
+      bubble.classList.add("is-hushed");
     },
     reflow() { if (model) apply(model, false); },
     contains(node) { return !!node && root.contains(node); },

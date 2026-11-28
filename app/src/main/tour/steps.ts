@@ -4,10 +4,10 @@ import { bindingLabels } from "../keys";
 import type { DeviceSettings } from "../types";
 import type { Box, Side } from "./place";
 
-type StepId = "permission" | "model" | "model-list" | "apps" | "team" | "account" | "dictation" | "calendar" | "raphael" | "keys";
-type Line = "permission" | "model" | "modelList" | "apps" | "team" | "account" | "dictation" | "calendar" | "raphael" | "keys";
-type Seen = "permissionSeen" | "modelListSeen" | "appsSeen" | "teamSeen" | "dictationSeen" | "calendarSeen" | "raphaelSeen";
-type Title = "permission" | "model" | "apps" | "team" | "account" | "dictation" | "calendar" | "raphael" | "keys";
+type StepId = "member" | "computer" | "member-settings" | "apps" | "model" | "model-list" | "account" | "dictation" | "calendar" | "raphael" | "keys";
+type Line = "member" | "computer" | "memberSettings" | "apps" | "model" | "modelList" | "account" | "dictation" | "calendar" | "raphael" | "keys";
+type Seen = "memberSeen" | "computerSeen" | "memberSettingsSeen" | "appsSeen" | "modelListSeen" | "dictationSeen" | "calendarSeen" | "raphaelSeen";
+type Title = "member" | "computer" | "memberSettings" | "apps" | "model" | "account" | "dictation" | "calendar" | "raphael" | "keys";
 export type Layer = keyof typeof LAYERS;
 
 /** The target's box with the room round it and the corner radius of the cut-out. */
@@ -67,6 +67,7 @@ export const COMPOSER = ".page-agent:not([hidden]) .composer";
 export const COMPOSER_FIELD = COMPOSER + " .cmp-input";
 export const SEND = COMPOSER + " .cmp-send:not(:disabled)";
 export const ACTION_MODE = COMPOSER + " .cmp-mode:not(:disabled)";
+export const MODEL_TRIGGER = COMPOSER + " .cmp-model .mp-trigger:not(:disabled)";
 export const LAYERS = {
   permission: ".cb-menu:has(.cb-modes)",
   model: ".cb-menu:has(.cb-now)",
@@ -74,6 +75,9 @@ export const LAYERS = {
   team: ".mb-scrim > .cr-dialog",
   account: ".account-menu",
   settings: '.modal-scrim[data-page="settings"]:not([data-standalone]) > .modal',
+  /** The slime's own panel beside its conversation, and its settings in the page. */
+  details: ".page-agent:not([hidden]) .mb-det:not([hidden])",
+  memberSettings: ".page-agent:not([hidden]) .ms-pane",
 } as const;
 
 /** The page area beside the sidebar, lit while a page the account menu opened is looked at. */
@@ -107,18 +111,22 @@ export function pressableBoxes(layer: HTMLElement): Box[] {
   });
 }
 
+// What sets this app apart comes first: each slime is someone of its own, with its panel, its own computer and its settings, and it
+// works in the owner's apps. Then the model that thinks, the tools behind the avatar, and Raphael itself last.
 export const STEPS: readonly TourStep[] = [
-  { id: "permission", title: "tour.permissionTitle", text: "tour.permission", seen: "tour.permissionSeen",
-    target: ACTION_MODE, opens: "permission", prefer: ["above"], pad: 4 },
-  { id: "model", title: "tour.modelTitle", text: "tour.model", target: COMPOSER + " .cmp-model .mp-trigger:not(:disabled)",
-    opens: "model", prefer: ["above"], pad: 4 },
+  { id: "member", title: "tour.memberTitle", text: "tour.member", seen: "tour.memberSeen",
+    target: ".page-agent:not([hidden]) .conversation-trigger", opens: "details", prefer: ["below", "left"], pad: 4 },
+  { id: "computer", title: "tour.computerTitle", text: "tour.computer", seen: "tour.computerSeen",
+    target: LAYERS.details + ' [data-det="tab"][data-tab="computer"]', layer: "details",
+    reacted: () => !!firstShown(LAYERS.details + ' [data-tab="computer"][aria-selected="true"]'), prefer: ["left", "below"], pad: 2 },
+  { id: "member-settings", title: "tour.memberSettingsTitle", text: "tour.memberSettings", seen: "tour.memberSettingsSeen",
+    target: LAYERS.details + ' [data-det="gear"]', layer: "details", opens: "memberSettings", prefer: ["left", "below"], pad: 2 },
+  { id: "apps", title: "tour.appsTitle", text: "tour.apps", seen: "tour.appsSeen",
+    target: "#nav .sidebar-apps", opens: "apps", prefer: ["right", "above"], pad: 4 },
+  { id: "model", title: "tour.modelTitle", text: "tour.model", target: MODEL_TRIGGER, opens: "model", prefer: ["above"], pad: 4 },
   { id: "model-list", title: "tour.modelTitle", text: "tour.modelList", seen: "tour.modelListSeen",
     target: LAYERS.model + ' .cb-pick[data-cb-act="models"]', layer: "model",
     reacted: () => !!firstShown('.cb-menu .cb-body[data-view="models"]'), prefer: ["left", "right"] },
-  { id: "apps", title: "tour.appsTitle", text: "tour.apps", seen: "tour.appsSeen",
-    target: "#nav .sidebar-apps", opens: "apps", prefer: ["right", "above"], pad: 4 },
-  { id: "team", title: "tour.teamTitle", text: "tour.team", seen: "tour.teamSeen",
-    target: '#nav [data-col="add"]', opens: "team", prefer: ["right", "below"], pad: 4 },
   { id: "account", title: "tour.accountTitle", text: "tour.account",
     target: "#nav .sidebar-account", opens: "account", prefer: ["above"], pad: 4 },
   // Each row of the account menu worth knowing is pressed in turn; after a look the tour opens the menu again for the next one.

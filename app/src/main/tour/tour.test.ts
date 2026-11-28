@@ -270,6 +270,8 @@ test("the offer gives up quietly when the account button never appears", async (
 
 const stepId = () => find(".tour")?.dataset.step;
 const state = () => find(".tour")?.dataset.state;
+/** Without the sidebar's plus and Connect apps, the walk starts at the permission chip. */
+const fromPermission = () => { for (const selector of ['[data-col="add"]', ".sidebar-apps"]) find(selector).remove(); };
 const line = (key: TourStep["text"]) => t(key, { name: t("agent.title") });
 
 function wireSteps(showConversation: (shown: boolean) => void) {
@@ -347,17 +349,18 @@ test("every step is one action, and what it opens is lit and explained until 好
   const { create, cancel } = wireSteps(showConversation);
   const row = (id: string) => () => find(`.account-menu [data-account="${id}"]`).click();
   const actions = [
+    () => find('[data-col="add"]').click(),
+    () => find(".sidebar-apps").click(),
     () => find(".cmp-mode").click(),
     () => find(".mp-trigger").click(),
     () => find('[data-cb-act="models"]').click(),
-    () => find(".sidebar-apps").click(),
-    () => find('[data-col="add"]').click(),
     () => find(".sidebar-account").click(),
     row("dictation"), row("calendar"), row("raphael"),
   ];
 
   await begin(tour);
-  expect(STEPS.map(step => step.id)).toEqual(["permission", "model", "model-list", "apps", "team", "account", "dictation", "calendar", "raphael", "keys"]);
+  // What sets the app apart first: making a slime and connecting its apps; then the conversation's controls, the avatar's tools and Raphael.
+  expect(STEPS.map(step => step.id)).toEqual(["team", "apps", "permission", "model", "model-list", "account", "dictation", "calendar", "raphael", "keys"]);
   for (const [index, step] of STEPS.entries()) {
     expect(stepId()).toBe(step.id);
     expect(state()).toBe("do");
@@ -384,8 +387,8 @@ test("every step is one action, and what it opens is lit and explained until 好
     expect(button("gotIt").textContent).toBe("好的");
     expect([...bubble().querySelectorAll("button")].map(el => el.dataset.tour)).toEqual(["close", "gotIt"]);
     expect(spot().hidden).toBe(false);
-    // A page is lit whole, beside the dimmed sidebar.
-    if (step.page) expect(spot().style.left).toBe("348px");
+    // A page is lit whole beside the dimmed sidebar, its frame just inside its edges so the whole ring shows.
+    if (step.page) expect([spot().style.left, spot().style.width]).toEqual(["354px", "760px"]);
     await settle(30000);
     expect(stepId()).toBe(step.id);
     await press("gotIt");
@@ -414,6 +417,7 @@ test("every step is one action, and what it opens is lit and explained until 好
 
 test("an attempted action with no reaction advances after four seconds", async () => {
   const { tour } = harness();
+  fromPermission();
   await begin(tour);
   find(".cmp-mode").click();
   await settle(3999);
@@ -424,9 +428,9 @@ test("an attempted action with no reaction advances after four seconds", async (
 
 test("a missing target skips immediately and keeps the original progress count", async () => {
   const { tour } = harness();
-  find(".cmp-mode").remove();
+  find('[data-col="add"]').remove();
   await begin(tour);
-  expect(stepId()).toBe("model");
+  expect(stepId()).toBe("apps");
   expect(count()).toBe("2/10");
 });
 
@@ -444,6 +448,7 @@ test("an unavailable quick ask still offers Finish after eight seconds", async (
 
 test("the action fallback timer waits for the confirmation to close", async () => {
   const { tour } = harness();
+  fromPermission();
   await begin(tour);
   find(".cmp-mode").click();
   await press("close");
@@ -457,6 +462,7 @@ test("the action fallback timer waits for the confirmation to close", async () =
 test.each(["Cancel", "Escape", "outside press"])("%s from End tour resumes the same step and open layer", async method => {
   const { tour, showConversation } = harness();
   wireSteps(showConversation);
+  fromPermission();
   await begin(tour);
   find(".cmp-mode").click();
   await settle();
@@ -473,6 +479,7 @@ test.each(["Cancel", "Escape", "outside press"])("%s from End tour resumes the s
 test("confirming End tour closes its layer and removes the tour immediately without a goodbye", async () => {
   const { tour, showConversation } = harness();
   wireSteps(showConversation);
+  fromPermission();
   find(".cmp-mode").remove();
   await begin(tour);
   find(".mp-trigger").click();
@@ -487,6 +494,7 @@ test("confirming End tour closes its layer and removes the tour immediately with
 
 test("Tab cycles through the framed control and the close button while outside presses are blocked", async () => {
   const { tour } = harness();
+  fromPermission();
   await begin(tour);
   const mode = find(".cmp-mode");
   const outside = vi.fn(), caption = vi.fn();

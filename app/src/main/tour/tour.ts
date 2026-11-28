@@ -7,7 +7,7 @@ import { raphaelName } from "../raphael";
 import type { AppContext, DeviceSettings } from "../types";
 import { closeMenu, holdMenuOpen } from "../ui";
 import { CAPTION_CONTROLS, createView, type Pressed, type TourView, type ViewModel } from "./view";
-import { COMPOSER, LAYERS, STEPS, askKeys, boxOf, firstShown, pressableBoxes, spotOf, type Layer } from "./steps";
+import { COMPOSER, LAYERS, MODEL_TRIGGER, STEPS, askKeys, boxOf, firstShown, pressableBoxes, spotOf, type Layer } from "./steps";
 
 export type TourHost = Pick<AppContext, "closeSettings" | "onEvent" | "go"> & {
   device(): DeviceSettings;
@@ -33,6 +33,13 @@ const KEYS_WAIT_MS = 8000;
 const COVERING_SCRIMS = ".modal-scrim, .mb-scrim:not(.tour-confirm), .cs-scrim";
 
 const account = (): HTMLElement | null => firstShown("#nav .sidebar-account");
+/** The controls that open the menus a step works in or shows. */
+const MENU_OPENERS: Partial<Record<Layer, () => HTMLElement | null>> = {
+  model: () => firstShown(MODEL_TRIGGER),
+  account,
+};
+/** A menu opened while the window is in the background would close again at once (ui.ts closes menus of an unfocused window). */
+const windowFocused = (): boolean => typeof document.hasFocus !== "function" || document.hasFocus();
 
 export function createTour(host: TourHost): Tour {
   let phase: Phase = "idle";
@@ -40,6 +47,8 @@ export function createTour(host: TourHost): Tour {
   let at = 0;
   /** The step's action is done and what it opened is lit and explained, until the person presses 好的. */
   let seeing = false;
+  /** The person pressed something in what is lit: when that closes it (a pick, its own close), the walk goes on. */
+  let used = false;
   let answered = false;
   let finishReady = false;
   let canFinish = false;
@@ -73,7 +82,9 @@ export function createTour(host: TourHost): Tour {
     const selector = stepNow().target;
     return selector ? firstShown(selector, { includeInert }) : null;
   };
-  const controls = () => pressing ? [pressing] : seeing || wait?.kind === "advance" ? [] : [target()].flatMap(el => el ? [el] : []);
+  // While what a step opened is looked at, it can be used as well: the person tries it while Raphael explains it.
+  const controls = () => pressing ? [pressing] : wait?.kind === "advance" || wait?.kind === "see" ? [] :
+    [seeing ? lookAt() : target()].flatMap(el => el ? [el] : []);
   const openLayer = () => layer(stepNow().opens) ?? layer(stepNow().layer);
   /** What the person looks at once the step's action is done: the page it went to, or what it opened. */
   const lookAt = (): HTMLElement | null => {
@@ -94,7 +105,8 @@ export function createTour(host: TourHost): Tour {
     const step = stepNow()!;
     const progress = { current: at + 1, total: STEPS.length, label: t("tour.progress", { current: at + 1, total: STEPS.length }) };
     if (seeing && step.seen) {
-      const looked = () => { const el = lookAt(); return el ? spotOf(el, step.page ? 0 : 6) : null; };
+      // A page fills the window to its edges: its frame stands just inside it, so the whole ring shows.
+      const looked = () => { const el = lookAt(); return el ? spotOf(el, step.page ? -6 : 6) : null; };
       return {
         mode: "step", step: step.id, label, title: t(step.title), closeLabel: t("tour.close"),
         text: t(step.seen), progress, seeing: true,
@@ -179,11 +191,21 @@ export function createTour(host: TourHost): Tour {
         const opened = layer(step.opens);
         if (opened && step.opens && opened !== priorLayer) ownedLayers.set(step.opens, opened);
         const reacted = (opened !== null && opened !== priorLayer) || step.reacted?.();
+        // The instruction is done with: its words fade at once instead of lingering until Raphael moves on.
+        if (reacted) view?.hush();
         if (reacted && step.seen) setWait("see", REACTION_MS);
         else if (reacted) setWait("advance", REACTION_MS);
-      } else if (!wait && !seeing && step.target && !target()) {
-        advance();
-        return;
+      } else if (!wait && !pressing) {
+        if (seeing && used && !lookAt()) {
+          advance();
+          return;
+        }
+        // A resize, or a switch to another window, closes the app's menus: the step's own menu comes back where it now belongs.
+        if (windowFocused()) reopenMenu();
+        if (!seeing && step.target && !target()) {
+          advance();
+          return;
+        }
       }
       if (step.keys && canFinish && !finishReady) showFinish();
       view?.keepFocus(controls());
@@ -238,7 +260,8 @@ export function createTour(host: TourHost): Tour {
   }
 
   function targetPressed(): void {
-    if (pressing || seeing) return;
+    if (pressing) return;
+    if (seeing) { used = true; return; }
     watchAction();
   }
 
@@ -256,35 +279,60 @@ export function createTour(host: TourHost): Tour {
     try { control?.click(); } finally { pressing = null; }
   }
 
+  /** Closes what a step opened through the window's own way out of it. */
+  function closeLayer(id: Layer, panel: HTMLElement): void {
+    if (id === "apps" || id === "settings") host.closeSettings();
+    else if (id === "team") press(panel.querySelector<HTMLElement>('[data-dlg="cancel"]'));
+    else if (id === "details") press(panel.querySelector<HTMLElement>('[data-det="close"]'));
+    else if (id === "memberSettings") host.go("agent");
+    else closeMenu();
+  }
+
   function closeOpened(keep?: Layer): void {
-    for (const [id, panel] of ownedLayers) {
+    // The slime's settings first: closing them brings its conversation back, and its panel closes after.
+    for (const [id, panel] of [...ownedLayers].sort(([a]) => a === "memberSettings" ? -1 : 0)) {
       if (id === keep) continue;
       ownedLayers.delete(id);
-      if (panel !== layer(id)) continue;
-      if (id === "apps" || id === "settings") host.closeSettings();
-      else if (id === "team") press(panel.querySelector<HTMLElement>('[data-dlg="cancel"]'));
-      else closeMenu();
+      const now = layer(id);
+      if (now && (now === panel || id === "details")) closeLayer(id, now);
     }
   }
 
-  /** The next row of the account menu waits after a look at another row's page: the conversation comes back and the menu opens again. */
-  function reopenAccount(): void {
-    if (stepNow().layer !== "account" || layer("account")) return;
-    if (!host.isConversation()) host.go("agent");
-    press(account());
-    const menu = layer("account");
-    if (menu) ownedLayers.set("account", menu);
+  /** The menu the step works in or shows: the window closes its menus on a resize, and the tour opens this one again. */
+  function neededMenu(): Layer | undefined {
+    const step = stepNow();
+    const id = seeing ? (step.page ? undefined : step.opens ?? step.layer) : step.layer;
+    return id && id in MENU_OPENERS ? id : undefined;
+  }
+
+  /**
+   * Opens the step's menu again from its own control when it is not there: after a look at another row's page of the account
+   * menu (the conversation comes back first), or after a resize or a switch away closed it. The model list is shown again too.
+   */
+  function reopenMenu(): void {
+    const id = neededMenu();
+    if (!id || layer(id)) return;
+    if (id === "account" && !host.isConversation()) host.go("agent");
+    press(MENU_OPENERS[id]!());
+    const menu = layer(id);
+    if (!menu) return;
+    ownedLayers.set(id, menu);
+    if (seeing && stepNow().id === "model-list") press(menu.querySelector<HTMLElement>('[data-cb-act="models"]'));
   }
 
   function arrive(): void {
     clearWait();
     seeing = false;
-    reopenAccount();
+    used = false;
+    reopenMenu();
     while (stepNow().target && !target()) {
       at++;
       closeOpened(stepNow().layer);
     }
     const step = stepNow();
+    // What the step's press opens starts closed (a wide window shows the slime's panel already), so the press opens it.
+    const already = step.opens ? layer(step.opens) : null;
+    if (step.opens && already && step.opens !== step.layer) closeLayer(step.opens, already);
     priorLayer = layer(step.opens);
     draw(true);
     view?.keepFocus(controls());
@@ -294,6 +342,8 @@ export function createTour(host: TourHost): Tour {
   function advance(): void {
     at++;
     closeOpened(stepNow().layer);
+    // A menu the person opened from what they were trying out goes too, unless the next step works in a menu.
+    if (!stepNow().layer) closeMenu();
     arrive();
   }
 
