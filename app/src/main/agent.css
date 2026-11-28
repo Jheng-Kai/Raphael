@@ -593,6 +593,10 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
    without changing the words' metrics. The box is the mark's own width, so that a narrower @ does not make it overflow sideways. */
 .mention-ico { position: absolute; inset-block: 0; inset-inline-start: 0; width: 16px; display: grid; place-items: center; translate: -3px 0; -webkit-text-fill-color: currentColor; }
 .mention-ico .i, .mention-ico .mono { width: 16px; height: 16px; margin: 0; }
+/* Where the mark stands in the @'s own box (a sent bubble, a room message), it ends 2 px before the name, however wide the
+   font draws the @: leaning a fixed 3 px left, it ended exactly where a 13 px @ ends, and a mark drawn to its own edge (the
+   generic app mark of an app with no logo, the owner's Onyx) ran into the name's first letter and read as a broken character. */
+.mention-at > .mention-ico { inset-inline-start: auto; inset-inline-end: 2px; translate: none; }
 /* One slot: 拉斐爾大師 (voice) while the draft is empty; once there is something to send it turns
    into a bare send icon (a level paper plane, no background). */
 .composer .cmp-pair:has(.cmp-send:disabled) .cmp-send, .composer .cmp-pair:has(.cmp-send:not(:disabled)) .cmp-voice { display: none; }

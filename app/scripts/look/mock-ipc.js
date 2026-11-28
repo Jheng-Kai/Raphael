@@ -1361,6 +1361,11 @@ export function installMock(fixture, config = {}, target = window) {
   // every scene that switches, signs in or uninstalls moves the count as the core moves it: an app is connected when its tools can be
   // called now; one that waits for a sign-in, failed, is off, has every tool off, or is a second way to an app that is counted already
   // is listed and never counted. `inventoryUnreadable` is a core that cannot say.
+  // An MCP server the owner added by hand, with no logo of its own (the owner's Onyx knowledge base): its chip draws the generic app mark.
+  if (variant.mentionCustomServer && !data.servers.some(server => server.name === "Onyx")) {
+    data.servers.push({ id: "onyx01", name: "Onyx", transport: "http", url: "https://knowledge.example/mcp", enabled: true, status: "ok", error: null, catalog_id: "",
+      tools: [{ name: "search", enabled: true, description: "Search the knowledge base" }] });
+  }
   const inventory = () => {
     if (variant.inventoryUnreadable) return { state: "unknown", count: null, apps: [] };
     if (variant.mentionMany) return { state: "complete", count: data.mentionServices.filter(app => app.connected).length, apps: data.mentionServices };
