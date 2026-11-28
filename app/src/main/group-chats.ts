@@ -338,6 +338,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const measureAllMessages = messagePreviewMeasure(thread);
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureAllMessages) : null;
   messageResize?.observe(thread);
+  // While an edge is dragged each frame is measured in the frame itself (reading-place.ts followLines).
+  scroll.addEventListener("conversation-measure", () => measureMessagePreviews(thread, { all: true }));
   const finder = mountConversationFind({bar:el.querySelector('.ra-find')!,thread,scroll,
     records: () => roomWindow.before || roomWindow.after ? messages.map(message => ({ key: `message:${message.id}`, texts: message.member_id === null ? [messagePlainText(message.text)] : plainReplies(replyMessages(message.text)).map(text => messagePlainText(text, true, composioAction(message.turn))) })) : undefined,
     reveal: key => { releaseRichScroll(scroll); if (roomWindow.focus(key)) draw(); }, load:async current=>{

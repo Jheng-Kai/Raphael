@@ -37,8 +37,13 @@ root and `--pa-det` on the page, which every element beneath inherits: each move
 window for its cursor and its press (`edge-drag.ts`); it no longer sets `cursor` and `user-select` on the root. `resize-probe`
 (`scripts/look/resize-probe.mjs`) drags an edge out and back, or toggles a pane, and reports frames, style and layout work, the
 elements each write restyled (`recalcElementsPerWrite`), ResizeObserver runs and how the words moved (read where the owner sees
-them, after the app's own observers). `LOOK_RESIZE_THROTTLE=4` runs it with a CPU four times slower, `LOOK_INVALIDATIONS=1` names
-what invalidated the styles and `LOOK_SERIES=1` lists each word's jumps.
+them, after the app's own observers; the probe makes its observer again once the edge is held, so it is told after the drag's own).
+With `anchor` (R-PERF-27) it also reports how far any text of the conversation reaches past the area between the panes
+(`overflowMax`, `hscrollMax`), how far the line the owner reads moves (`anchorDrift`: the distance of a thread at its bottom from its end, otherwise
+the top of the first line whole in view), words that jump one way and back in the next frame (`flicker`), how often the column's width changed (`colSteps`) and whether every change was a whole
+number of steps (`colOffGrid`, 0), the work of each frame up to its layout
+(`workMsP95`, `workMsMax`) and, with `shots`, photographs of the window taken while the hand holds the edge. `LOOK_RESIZE_THROTTLE=4` runs it with a CPU four times slower, `LOOK_INVALIDATIONS=1` names
+what invalidated the styles, `LOOK_SERIES=1` lists each word's jumps and the line read's top for every frame, and `LOOK_CPUPROFILE=1` lists the script time of the press by function.
 
 ## Selected rendered verification
 
@@ -49,7 +54,7 @@ maps supply these representative consumers. Use both themes and all three sizes:
 npm run look -- slime-states slime-gallery slime-liquid-sheet slime-liquid-still slime-parts slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-characters-at-rest slime-sizes slime-pointer presence-states-sidebar busy-team-thread busy-team-room busy-team-typing busy-team-follow busy-team-anchor thread-new-divider-stays rich-code rich-diagram conversation-chief-up conversation-member-up conversation-room-up automations-calendar dictation-overview dictation-notice cli-account-disconnect-ask overlay-confirm-short-120 overlay-confirm-long-150 --theme both --width 1120,720,1920x1080
 ```
 
-Pane drags and toggles: `npm run look -- sidebar-resize-smooth sidebar-resize-busy sidebar-toggle-smooth panel-resize-smooth panel-resize-busy panel-toggle-smooth --theme both --width 1120,720,1920x1080`.
+Pane drags and toggles: `npm run look -- sidebar-resize-smooth sidebar-resize-reading sidebar-resize-busy sidebar-toggle-smooth panel-resize-smooth panel-resize-reading panel-resize-busy panel-toggle-smooth --theme both --width 1120,720,1920x1080`.
 The list's scenes skip below 860 px, where it is the rail with no edge. Each scene's report carries the frames and the work behind them.
 
 Run judge against that same selected run. The implementation brief delegates look

@@ -703,6 +703,8 @@ export function createAgent(app: AppContext, places?: {
   const measureAllMessages = messagePreviewMeasure(thread);
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureAllMessages) : null;
   void document.fonts?.ready.then(measureAllMessages);
+  // While an edge is dragged each frame is measured in the frame itself, before the line read is put back (reading-place.ts followLines).
+  scroller.addEventListener("conversation-measure", () => measureMessagePreviews(thread, { all: true }));
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let ticker: ReturnType<typeof setInterval> | null = null;
   /** Questions typed here whose turns have not come yet. */

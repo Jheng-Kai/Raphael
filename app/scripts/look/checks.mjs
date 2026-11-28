@@ -4725,6 +4725,32 @@ export function checkRendered(name, context = {}) {
     require(edge.getAttribute('role') === 'separator' && Math.abs(box.left - panel.getBoundingClientRect().left) < 1 && parseFloat(getComputedStyle(edge, '::after').width) === 0, "its left edge drags it, with no handle drawn (only a hairline border)");
     return {check:name, width:Math.round(width)};
   }
+  if (name === "reading-line-before" || name === "reading-line-kept") {
+    // A pane dragged wider rewraps the conversation (R-PERF-27): the first line whole in view stays where it stood, whatever the paragraphs around it do.
+    const scroller = [...document.querySelectorAll('.page-agent .ra-scroll')].find(visible), view = scroller.getBoundingClientRect(), one = document.createRange();
+    if (name === "reading-line-before") {
+      require(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop > 40, "the view is in the middle of the conversation");
+      const walker = document.createTreeWalker(scroller, NodeFilter.SHOW_TEXT);
+      let best = null;
+      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+        if (!text.textContent.trim() || text.parentElement.closest('[hidden], [aria-hidden="true"], svg, textarea, button')) continue;
+        one.selectNodeContents(text);
+        for (const rect of one.getClientRects()) if (rect.width > 4 && rect.top >= view.top && rect.bottom <= view.bottom && (!best || rect.top < best.rect.top)) best = { text, rect };
+      }
+      require(best, "a line is whole in view");
+      let at = 0;
+      for (; at < best.text.length; at++) { one.setStart(best.text, at); one.setEnd(best.text, at + 1); const box = one.getBoundingClientRect(); if (box.width > 0 && Math.abs(box.top - best.rect.top) < 2 && Math.abs(box.left - best.rect.left) < 2) break; }
+      window.__readingLine = { text: best.text, at, offset: best.rect.top - view.top, width: scroller.clientWidth };
+      return { check: name };
+    }
+    const was = window.__readingLine;
+    const panel = document.querySelector('.page-agent .mb-det:not([hidden])');
+    if (panel && getComputedStyle(panel).position !== 'absolute') require(scroller.clientWidth < was.width - 50, `the conversation got narrower: ${was.width} -> ${scroller.clientWidth}`);
+    one.setStart(was.text, was.at); one.setEnd(was.text, was.at + 1);
+    const offset = one.getBoundingClientRect().top - view.top;
+    require(Math.abs(offset - was.offset) <= 1.5, `the line read stays where it stood: ${Math.round(was.offset)} -> ${Math.round(offset)}`);
+    return { check: name, moved: Math.round(offset - was.offset) };
+  }
   if (name === "reading-place-before" || name === "reading-place-kept") {
     // The details panel dragged wider or closed rewraps the conversation without moving what is read.
     const scroller = [...document.querySelectorAll('.page-agent .ra-scroll')].find(visible);

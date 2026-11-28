@@ -970,6 +970,17 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
    moves by half a pixel for each pixel the pane is dragged: its words are drawn a pixel further on every other frame. Its lead is the
    same space rounded down to a whole pixel (the resting layout differs by under half a pixel). Where `round()` is unknown the
    columns keep `margin: auto`. */
+/* While an edge is dragged (reading-place.ts followLines) the reading column's width goes in steps of 24px: the pane's width rounded down to
+   the grid that passes through the width the column had when the edge was taken (`--step-r`), never more than the space the pane leaves, so
+   no word is covered, and the paragraphs wrap again when the width crosses a step, not at every pixel the pointer moves. It is centred in
+   what is left on a whole pixel. Letting go gives it its own width again. */
+@property --step-r { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@supports (width: round(down, 1px, 1px)) {
+  .ra-scroll[data-stepping] > .ra-col {
+    width: min(var(--pa-colw), calc(round(down, calc(100% - var(--step-r)), 24px) + var(--step-r)));
+    margin-inline: max(0px, round(down, calc((100% - min(var(--pa-colw), calc(round(down, calc(100% - var(--step-r)), 24px) + var(--step-r)))) / 2), 1px)) 0;
+  }
+}
 @supports (margin-left: round(down, 1px, 1px)) {
   .page-agent { --col-lead: max(0px, round(down, calc((100% - var(--pa-colw)) / 2), 1px)); }
   .page-agent .ra-col, .page-agent .ra-dock > .composer, .page-agent .ra-dock > .ask-card, .page-agent .ra-dock > .draft-panel, .page-agent .peer-thread { margin-inline: var(--col-lead) 0; }
