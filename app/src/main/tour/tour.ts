@@ -14,6 +14,8 @@ export type TourHost = Pick<AppContext, "closeSettings" | "onEvent" | "go"> & {
   device(): DeviceSettings;
   setDevice(patch: Partial<DeviceSettings>): Promise<unknown>;
   isConversation(): boolean;
+  /** Raphael's keys only report that they went down or up (`Hotkey` events) and start nothing: the last step's practice. */
+  practiseKeys(on: boolean): void;
 };
 
 export interface Tour {
@@ -61,7 +63,6 @@ export function createTour(host: TourHost): Tour {
   let used = false;
   let answered = false;
   let finishReady = false;
-  let canFinish = false;
   let priorLayer: HTMLElement | null = null;
   /** A control the tour presses itself (the maker's Cancel, the account button that opens the menu again). */
   let pressing: HTMLElement | null = null;
@@ -216,7 +217,6 @@ export function createTour(host: TourHost): Tour {
           return;
         }
       }
-      if (step.keys && canFinish && !finishReady) showFinish();
       view?.keepFocus(controls());
     }
     view?.reflow();
@@ -268,14 +268,36 @@ export function createTour(host: TourHost): Tour {
   const askCodes = (): string[] => host.device().agent_keys[0]?.split("+").map(part => part.trim()).filter(Boolean) ?? [];
   /** Which of those keys is held now: each lights up on screen, and all of them down together brings Finish. */
   const held = new Set<number>();
-  function trackKeys(event: KeyboardEvent): void {
-    if (phase !== "step" || !stepNow().keys || confirmation) return;
+  let practising = false;
+  function showHeld(): void {
     const codes = askCodes();
-    const index = codes.findIndex(code => canonicalKey(code) === canonicalKey(event.code) || canonicalKey(code) === canonicalKey(event.key));
-    if (index < 0) return;
-    if (event.type === "keydown") held.add(index); else held.delete(index);
     view?.pressKeys(codes.map((_, at) => held.has(at)));
     if (codes.length && held.size === codes.length) showFinish();
+  }
+  /** A key the window itself sees (the hook takes Raphael's keys first, and reports them as `Hotkey` events instead). */
+  function trackKeys(event: KeyboardEvent): void {
+    if (phase !== "step" || !stepNow().keys || confirmation) return;
+    const index = askCodes().findIndex(code => canonicalKey(code) === canonicalKey(event.code) || canonicalKey(code) === canonicalKey(event.key));
+    if (index < 0) return;
+    if (event.type === "keydown") held.add(index); else held.delete(index);
+    showHeld();
+  }
+  /** What the hook says while the keys are practised: the dictation key alone lights its cap, the whole question lights them all. */
+  function hookKey(kind: string): void {
+    const codes = askCodes();
+    const dictation = new Set((host.device().dictation_keys ?? []).flatMap(binding => binding.split("+")).map(canonicalKey));
+    const ofDictation = codes.flatMap((code, at) => dictation.has(canonicalKey(code)) ? [at] : []);
+    if (kind === "agent_down") codes.forEach((_, at) => held.add(at));
+    else if (kind === "agent_up") held.clear();
+    else if (kind === "dictation_down") ofDictation.forEach(at => held.add(at));
+    else if (kind === "dictation_up") ofDictation.forEach(at => held.delete(at));
+    else return;
+    showHeld();
+  }
+  function practise(on: boolean): void {
+    if (practising === on) return;
+    practising = on;
+    host.practiseKeys(on);
   }
 
   function watchAction(): void {
@@ -358,6 +380,7 @@ export function createTour(host: TourHost): Tour {
     if (step.opens && already && step.opens !== step.layer) closeLayer(step.opens, already);
     priorLayer = layer(step.opens);
     held.clear();
+    practise(!!step.keys);
     draw(true);
     view?.keepFocus(controls());
   }
@@ -434,6 +457,7 @@ export function createTour(host: TourHost): Tour {
   function finish(): void {
     closeOpened();
     clearWait();
+    practise(false);
     phase = "bye";
     timer = setTimeout(close, BYE_MS + draw(true));
   }
@@ -442,6 +466,8 @@ export function createTour(host: TourHost): Tour {
     clearTimeout(timer);
     clearTimeout(settle);
     clearWait();
+    // The keys always come back to their real work, however the tour ends.
+    practise(false);
     timer = undefined;
     unlisten?.();
     unlisten = undefined;
@@ -522,9 +548,9 @@ export function createTour(host: TourHost): Tour {
       if (phase === "offer" || phase === "step" || phase === "bye") draw(false);
     });
     const events = host.onEvent(event => {
-      if (phase !== "step" || !stepNow().keys || event.type !== "Dictation" || !event.agent || event.phase !== "listening") return;
-      canFinish = true;
-      if (!confirmation) showFinish();
+      if (phase !== "step" || !stepNow().keys || confirmation) return;
+      if (event.type === "Hotkey") hookKey(event.kind);
+      else if (event.type === "Dictation" && event.agent && event.phase === "listening") showFinish();
     });
     unlisten = () => {
       cancelAnimationFrame(frame);

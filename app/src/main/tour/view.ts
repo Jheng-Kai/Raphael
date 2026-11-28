@@ -5,6 +5,7 @@ import { RAPHAEL_ID, faceHTML } from "../members";
 import { bindNavLayer } from "../nav-layers";
 import { btn, esc, headerCloseButton, reducedMotion, replay } from "../ui";
 import { dimClip } from "./dim";
+import { NUDGE_PX, cheerPlan, facingOf, groundOffset, hopPlan, playHops, popPlan, poseOf, type HopPlan, type PlayingHops, type Rig } from "../slime-hop";
 import { EDGE, GROUP_GAP, SPOT_GAP, placeAroundLayer, placeGroup, placeInside, type Box, type PlaceInput, type Placement, type Side } from "./place";
 import { boxOf, type Spot } from "./steps";
 import "./tour.css";
@@ -76,23 +77,6 @@ const GHOST_MS = 220;
 // The 64 px portrait has padding around its drawing. Anchor the pose and light at the drawn foot.
 const FOOT = 52;
 const BODY_HEIGHT = 40;
-const ANTICIPATION_MS = 80;
-// One jump all the way: a short move is a quick low hop, a long one flies higher and longer (under a second in the air).
-const AIR_BASE_MS = 260;
-const AIR_PER_PX = 0.55;
-const MIN_AIR_MS = 300;
-const MAX_AIR_MS = 820;
-const RISE_PER_PX = 0.3;
-const MIN_RISE = 18;
-const MAX_RISE = 150;
-/** A move smaller than this is a nudge of the layout, not a journey: it is not worth a jump. */
-const NUDGE_PX = 6;
-const LAND_MS = 180;
-const HAPPY_MS = 150;
-const RISE = "cubic-bezier(0.33, 0.67, 0.67, 1)";
-const FALL = "cubic-bezier(0.33, 0, 0.67, 0.33)";
-const FALL_IN_PROGRESS = "cubic-bezier(0.33, 0.16, 0.67, 0.5)";
-const GLOW_OPACITY = "var(--tour-glow-opacity)";
 
 export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: Element) => void): TourView {
   const root = document.createElement("div");
@@ -116,32 +100,26 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
   bindNavLayer(bubble, () => {}, { active: () => model?.mode === "step", step: () => true });
   let placed: Box | null = null;
   let leaving: ReturnType<typeof setTimeout> | undefined;
-  let playing: { plan: MotionPlan; body: Animation; tracks: Animation[] } | null = null;
+  const rig: Rig = { ground, body: slime, glow };
+  let playing: PlayingHops | null = null;
 
   function cancelMotion(): void {
     delete root.dataset.facing;
-    if (!playing) return;
-    playing.body.onfinish = null;
-    for (const track of playing.tracks) track.cancel();
+    playing?.cancel();
     playing = null;
   }
 
-  function play(plan: MotionPlan, facing?: "left" | "right"): void {
+  function play(plan: HopPlan, facing?: "left" | "right"): void {
     root.classList.remove("is-idle");
     // In the air Raphael looks where it is going, turned to its side; it faces the person again once it lands.
     if (facing) root.dataset.facing = facing; else delete root.dataset.facing;
-    const animate = (element: HTMLElement, frames: TimedFrame[]) => element.animate(
-      frames.map(({ time, ...frame }) => ({ ...frame, offset: time / plan.duration })),
-      { duration: plan.duration, fill: "backwards" },
-    );
-    const body = animate(slime, plan.body);
-    playing = { plan, body, tracks: [body, animate(ground, plan.ground), animate(glow, plan.glow)] };
-    body.onfinish = () => {
-      if (playing?.body !== body) return;
+    playing = playHops(rig, plan, () => {
       playing = null;
       delete root.dataset.facing;
       root.classList.add("is-idle");
-    };
+      // Landed: if the place moved on meanwhile, the next hops start from here, again on a straight line.
+      if (model) apply(model, false);
+    });
   }
 
   // Catch presses before the document's outside-press dismissals. The clip supplies pointer hit-testing;
@@ -247,37 +225,30 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
     const clear = anchor && spot ? [spot.box] : [];
     const controls = next.keepControlsClear?.() ?? [];
     const placement = place(next, anchor ?? spot?.box ?? null, clear, controls, layer);
-    const to = placement.slime;
+    // Hops under way keep their course, one straight line from start to end: a move the layout forces meanwhile waits for the
+    // landing (`play` looks again then). Only a new step turns Raphael from where it is.
+    const holdCourse = !hop && !!playing && !!placed;
+    const to = holdCourse ? placed! : placement.slime;
     const moved = placed?.left !== to.left || placed.top !== to.top;
     const canMove = !reducedMotion() && typeof slime.animate === "function";
-    let plan: MotionPlan | undefined;
+    let plan: HopPlan | undefined;
     let facing: "left" | "right" | undefined;
-    // Raphael never appears somewhere else at once: a step jumps, and so does a move the layout forces (a resize, a layer that opened).
+    // Raphael never appears somewhere else at once: a step hops there, and so does a move the layout forces (a resize, a layer that opened).
     const journey = !!placed && Math.hypot(placed.left - to.left, placed.top - to.top) > NUDGE_PX;
     if (canMove && (hop ? moved || next.mode === "step" : journey)) {
       if (placed) {
-        // Read all three poses before cancelling or moving their common anchor.
-        const currentGround = matrixOf(getComputedStyle(ground).transform);
-        const bodyStyle = getComputedStyle(slime), glowStyle = getComputedStyle(glow);
-        const currentBody = matrixOf(bodyStyle.transform), currentGlow = matrixOf(glowStyle.transform);
-        const from = { ...placed, left: placed.left + currentGround.m41, top: placed.top + currentGround.m42 };
-        const time = Number(playing?.body.currentTime);
-        // Raphael always travels the whole way in hops, never jumping in place and reappearing elsewhere.
-        const across = from.left - to.left;
-        if (Math.abs(across) > 24) facing = across > 0 ? "left" : "right";
-        plan = hopPlan(across, from.top - to.top, {
-          y: currentBody.m42, width: Math.hypot(currentBody.m11, currentBody.m12), height: Math.hypot(currentBody.m21, currentBody.m22),
-          tilt: Math.atan2(currentBody.m12, currentBody.m11) * 180 / Math.PI, opacity: bodyStyle.opacity || 1,
-          glowWidth: currentGlow.m11, glowOpacity: glowStyle.opacity || GLOW_OPACITY,
-          falling: playing?.plan.descents.some(([apex, ground]) => time >= apex && time < ground) ?? false,
-        }, Math.max(MIN_RISE, Math.min(MAX_RISE, Math.min(from.top, to.top) - 4)));
+        // Read where the ground and the body are before cancelling or moving their common anchor.
+        const offset = groundOffset(rig);
+        const from = { ...placed, left: placed.left + offset.x, top: placed.top + offset.y };
+        facing = facingOf(from.left - to.left);
+        plan = hopPlan(from.left - to.left, from.top - to.top, { from: poseOf(rig, playing), maxRise: Math.min(from.top, to.top) - 4 });
       } else {
         const from = next.origin();
-        if (from) plan = popPlan(from, to);
+        if (from) plan = popPlan(from, to, { foot: FOOT, bodyHeight: BODY_HEIGHT });
       }
     }
-    if (canMove && celebrate) plan = happyPlan(plan);
-    // A nudge of the layout mid-jump only shifts where the jump lands; stopping it would show Raphael at the end at once.
+    if (canMove && celebrate) plan = cheerPlan(plan);
+    // A nudge of the layout mid-hop only shifts where the hops land; stopping them would show Raphael at the end at once.
     if (!canMove || plan) cancelMotion();
     const ring = next.mode === "step" && spot?.dim ? spot : null;
     // The dim's opening is what is lit; the pulsing frame stays on what is to be pressed (or, while looking, round the lit thing).
@@ -301,7 +272,7 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
     placed = to;
     if (plan) play(plan, facing);
     else if (!playing) root.classList.toggle("is-idle", canMove);
-    return playing ? Math.max(0, playing.plan.arrival - Number(playing.body.currentTime)) : 0;
+    return playing ? Math.max(0, playing.plan.arrival - playing.elapsed()) : 0;
   }
 
   const buttons = () => [...bubble.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
@@ -385,104 +356,4 @@ export function createView(on: (pressed: Pressed) => void, onTargetPress: (el: E
     },
     destroy() { clearTimeout(leaving); cancelMotion(); for (const type of owned) window.removeEventListener(type, own, true); root.remove(); },
   };
-}
-
-type TimedFrame = Keyframe & { time: number };
-type Tracks = { ground: TimedFrame[]; body: TimedFrame[]; glow: TimedFrame[] };
-type MotionPlan = Tracks & { descents: [apex: number, ground: number][]; arrival: number; duration: number };
-
-function matrixOf(transform: string): DOMMatrixReadOnly {
-  return new DOMMatrixReadOnly(transform && transform !== "none" ? transform : undefined);
-}
-
-function shift(time: number, x: number, y: number, easing = "linear"): TimedFrame {
-  return { time, transform: `translate(${x}px, ${y}px)`, easing };
-}
-
-function pose(time: number, y: number, width = 1, height = 1, easing = "linear", tilt = 0, opacity: number | string = 1): TimedFrame {
-  return { time, transform: `translateY(${y}px) rotate(${tilt}deg) scale(${width}, ${height})`, easing, opacity };
-}
-
-function pool(time: number, width = 1, opacity: number | string = GLOW_OPACITY, easing = "linear"): TimedFrame {
-  return { time, transform: `scaleX(${width})`, opacity, easing };
-}
-
-/** A landing has one squash and one rebound before the portrait comes to rest. */
-function land(tracks: Tracks, descents: MotionPlan["descents"], contact: number): MotionPlan {
-  const squash = contact + 35;
-  const duration = contact + LAND_MS;
-  tracks.ground.push(shift(duration, 0, 0));
-  tracks.body.push(pose(contact, 0, 1, 1, "ease-out"), pose(squash, 0, 1.16, 0.84, "ease-out"),
-    pose(contact + 100, 0, 0.97, 1.04, "ease-in-out"), pose(duration, 0));
-  tracks.glow.push(pool(contact, 1, GLOW_OPACITY, "ease-out"), pool(squash, 1, `calc(${GLOW_OPACITY} * 1.16)`, "ease-out"),
-    pool(duration));
-  return { ...tracks, descents, arrival: duration, duration };
-}
-
-interface CurrentPose {
-  y: number; width: number; height: number; tilt: number; opacity: number | string;
-  glowWidth: number; glowOpacity: number | string; falling: boolean;
-}
-
-/**
- * One jump from where Raphael stands to where it goes: the farther, the higher and the longer it flies, never past the top of the
- * window (`maxRise`). The ground light slides along the floor underneath while only the portrait rises.
- */
-function hopPlan(dx: number, dy: number, start: CurrentPose, maxRise = MAX_RISE): MotionPlan {
-  const distance = Math.hypot(dx, dy);
-  const air = Math.round(Math.min(MAX_AIR_MS, Math.max(MIN_AIR_MS, AIR_BASE_MS + distance * AIR_PER_PX)));
-  const rise = Math.round(Math.max(MIN_RISE, Math.min(maxRise, distance * RISE_PER_PX)) * 10) / 10;
-  const tilt = -Math.sign(dx) * 3;
-  const inFlight = start.y !== 0;
-  const falling = inFlight && start.falling;
-  const time = inFlight ? 0 : ANTICIPATION_MS;
-  const ease = falling ? FALL_IN_PROGRESS : inFlight ? RISE : "ease-in-out";
-  const ground = [shift(0, dx, dy)];
-  const body = [pose(0, start.y, start.width, start.height, ease, start.tilt, start.opacity)];
-  const glow = [pool(0, start.glowWidth, start.glowOpacity, ease)];
-  if (!inFlight) {
-    ground.push(shift(time, dx, dy, "ease-in-out"));
-    body.push(pose(time, 0, 1.12, 0.88, RISE));
-    glow.push(pool(time, 1, GLOW_OPACITY, RISE));
-  }
-  const apex = time + (falling ? 0 : air / 2);
-  const contact = time + (falling ? air / 2 : air);
-  if (!falling) {
-    body.push(pose(apex, Math.min(-rise, start.y), 0.94, 1.08, FALL, tilt));
-    glow.push(pool(apex, rise > 60 ? 0.5 : 0.65, `calc(${GLOW_OPACITY} * 0.5)`, FALL));
-  }
-  ground.push(shift(contact, 0, 0));
-  return land({ ground, body, glow }, [[apex, contact]], contact);
-}
-
-/** The goodbye's two hops share the last travel position and begin as its words appear. */
-function happyPlan(travel?: MotionPlan): MotionPlan {
-  const plan = travel ?? { ground: [shift(0, 0, 0)], body: [pose(0, 0, 1, 1, RISE)], glow: [pool(0, 1, GLOW_OPACITY, RISE)],
-    descents: [], arrival: 0, duration: 0 };
-  const start = plan.duration;
-  plan.body[plan.body.length - 1]!.easing = RISE;
-  plan.glow[plan.glow.length - 1]!.easing = RISE;
-  for (let hop = 0; hop < 2; hop++) {
-    const apex = start + (hop + 0.5) * HAPPY_MS;
-    const contact = apex + HAPPY_MS / 2;
-    plan.body.push(pose(apex, -12, 1, 1, FALL), pose(contact, 0, 1, 1, RISE));
-    plan.glow.push(pool(apex, 0.8, `calc(${GLOW_OPACITY} * 0.7)`, FALL), pool(contact, 1, GLOW_OPACITY, RISE));
-    plan.descents.push([apex, contact]);
-  }
-  plan.duration += 2 * HAPPY_MS;
-  plan.ground.push(shift(plan.duration, 0, 0));
-  return plan;
-}
-
-/** Raphael grows from the button's centre and overshoots the ground before touching down. */
-function popPlan(from: Box, to: Box): MotionPlan {
-  const scale = 0.3;
-  const dx = from.left + from.width / 2 - (to.left + to.width / 2);
-  const dy = from.top + from.height / 2 - (to.top + FOOT - BODY_HEIGHT * scale / 2);
-  const apex = 180;
-  return land({
-    ground: [shift(0, dx, 0, RISE), shift(apex, 0, 0)],
-    body: [pose(0, dy, scale, scale, RISE, 0, 0.2), pose(apex, -14, 0.94, 1.08, FALL)],
-    glow: [pool(0, 0.65, 0), pool(apex, 0.65, 0, FALL)],
-  }, [[apex, 250]], 250);
 }

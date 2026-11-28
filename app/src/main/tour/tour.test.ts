@@ -72,11 +72,12 @@ function harness(patch: Partial<DeviceSettings> = {}) {
   const go = vi.fn(() => { find("#main").querySelectorAll(".page-dictation, .au-page, .ms-pane").forEach(page => page.remove()); conversation = true; });
   const listeners = new Set<(event: MainEvent) => void>();
   const emit = (event: MainEvent) => listeners.forEach(listener => listener(event));
-  const tour = createTour({ device: () => device, setDevice, closeSettings, go, isConversation: () => conversation,
+  const practiseKeys = vi.fn();
+  const tour = createTour({ device: () => device, setDevice, closeSettings, go, practiseKeys, isConversation: () => conversation,
     onEvent: listener => { listeners.add(listener); return () => void listeners.delete(listener); } });
   const showConversation = (shown: boolean) => { conversation = shown; tour.conversationChanged(); };
   tours.push(tour);
-  return { tour, device, setDevice, closeSettings, showConversation, emit, go };
+  return { tour, device, setDevice, closeSettings, showConversation, emit, go, practiseKeys };
 }
 
 async function offer(tour: Tour): Promise<void> {
