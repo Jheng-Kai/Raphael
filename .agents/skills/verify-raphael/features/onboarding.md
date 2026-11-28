@@ -123,33 +123,49 @@ persist. Keep sanitized readback and stop the owned dev process.
 
 ## Raphael's guided tour of the window
 
-After the first-run guide Raphael (its blue slime, drawn as the account menu draws it, no crown: the crown is the chief's, R-RAPHAEL-UI-04) springs out of the
-account button at the bottom left and asks whether the newcomer wants a tour, with how many minutes it takes (R-TOUR-01). The code is `app/src/main/tour/`
-(`tour.ts` the state, `view.ts` the dim, cut-out, slime and bubble, `steps.ts` what each step points at, `place.ts` where the group stands, `tour.css`), wired
-in `main.ts` at the guide's `onDone` (the one call of `offerOnce()`) and from the account menu's 導覽 entry (`AppContext.startTour`). The words are `tour.*`
-(`i18n/tour-catalogs.ts`, fifteen languages); the offer is remembered in the device setting `tour_offered`.
+Raphael's blue slime offers a tour after the first-run guide or on an ordinary launch
+with an unanswered offer. Start and Skip save `tour_offered`; Escape leaves it unanswered.
+`app/src/main/tour/` contains the controller, placement and view. The text comes from the
+fifteen `tour.*` catalogues. The tour observes the app's own controls as the person tries them.
 
-- **The offer** (`tour-offer`, `tour-offer-remembered`, `tour-offer-later`, `tour-offer-escape`): the scenes go through the real guide (the fixture's
-  `tourOffer` leaves the setting off; every other onboarding scene is told it was already offered, so that they are unchanged). Raphael stands over the account
-  button with one bubble and two buttons, 之後再說 and 開始; nothing is dimmed or blocked. 之後再說 and Escape turn it into the goodbye line.
-- **The walk** (R-TOUR-02, R-TOUR-03), begun through the account menu's 導覽 from the app's own start: `tour-composer`, `tour-team`, `tour-apps`,
-  `tour-permission`, `tour-model`, `tour-usage`, `tour-skills`, `tour-safety`, `tour-keys` are steps 1 to 9. Each draws a dim with one rounded cut-out on the
-  target, Raphael beside it and a bubble with the count, 上一步, 下一步 (完成 on the last) and a ×. The Settings steps open Settings at 用量, 團隊技能 and 安全 and
-  cut the dialog out whole, Raphael in its lower right; the last step points at nothing and draws the keys that ask Raphael as caps, from the shortcut
-  settings. `tour-back` goes back out of Settings, `tour-end` is 完成 (the goodbye, window working again), `tour-end-closed` the goodbye fading, `tour-escape`
-  and `tour-close` end the walk from inside Settings and from the ×, `tour-hop` runs with motion allowed (Raphael lands beside the next target after 300 ms).
-- **The checks** (`tour-offer`, `tour-bye`, `tour-step-<id>`, `tour-closed`, `tour-closed-window` in `checks.mjs`) measure: Raphael and the bubble inside the window
-  and clear of the caption strip, the bubble on the floating surface and at most 300 px, controls no taller than the control tokens, plain words (no
-  exclamation mark, no title, at most two sentences), the cut-out equal to the target's box with its room and rounded, Raphael and the bubble beside the target and
-  not over it, the sidebar and the page inert, a surface over the whole window that takes a press on the dim, and Settings open at the step's tab or closed.
-- **Skipped steps** are covered by Vitest only (`tour/tour.test.ts`): every look fixture has all its targets, and a scene must not remove one by hand. A target that is not on screen is dropped and the count follows.
+- **The offer** (`tour-offer`, `tour-offer-returning`, `tour-offer-skip`, `tour-offer-escape`):
+  Raphael grows from the account button, overshoots by 14 px at 180 ms and touches down at
+  250 ms, revealing the pool of blue light. The bubble appears after the 80 ms landing at
+  330 ms. The pose settles at 450 ms.
+- **The walk**: `tour-composer`, `tour-permission`, `tour-model`, `tour-apps` and `tour-account`
+  show the highlighted controls while Raphael waits. `tour-composer-done`, `tour-permission-done`,
+  `tour-model-done`, `tour-apps-done` and `tour-account-done` focus or press the same controls
+  and wait for the follow-up and primary Next. The model chip opens its ordinary menu. The
+  icon on the left switches providers, and pressing the model name opens the model list.
+  Connect apps opens its standalone dialog. `tour-back` goes forward from that dialog,
+  checks that it closes, and goes back to the waiting step. `tour-team` and `tour-keys`
+  show the two read-only steps. The last step draws the configured shortcut as key caps.
+  The bubble starts each sentence on a new line and wraps within sentences at up to 300 px.
+  The account step stands above the sidebar foot while highlighting the avatar or its menu.
+- **The motion** (`tour-hop`): the scene enables motion and waits for the offer and the hop
+  to settle. A long hop has 100 ms anticipation, 300 ms in the air, an 80 ms landing and a
+  120 ms settle. A short hop has 35 ms anticipation and 220 ms in the air. Only Raphael arcs
+  up. The glow follows the line between the two ground points, narrowing and dimming at the
+  top of the arc. At rest the shared portrait is 64 px on whole-pixel coordinates. Only the
+  blue light breathes in width and opacity over 2.6 s. Reduced motion places both immediately.
+- **The goodbye** (`tour-end`, `tour-end-closed`, `tour-escape`, `tour-close`): the dim clears,
+  Raphael returns to the sidebar foot, and the group fades.
+- **The checks** in `checks.mjs` verify the settled light is centered just below the foot
+  and stays in its ground box. Every checked tour step samples the dim at all four window
+  corners and at the window centre when outside the cut-out. The portrait, its light and
+  the bubble clear the composer and the sidebar foot controls. The portrait and light
+  also clear the target and any opened surface.
+  On narrow windows where the Connect apps dialog leaves room for the portrait alone, the
+  portrait stands clear of the dialog while the bubble sits over its body. If there is no
+  room for the portrait, the bubble remains available on its own.
+  `tour/view.test.ts` checks keyframes, the bubble's delay, reduced motion and retargeting
+  from the current pose. `tour/tour.test.ts` covers target changes and skipped steps.
 
 ```powershell
-npm run look -- tour-offer tour-offer-remembered tour-offer-later tour-offer-escape tour-composer tour-team tour-apps tour-permission tour-model tour-usage tour-skills tour-safety tour-keys tour-back tour-end tour-end-closed tour-escape tour-close tour-hop foot-account-menu raphael-entry foot-account-keys --theme both --width 1120,720,1920x1080
+npm run look -- tour-offer tour-offer-returning tour-offer-skip tour-offer-escape tour-composer tour-composer-done tour-permission tour-permission-done tour-model tour-model-done tour-apps tour-apps-done tour-team tour-account tour-account-done tour-keys tour-back tour-hop tour-end tour-end-closed tour-escape tour-close --theme both --width 1120,720,1920x1080
 ```
 
-Native proof (not offline): a fresh `RAPHAEL_DATA_DIR`, finish the guide, see the offer once, restart and see it does not come again; the real Right Alt
-keys are read from `device.json`. Raphael's hop is a Web Animations API transform: a WKWebView check on a Mac is unverified.
+Native verification still needs the real window. Look exercises the app with fixture data.
 
 ## Gotchas
 

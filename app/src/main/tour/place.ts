@@ -1,7 +1,7 @@
 // Where Raphael and its bubble stand beside what the tour points at. Pure geometry: the view measures, this decides.
 
 export interface Box { left: number; top: number; width: number; height: number }
-/** The side of the target the group stands on; `inside` is for a target that fills the window (Settings): the group stands in its lower right. */
+/** The side of the target the bubble stands on. It can move inside when a large dialog leaves no room beside it. */
 export type Side = "right" | "left" | "above" | "below" | "inside";
 
 export interface PlaceInput {
@@ -11,13 +11,20 @@ export interface PlaceInput {
   bubble: { width: number; height: number };
   /** Raphael's slime is a square of this side. */
   slime: number;
-  /** The sides to try, best first; the others follow, `inside` last. */
+  /** The light extends beyond both sides of the portrait. */
+  slimeInset?: number;
+  /** Other surfaces to keep clear, such as the control that opened a highlighted dialog. */
+  clear?: readonly Box[];
+  /** The sidebar foot and composer stay clear even when the bubble must overlap the highlighted dialog. */
+  controls?: readonly Box[];
+  slimeFirst?: boolean;
+  /** The sides to try first. */
   prefer: readonly Side[];
   /** Above or below the target Raphael stands over its middle (`center`) or at its left edge (`start`). */
   align?: "center" | "start";
 }
 
-export interface Placement { side: Side; slime: Box; bubble: Box }
+export interface Placement { side: Side; slime: Box; bubble: Box; hideSlime?: boolean }
 
 /** The space between Raphael and its words, and between the group and the target. */
 export const GROUP_GAP = 8;
@@ -31,25 +38,30 @@ const ALL: readonly Side[] = ["right", "above", "left", "below", "inside"];
 const within = (box: Box, view: PlaceInput["view"]): boolean =>
   box.left >= EDGE - 0.5 && box.top >= EDGE_TOP - 0.5 && box.left + box.width <= view.width - EDGE + 0.5 && box.top + box.height <= view.height - EDGE + 0.5;
 
-const touches = (a: Box, b: Box): boolean =>
+export const touches = (a: Box, b: Box): boolean =>
   a.left < b.left + b.width && a.left + a.width > b.left && a.top < b.top + b.height && a.top + a.height > b.top;
 
 const clamp = (value: number, low: number, high: number): number => Math.max(low, Math.min(high, value));
 
+export const groundBox = (slime: Box, inset: number): Box => ({ ...slime, left: slime.left - inset, width: slime.width + 2 * inset });
+
 /** The two boxes of a group, from where its slime stands (`slimeLeft` to its left edge, with the words on the side `words` says). */
 function group(input: PlaceInput, slimeLeft: number, bubbleTop: number, words: "after" | "before"): Placement & { all: Box } {
-  const { slime, bubble } = input;
+  const { slime, bubble, slimeInset = 0 } = input;
+  slimeLeft = Math.round(slimeLeft);
+  bubbleTop = Math.round(bubbleTop);
   const bubbleLeft = words === "after" ? slimeLeft + slime + GROUP_GAP : slimeLeft - GROUP_GAP - bubble.width;
   const bubbleBox: Box = { left: bubbleLeft, top: bubbleTop, width: bubble.width, height: bubble.height };
   // Raphael stands on the ground of the words: its feet at the bubble's foot (over the bubble's top when the words are one short line).
   const slimeBox: Box = { left: slimeLeft, top: bubbleTop + bubble.height - slime, width: slime, height: slime };
-  const left = Math.min(bubbleBox.left, slimeBox.left), right = Math.max(bubbleBox.left + bubbleBox.width, slimeBox.left + slimeBox.width);
+  const ground = groundBox(slimeBox, slimeInset);
+  const left = Math.min(bubbleBox.left, ground.left), right = Math.max(bubbleBox.left + bubbleBox.width, ground.left + ground.width);
   const top = Math.min(bubbleBox.top, slimeBox.top), bottom = Math.max(bubbleBox.top + bubbleBox.height, slimeBox.top + slimeBox.height);
   return { side: "inside", slime: slimeBox, bubble: bubbleBox, all: { left, top, width: right - left, height: bottom - top } };
 }
 
-function candidate(side: Side, input: PlaceInput): (Placement & { all: Box }) | null {
-  const { spot, view, bubble, slime, align = "center" } = input;
+function candidate(side: Side, input: PlaceInput): Placement & { all: Box } {
+  const { spot, view, bubble, slime, align = "center", slimeInset = 0 } = input;
   if (!spot) {
     const width = slime + GROUP_GAP + bubble.width;
     const left = Math.round((view.width - width) / 2), top = Math.round((view.height - bubble.height) / 2);
@@ -57,16 +69,22 @@ function candidate(side: Side, input: PlaceInput): (Placement & { all: Box }) | 
   }
   const middleY = spot.top + spot.height / 2;
   const vertical = clamp(middleY - bubble.height / 2, EDGE_TOP, Math.max(EDGE_TOP, view.height - EDGE - bubble.height));
-  if (side === "right") return { ...group(input, spot.left + spot.width + SPOT_GAP, vertical, "after"), side };
-  if (side === "left") return { ...group(input, spot.left - SPOT_GAP - slime, vertical, "before"), side };
+  if (side === "right") return { ...group(input, spot.left + spot.width + SPOT_GAP + slimeInset, vertical, "after"), side };
+  if (side === "left") {
+    const width = input.slimeFirst ? slime + GROUP_GAP + bubble.width : slime + slimeInset;
+    return { ...group(input, spot.left - SPOT_GAP - width, vertical, input.slimeFirst ? "after" : "before"), side };
+  }
   if (side === "above" || side === "below") {
     const top = side === "above" ? spot.top - SPOT_GAP - bubble.height : spot.top + spot.height + SPOT_GAP;
     const slimeLeft = align === "start" ? spot.left : spot.left + spot.width / 2 - slime / 2;
     // The words go to the right of Raphael; where the window has no room for them, to its left.
-    const after = slimeLeft + slime + GROUP_GAP + bubble.width <= view.width - EDGE;
+    const after = input.slimeFirst || slimeLeft + slime + GROUP_GAP + bubble.width <= view.width - EDGE;
     const placed = group(input, slimeLeft, top, after ? "after" : "before");
     // A group that sticks out sideways slides back in, Raphael still over (or under) the target.
-    const shift = placed.all.left < EDGE ? EDGE - placed.all.left : placed.all.left + placed.all.width > view.width - EDGE ? view.width - EDGE - (placed.all.left + placed.all.width) : 0;
+    const minShift = Math.max(-placed.all.left, EDGE - placed.bubble.left, EDGE - placed.slime.left);
+    const maxShift = Math.min(view.width - placed.all.left - placed.all.width,
+      view.width - EDGE - placed.bubble.left - bubble.width, view.width - EDGE - placed.slime.left - slime);
+    const shift = clamp(0, minShift, maxShift);
     return { ...group(input, slimeLeft + shift, top, after ? "after" : "before"), side };
   }
   // inside: the lower right of the target, kept in the window (a target too small to hold it still gives a group that is in view).
@@ -75,16 +93,71 @@ function candidate(side: Side, input: PlaceInput): (Placement & { all: Box }) | 
   return { ...group(input, Math.max(EDGE, right - bubble.width - GROUP_GAP - slime), top, "after"), side };
 }
 
-/** The first side, best first, whose group lies in the window and clear of the target; `inside` always answers. */
+/** Move a box the shortest distance to a free position, within the given bounds. */
+function nearestFree(box: Box, bounds: Box, obstacles: readonly Box[]): Box | undefined {
+  const { width, height } = box;
+  const right = bounds.left + bounds.width, bottom = bounds.top + bounds.height;
+  const lefts = [box.left, bounds.left, right - width];
+  const tops = [box.top, bounds.top, bottom - height];
+  for (const obstacle of obstacles) {
+    lefts.push(Math.floor(obstacle.left - width), Math.ceil(obstacle.left + obstacle.width));
+    tops.push(Math.floor(obstacle.top - height), Math.ceil(obstacle.top + obstacle.height));
+  }
+  let best: Box | undefined;
+  let distance = Infinity;
+  for (const left of lefts) for (const y of tops) {
+    if (left < bounds.left || left + width > right || y < bounds.top || y + height > bottom) continue;
+    const next = { ...box, left, top: y };
+    if (obstacles.some(obstacle => touches(next, obstacle))) continue;
+    const offset = Math.abs(left - box.left) + Math.abs(y - box.top);
+    if (offset < distance) { best = next; distance = offset; }
+  }
+  return best;
+}
+
+/** A large dialog may leave room for just the portrait. The bubble can use space inside the dialog. */
+function placeSeparately(input: PlaceInput, placed: Placement, obstacles: readonly Box[]): Placement {
+  const { view, slime, slimeInset = 0, controls = [] } = input;
+  // The still portrait has 10 px of transparent padding above the drawing.
+  const top = input.spot ? 22 : EDGE_TOP;
+  const ground = nearestFree(groundBox(placed.slime, slimeInset), { left: 0, top, width: view.width, height: view.height - top }, obstacles);
+  const bounds = { left: EDGE, top: EDGE_TOP, width: view.width - 2 * EDGE, height: view.height - EDGE_TOP - EDGE };
+  const bubble = placed.bubble;
+  if (ground) {
+    const portrait = { ...placed.slime, left: ground.left + slimeInset, top: ground.top };
+    const after = portrait.left + slime + GROUP_GAP;
+    const before = portrait.left - GROUP_GAP - bubble.width;
+    const left = after + bubble.width <= view.width - EDGE ? after : Math.max(EDGE, before);
+    const y = portrait.top < EDGE_TOP && input.spot ? input.spot.top + slime + SPOT_GAP : portrait.top + slime - bubble.height;
+    const nearby = { ...bubble, left, top: clamp(y, EDGE_TOP, view.height - EDGE - bubble.height) };
+    const free = nearestFree(nearby, bounds, [...controls, ground]);
+    if (free) return { ...placed, slime: portrait, bubble: free };
+  }
+  return { ...placed, bubble: nearestFree(bubble, bounds, controls) ?? bubble, hideSlime: true };
+}
+
+/** The first side whose group fits in the window and clears the target and other surfaces. */
 export function placeGroup(input: PlaceInput): Placement {
-  const order = [...input.prefer, ...ALL.filter(side => !input.prefer.includes(side))];
+  const order = [...input.prefer, ...ALL.filter(side => !input.prefer.includes(side))].filter(side => side !== "inside");
+  const clear = [...(input.clear ?? []), ...(input.controls ?? [])];
+  const obstacles = input.spot ? [input.spot, ...clear] : clear;
+  const fits = ({ all, slime, bubble }: ReturnType<typeof candidate>) => all.left >= 0 && all.left + all.width <= input.view.width &&
+    within(slime, input.view) && within(bubble, input.view) &&
+    obstacles.every(box => !touches(groundBox(slime, input.slimeInset ?? 0), box) && !touches(bubble, box));
+  const inside = candidate("inside", input);
+  if (!input.spot && fits(inside)) return inside;
   for (const side of order) {
     const found = candidate(side, input);
-    if (!found) continue;
-    const { all, ...placement } = found;
-    if (side === "inside" || !input.spot) return placement;
-    if (within(all, input.view) && !touches(all, input.spot)) return placement;
+    if (fits(found)) return found;
+    if (side === "below") continue;
+    // A target may be lower than a nearby control or panel. Try again above its top edge.
+    for (const box of clear) {
+      const top = box.top - SPOT_GAP - found.bubble.height;
+      if (top >= found.bubble.top) continue;
+      const words = found.slime.left < found.bubble.left ? "after" : "before";
+      const raised = { ...group(input, found.slime.left, top, words), side };
+      if (fits(raised)) return raised;
+    }
   }
-  const { all: _all, ...last } = candidate("inside", input)!;
-  return last;
+  return placeSeparately(input, inside, obstacles);
 }

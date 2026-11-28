@@ -1,304 +1,277 @@
-// Raphael's guided tour of the main window (R-TOUR-01..04). Once, right after the first-run guide, Raphael springs out of
-// the account button at the bottom left and asks whether you want a short tour; then it walks the window step by step,
-// pointing at one part at a time with a dim, a cut-out and one plain line. The account menu's 導覽 starts it again.
-//
-// This file is the state of the tour; tour/view.ts draws it and tour/steps.ts says what it points at.
+// Raphael's guided tour. The tour observes the window while the person uses its ordinary controls.
 
+import { hasOpenLayer, stepOpenLayer } from "../dismissals";
 import { onLocaleChange, t } from "../i18n";
 import type { MessageKey } from "../i18n/zh-TW";
 import type { NavStep } from "../nav-history";
-import type { AppContext, DeviceSettings, PageId, PageArgument, SettingsPane } from "../types";
-import { reducedMotion } from "../ui";
-import { createView, type ButtonId, type Pressed, type TourView, type ViewModel } from "./view";
-import { STEPS, askKeys, firstShown, shown, spotOf, tourMinutes, type TourStep } from "./steps";
+import type { AppContext, DeviceSettings } from "../types";
+import { closeMenu } from "../ui";
+import { createView, type Pressed, type TourView, type ViewModel } from "./view";
+import { COMPOSER, COMPOSER_FIELD, STEPS, askKeys, boxOf, firstShown, spotOf, tourMinutes, type TourStep } from "./steps";
 
-/** A catalogue line by a key the steps name, with the values it takes. */
 const say = t as unknown as (key: MessageKey, values?: Record<string, string | number>) => string;
 
-/** What the tour needs of the window: the app context, and nothing more. */
 export type TourHost = Pick<AppContext, "closeSettings"> & {
-  go(page: PageId, arg?: PageArgument): void;
   device(): DeviceSettings;
   setDevice(patch: Partial<DeviceSettings>): Promise<unknown>;
 };
 
 export interface Tour {
-  /** After the first-run guide: offers the tour, once. Never again on its own. */
   offerOnce(): void;
-  /** Starts the tour at its first step (the offer's 開始, the account menu's 導覽). */
-  start(): void;
-  /** Whether the offer, a step or the goodbye is on screen. */
   active(): boolean;
-  /** The mouse's back and forward buttons (and Alt+arrows) while the walk is on: the previous and the next step, and nothing under the dim is navigated. False when there is no walk. */
   navigate(direction: NavStep): boolean;
-  /** Takes everything down at once (the window is closing, a test ends). */
   stop(): void;
 }
 
 type Phase = "idle" | "offer" | "step" | "bye";
 
-/** Raphael waits this long after the guide before it appears: the window has just changed size and drawn its first page. */
 export const OFFER_DELAY_MS = 700;
-/** How long the goodbye stays when nobody presses anything. */
 export const BYE_MS = 4500;
-/** How long Settings takes to open before the cut-out measures it. */
-const SETTLE_MS = 240;
-const SETTLE_AGAIN_MS = [160, 420];
-const POLL_MS = 40;
-const OPEN_TIMEOUT_MS = 2500;
-
-const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
-
-async function waitFor(ready: () => boolean, timeout = OPEN_TIMEOUT_MS): Promise<boolean> {
-  for (let waited = 0; waited <= timeout; waited += POLL_MS) {
-    if (ready()) return true;
-    await sleep(POLL_MS);
-  }
-  return ready();
-}
 
 const account = (): HTMLElement | null => firstShown("#nav .sidebar-account");
-const paneShown = (pane: SettingsPane): boolean => !!document.querySelector(`.modal-scrim[data-page="settings"] [data-pane="${pane}"][aria-current="page"]`);
 
 export function createTour(host: TourHost): Tour {
   let phase: Phase = "idle";
   let view: TourView | null = null;
   let list: TourStep[] = [];
   let at = 0;
-  /** Settings is open because of the tour. */
-  let settingsOpen = false;
-  /** A step is being entered (its Settings tab opening): a press on a button waits for it. */
-  let entering = false;
-  let run = 0;
-  let timers: ReturnType<typeof setTimeout>[] = [];
-  let focusBefore: HTMLElement | null = null;
-  let unlisten: (() => void)[] = [];
-  const inertHosts = (): HTMLElement[] => ["nav", "main"].map(id => document.getElementById(id)).filter((el): el is HTMLElement => !!el);
+  let answered = false;
+  let done = false;
+  let openedAtEntry: HTMLElement | null = null;
+  let completedField: Element | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let settle: ReturnType<typeof setTimeout> | undefined;
+  let unlisten: (() => void) | undefined;
 
-  const clearTimers = (): void => { for (const timer of timers) clearTimeout(timer); timers = []; };
-  const later = (ms: number, run: () => void): void => { timers.push(setTimeout(run, ms)); };
-
-  // ---------- what is drawn ----------
-
-  /** The offer and the goodbye stand over the sidebar's whole foot (the account button, the apps button and, on the rail, the plus), so that they hide none of them. */
+  const sidebarFoot = () => firstShown("#nav .side-foot", { includeInert: true });
   const anchorSpot = () => {
-    const foot = firstShown("#nav .side-foot") ?? account();
+    const foot = sidebarFoot() ?? account();
     return foot ? { ...spotOf(foot, 0), dim: false } : null;
   };
-  const origin = () => anchorSpot()?.box ?? null;
+  const origin = () => {
+    const button = account();
+    return button ? spotOf(button, 0).box : anchorSpot()?.box ?? null;
+  };
+  // The composer and sidebar foot still occupy space when a modal makes the window inert.
+  const keepControlsClear = () => [sidebarFoot(), firstShown(COMPOSER, { includeInert: true })]
+    .flatMap(element => element ? [boxOf(element)] : []);
+  const keepClear = () => [stepNow()?.target?.(), opened()]
+    .flatMap(element => element ? [boxOf(element)] : []);
+  const stepNow = () => list[at];
+  const opened = (): HTMLElement | null => {
+    const panel = stepNow()?.opened?.() ?? null;
+    if (!panel) openedAtEntry = null;
+    return panel === openedAtEntry ? null : panel;
+  };
 
   function model(): ViewModel {
-    const label = t("tour.menu");
+    const label = t("tour.label");
     if (phase === "offer") {
       return {
         mode: "offer", text: t("tour.offer", { minutes: tourMinutes(STEPS.length) }), label,
-        buttons: [{ id: "later", label: t("tour.later") }, { id: "start", label: t("tour.start"), primary: true }],
-        locate: anchorSpot, prefer: ["above"], align: "start", origin,
+        buttons: [{ id: "skip", label: t("tour.skip") }, { id: "start", label: t("tour.start"), primary: true }],
+        locate: anchorSpot, prefer: ["above"], align: "start", origin, keepControlsClear,
       };
     }
-    if (phase === "bye") return { mode: "bye", text: t("tour.bye"), label, buttons: [], locate: anchorSpot, prefer: ["above"], align: "start", origin };
-    const step = list[at]!;
+    if (phase === "bye") return { mode: "bye", text: t("tour.bye"), label, buttons: [], locate: anchorSpot, prefer: ["above"], align: "start", origin, keepControlsClear };
+    const step = stepNow()!;
     const last = at === list.length - 1;
     const buttons: ViewModel["buttons"] = [];
     if (at > 0) buttons.push({ id: "back", label: t("tour.back") });
-    buttons.push(last ? { id: "done", label: t("tour.done"), primary: true } : { id: "next", label: t("tour.next"), primary: true });
-    const target = step.target;
+    const state = step.followup ? (done ? "done" : "ask") : "look";
+    const readyToFinish = last && state !== "ask";
+    buttons.push({ id: readyToFinish ? "done" : "next", label: t(readyToFinish ? "tour.done" : "tour.next"), primary: state !== "ask" });
     return {
-      mode: "step", label,
-      text: say(step.text, { ask: t("chat.modeAsk") }),
+      mode: "step", step: step.id, state, label,
+      text: say(done && step.followup ? step.followup : step.text, { ask: t("chat.modeAsk") }),
       ...(step.keys ? { keys: askKeys(host.device()) } : {}),
-      progress: { shown: `${at + 1}/${list.length}`, label: t("tour.progress", { current: at + 1, total: list.length }) },
+      progress: { shown: (at + 1) + "/" + list.length, label: t("tour.progress", { current: at + 1, total: list.length }) },
       buttons, closeLabel: t("tour.close"),
-      locate: target ? () => { const el = target(); return el ? { ...spotOf(el, step.pad ?? 0), dim: true } : null; } : () => null,
-      prefer: step.prefer, align: "center", origin,
+      locate: () => {
+        const panel = opened();
+        const target = panel ?? step.target?.();
+        return target ? { ...spotOf(target, panel ? 0 : step.pad ?? 0), dim: true } : null;
+      },
+      ...(step.id === "account" ? { anchor: () => anchorSpot()?.box ?? null } : {}),
+      prefer: step.prefer, align: step.id === "account" ? "start" : "center", origin, keepClear, keepControlsClear, slimeFirst: step.id === "model",
     };
   }
 
   function draw(hop: boolean): void {
-    view ??= createView(pressed);
+    view ??= createView(pressed, move);
     view.render(model(), { hop });
-    if (phase === "step") {
-      view.focusPrimary();
-      // A dialog still opening, a composer still growing: measure again once they have settled.
-      clearTimers();
-      for (const ms of SETTLE_AGAIN_MS) later(ms, () => view?.reflow());
-    }
+    clearTimeout(settle);
+    if (phase === "step") settle = setTimeout(check, 260);
   }
 
-  // ---------- the offer ----------
+  function check(): void {
+    if (phase === "step") {
+      const step = stepNow();
+      if (step?.id === "composer") {
+        if (document.activeElement?.matches(COMPOSER_FIELD)) completedField = document.activeElement;
+        if (!completedField?.isConnected || !step.target?.()?.contains(completedField)) completedField = null;
+      }
+      const complete = !!completedField || !!opened();
+      if (complete !== done) {
+        done = complete;
+        draw(true);
+        return;
+      }
+    }
+    view?.reflow();
+  }
 
   function offerOnce(): void {
-    if (phase !== "idle" || host.device().tour_offered) return;
-    later(OFFER_DELAY_MS, () => void show(0));
-    async function show(tries: number): Promise<void> {
-      if (phase !== "idle") return;
-      // The account button is drawn with the sidebar; a window that is not ready yet is asked again for a few seconds.
-      if (!account()) { if (tries < 20) later(300, () => void show(tries + 1)); return; }
-      phase = "offer";
-      void Promise.resolve(host.setDevice({ tour_offered: true })).catch(error => console.warn("tour: the offer could not be remembered", error));
-      listen();
-      draw(true);
-    }
-  }
-
-  // ---------- the walk ----------
-
-  function start(): void {
-    if (phase === "step") return;
-    void begin();
-  }
-
-  async function begin(): Promise<void> {
-    const mine = ++run;
-    clearTimers();
-    phase = "step";
-    entering = true;
-    focusBefore = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    if (settingsOpen) { host.closeSettings(); settingsOpen = false; }
-    // The composer's steps need the conversation on screen.
-    if (!firstShown(".page-agent:not([hidden]) .composer")) {
-      host.go("agent");
-      await waitFor(() => !!firstShown(".page-agent:not([hidden]) .composer"), 1500);
-      if (mine !== run) return;
-    }
-    list = STEPS.filter(step => step.pane || (step.keys ? askKeys(host.device()).length > 0 : !!step.target?.()));
-    if (!list.length) { finish(); return; }
-    at = 0;
-    for (const element of inertHosts()) element.inert = true;
-    listen();
-    await arrive(1, true);
-  }
-
-  /** Shows step `at`, going `direction`; a step whose target is not on screen is dropped and the next one is tried. */
-  async function arrive(direction: 1 | -1, hop: boolean): Promise<void> {
-    const mine = ++run;
-    entering = true;
-    for (;;) {
-      const step = list[at];
-      if (!step) { finish(); return; }
-      if (step.pane) {
-        if (!settingsOpen) { host.go("settings", step.pane); settingsOpen = true; }
-        else document.querySelector<HTMLElement>(`.modal-scrim[data-page="settings"] [data-pane="${step.pane}"]`)?.click();
-        await waitFor(() => paneShown(step.pane!));
-        if (!reducedMotion()) await sleep(SETTLE_MS);
-      } else if (settingsOpen) {
-        host.closeSettings(); settingsOpen = false;
-        if (!reducedMotion()) await sleep(SETTLE_MS / 2);
+    if (timer !== undefined || phase !== "idle" || answered || host.device().tour_offered) return;
+    timer = setTimeout(() => show(0), OFFER_DELAY_MS);
+    function show(tries: number): void {
+      timer = undefined;
+      if (phase !== "idle" || host.device().tour_offered) return;
+      if (!account()) {
+        if (tries < 20) timer = setTimeout(() => show(tries + 1), 300);
+        return;
       }
-      if (mine !== run) return;
-      if (!step.target || shown(step.target())) break;
-      // Nothing to point at at this width: never point at nothing.
+      phase = "offer";
+      draw(true);
+      listen();
+    }
+  }
+
+  function arrive(direction: 1 | -1): void {
+    while (list[at]?.target && !list[at]!.target!()) {
       list.splice(at, 1);
       if (direction < 0) at = Math.max(0, at - 1);
-      else if (at >= list.length) { finish(); return; }
     }
-    entering = false;
-    draw(hop);
+    const step = stepNow();
+    if (!step) { finish(); return; }
+    done = false;
+    completedField = null;
+    openedAtEntry = step.opened?.() ?? null;
+    draw(true);
   }
 
-  function press(id: ButtonId | "close"): void {
-    if (id === "start") { start(); return; }
-    if (id === "later" || id === "close" || id === "done") { finish(); return; }
-    if (entering) return;
-    if (id === "next") { at += 1; void arrive(1, true); }
-    else if (id === "back" && at > 0) { at -= 1; void arrive(-1, true); }
+  function closeOpened(): void {
+    const panel = opened();
+    if (!panel) return;
+    switch (stepNow()?.id) {
+      case "account":
+      case "permission":
+      case "model": closeMenu(); break;
+      case "apps": host.closeSettings(); break;
+    }
+  }
+
+  function move(direction: NavStep): void {
+    if (direction === "back" ? at === 0 : at === list.length - 1) return;
+    closeOpened();
+    const delta = direction === "back" ? -1 : 1;
+    at += delta;
+    arrive(delta);
   }
 
   function pressed(button: Pressed): void {
-    if (button === "dismiss") { close(); return; }
-    press(button);
+    if (phase === "offer" && (button === "start" || button === "skip")) {
+      answered = true;
+      void host.setDevice({ tour_offered: true }).catch(error => console.warn("tour: the answer could not be remembered", error));
+      if (button === "skip") { finish(); return; }
+      list = STEPS.filter(step => (!step.target || !!step.target()) && (!step.keys || askKeys(host.device()).length > 0));
+      at = 0;
+      phase = "step";
+      arrive(1);
+      return;
+    }
+    if (button === "dismiss") close();
+    else if (button === "close" || button === "done" || button === "next" && at === list.length - 1) finish();
+    else if (button === "back" || button === "next") move(button === "back" ? "back" : "forward");
   }
 
-  // ---------- the way out ----------
-
-  /** Raphael hops back to the account button and says where to find the tour again; then it fades. */
   function finish(): void {
-    if (phase === "idle" || phase === "bye") return;
-    run += 1;
-    entering = false;
-    clearTimers();
-    for (const element of inertHosts()) element.inert = false;
-    if (settingsOpen) { host.closeSettings(); settingsOpen = false; }
-    if (focusBefore?.isConnected && !focusBefore.closest("[inert]")) focusBefore.focus({ preventScroll: true });
-    focusBefore = null;
+    if (phase === "step") closeOpened();
     phase = "bye";
     draw(true);
-    later(BYE_MS, close);
+    timer = setTimeout(close, BYE_MS);
+  }
+
+  function clear(): TourView | null {
+    clearTimeout(timer);
+    clearTimeout(settle);
+    timer = undefined;
+    unlisten?.();
+    unlisten = undefined;
+    phase = "idle";
+    const leaving = view;
+    view = null;
+    return leaving;
   }
 
   function close(): void {
-    clearTimers();
-    const leaving = view;
-    phase = "idle";
-    view = null;
-    for (const stop of unlisten) stop();
-    unlisten = [];
-    for (const element of inertHosts()) element.inert = false;
+    const leaving = clear();
     leaving?.leave(() => leaving.destroy());
   }
 
   function stop(): void {
-    run += 1;
-    clearTimers();
-    if (settingsOpen) { host.closeSettings(); settingsOpen = false; }
-    const old = view;
-    phase = "idle"; view = null;
-    for (const off of unlisten) off();
-    unlisten = [];
-    for (const element of inertHosts()) element.inert = false;
-    old?.destroy();
+    if (phase === "step") closeOpened();
+    clear()?.destroy();
   }
 
-  // ---------- the keyboard, the window and the language ----------
-
-  /** The walk keeps the keyboard: arrows go between steps, Esc ends, Tab stays in the bubble. */
   function walkKey(event: KeyboardEvent): void {
-    if (phase !== "step" || !view) return;
-    const take = (): void => { event.preventDefault(); event.stopImmediatePropagation(); };
-    if (event.key === "Escape") { take(); finish(); }
-    else if (event.key === "ArrowRight" && !event.altKey) { take(); if (!entering && at < list.length - 1) press("next"); }
-    else if (event.key === "ArrowLeft" && !event.altKey) { take(); press("back"); }
-    else if (event.key === "Tab") {
-      take();
-      const stops = view.stops();
-      if (!stops.length) return;
-      const index = stops.indexOf(document.activeElement as HTMLElement);
-      stops[(index + (event.shiftKey ? -1 : 1) + stops.length) % stops.length]!.focus({ preventScroll: true });
+    if (phase !== "step" || event.isComposing || event.defaultPrevented) return;
+    if (event.key === "Escape" && !hasOpenLayer()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      finish();
+      return;
     }
+    if (!(event.target instanceof Node) || !view?.contains(event.target) || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    move(event.key === "ArrowLeft" ? "back" : "forward");
   }
 
-  /** The offer and the goodbye are not modal: Esc closes them only when nothing else took the key. */
+  /** The window's own layer handlers get the key first. */
   function quietKey(event: KeyboardEvent): void {
-    if (event.key !== "Escape" || event.defaultPrevented) return;
-    if (phase === "offer") finish();
+    if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return;
+    if (phase === "step" && opened() && stepOpenLayer("back")) return;
+    if (phase === "offer" || phase === "step") finish();
     else if (phase === "bye") close();
   }
 
   function listen(): void {
-    if (unlisten.length) return;
+    let frame = 0;
+    const schedule = (): void => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => { frame = 0; check(); });
+    };
+    const observer = new MutationObserver(records => {
+      if (records.some(record => !view?.contains(record.target))) schedule();
+    });
+    observer.observe(document.documentElement, { attributes: true, childList: true, subtree: true });
+    document.addEventListener("focusin", schedule);
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, true);
     window.addEventListener("keydown", walkKey, true);
     window.addEventListener("keydown", quietKey);
-    // Settings give their own tab the focus as they open; the walk takes it back, so that Enter and the arrows stay the bubble's.
-    const keepFocus = (event: FocusEvent): void => { if (phase === "step" && view && !view.contains(event.target as Node)) view.focusPrimary(); };
-    document.addEventListener("focusin", keepFocus);
-    let frame = 0;
-    const reflow = (): void => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => view?.reflow()); };
-    window.addEventListener("resize", reflow);
-    const language = onLocaleChange(() => { if (phase !== "idle" && view && !entering) draw(false); });
-    unlisten = [
-      () => window.removeEventListener("keydown", walkKey, true),
-      () => window.removeEventListener("keydown", quietKey),
-      () => document.removeEventListener("focusin", keepFocus),
-      () => { cancelAnimationFrame(frame); window.removeEventListener("resize", reflow); },
-      language,
-    ];
+    const language = onLocaleChange(() => draw(false));
+    unlisten = () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      document.removeEventListener("focusin", schedule);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, true);
+      window.removeEventListener("keydown", walkKey, true);
+      window.removeEventListener("keydown", quietKey);
+      language();
+    };
   }
 
   function navigate(direction: NavStep): boolean {
     if (phase !== "step") return false;
-    if (!entering) { if (direction === "back") press("back"); else if (at < list.length - 1) press("next"); }
+    if (opened()) return stepOpenLayer("back");
+    if (hasOpenLayer() && stepOpenLayer(direction)) return true;
+    move(direction);
     return true;
   }
 
-  return { offerOnce, start, active: () => phase !== "idle", navigate, stop };
+  return { offerOnce, active: () => phase !== "idle", navigate, stop };
 }

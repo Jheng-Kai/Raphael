@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { EDGE, EDGE_TOP, GROUP_GAP, SPOT_GAP, placeGroup, type Box, type PlaceInput } from "./place";
+import { EDGE, EDGE_TOP, GROUP_GAP, SPOT_GAP, groundBox, placeGroup, type Box, type PlaceInput } from "./place";
 
 const view = { width: 1120, height: 900 };
 const bubble = { width: 260, height: 110 };
@@ -44,13 +44,53 @@ test("a side with no room gives way to the next: a target at the top has nothing
   expect(apart(found.bubble, top) && apart(found.slime, top)).toBe(true);
 });
 
-test("a target that fills the window holds the group inside, in its lower right", () => {
-  const dialog: Box = { left: 60, top: 32, width: 1000, height: 813 };
-  const found = placeGroup({ ...base, spot: dialog, prefer: ["inside"] });
+test("the model group stands above the composer with the slime left of the bubble", () => {
+  const composer: Box = { left: 385, top: 780, width: 696, height: 100 };
+  const model: Box = { left: 905, top: 828, width: 120, height: 42 };
+  const found = placeGroup({ ...base, bubble: { width: 300, height: 88 }, slime: 64, slimeInset: 18,
+    spot: model, clear: [composer], prefer: ["above"], slimeFirst: true });
+  expect(found.side).toBe("above");
+  expect(right(found.slime)).toBeLessThan(found.bubble.left);
+  expect(bottom(found.bubble)).toBe(composer.top - SPOT_GAP);
+  expect(apart(groundBox(found.slime, 18), composer)).toBe(true);
+});
+
+test("the portrait and its light stay clear of the standalone Connect apps dialog at 720 px", () => {
+  const dialog = { left: 16, top: 86, width: 688, height: 760 };
+  const composer = { left: 120, top: 782, width: 568, height: 90 };
+  const found = placeGroup({ ...base, view: { width: 720, height: 900 }, bubble: { width: 300, height: 88 },
+    spot: dialog, clear: [composer], slime: 64, slimeInset: 18, prefer: ["right", "above"] });
   expect(found.side).toBe("inside");
-  expect(right(found.bubble)).toBe(right(dialog) - 24);
-  expect(bottom(found.bubble)).toBe(bottom(dialog) - 24);
-  expect(found.slime.left + 56 + GROUP_GAP).toBe(found.bubble.left);
+  expect(found.hideSlime).toBeUndefined();
+  expect(bottom(groundBox(found.slime, 18))).toBe(dialog.top);
+  expect(apart(groundBox(found.slime, 18), composer)).toBe(true);
+  expect(found.bubble.top).toBeGreaterThan(dialog.top);
+});
+
+test("the whole account group stands above the sidebar foot, clear of its controls and the composer", () => {
+  const foot = { left: 12, top: 810, width: 324, height: 82 };
+  const account = { left: 12, top: 856, width: 36, height: 36 };
+  const apps = { left: 52, top: 856, width: 284, height: 36 };
+  const composer = { left: 391, top: 780, width: 686, height: 100 };
+  const found = placeGroup({ ...base, slime: 64, slimeInset: 16, spot: foot, clear: [account], controls: [foot, composer],
+    prefer: ["above"], align: "start" });
+  expect(found.side).toBe("above");
+  for (const part of [groundBox(found.slime, 16), found.bubble]) {
+    expect(bottom(part)).toBe(foot.top - SPOT_GAP);
+    for (const control of [account, apps, composer]) expect(apart(part, control)).toBe(true);
+  }
+});
+
+test("the bubble still avoids the composer when it has to stand inside a large dialog", () => {
+  const dialog = { left: 16, top: 86, width: 688, height: 760 };
+  const composer = { left: 104, top: 159, width: 584, height: 88 };
+  const foot = { left: 12, top: 812, width: 64, height: 80 };
+  const found = placeGroup({ ...base, view: { width: 720, height: 900 }, bubble: { width: 300, height: 88 },
+    spot: dialog, controls: [foot, composer], slime: 64, slimeInset: 16, prefer: ["right", "above"] });
+  expect(found.side).toBe("inside");
+  expect(found.hideSlime).toBeUndefined();
+  expect(apart(found.bubble, composer)).toBe(true);
+  expect(apart(found.bubble, foot)).toBe(true);
 });
 
 test("pointing at nothing puts the group in the middle of the window", () => {

@@ -28,7 +28,7 @@ const WIDTH_KEY = "raphael.sidebar.width";
 const STARTER_APPS = [{ name: "Gmail", icon: "gmail" }, { name: "Notion", icon: "notion" }, { name: "Google Calendar", icon: "googlecalendar" }] as const;
 const clampWidth = (width: number): number => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width)));
 
-export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<AppContext, "onEvent" | "go" | "startTour">): void {
+export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<AppContext, "onEvent" | "go">): void {
   nav.classList.add("sidebar");
   // The foot is one row (R-SIDE-01): the owner's face (it opens the account menu) and the 連結應用程式 pill, which takes
   // the rest of the row. On the rail the pill is the icon button of its own and the face stands under it.
@@ -166,7 +166,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
   let drawnFace = "";
   account.addEventListener("click", () => {
     if (!app?.go) return;
-    openAccountMenu(account, { go: app.go, startTour: app.startTour, allowances: api.usageAllowances, chatgptStatus: api.chatgptStatus, status: api.statusGet }, rail() ? "right" : "above");
+    openAccountMenu(account, { go: app.go, allowances: api.usageAllowances, chatgptStatus: api.chatgptStatus, status: api.statusGet }, rail() ? "right" : "above");
   });
   compactWindow.addEventListener("change", placeRail);
   // The list's own width never squeezes the conversation on a window narrower than it was dragged on.

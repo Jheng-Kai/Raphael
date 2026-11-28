@@ -42,7 +42,7 @@ test("each subscription gives its window with the most used, in the reading's or
 test("the rows are 用量 with a chevron and no number, 聽寫, 行事曆, a hairline, Raphael, a hairline and 設定, and with no window known 用量 has no chevron and no submenu", () => {
   const known = document.createElement("div");
   known.innerHTML = accountMenuHTML([block({}), block({ id: "claude", name: "Claude 每週", used: 97, value: "已使用 97%" })]);
-  expect([...known.querySelectorAll("button")].map(row => row.dataset.account)).toEqual(["usage", "dictation", "calendar", "raphael", "tour", "settings"]);
+  expect([...known.querySelectorAll("button")].map(row => row.dataset.account)).toEqual(["usage", "dictation", "calendar", "raphael", "settings"]);
   expect(known.querySelector('[data-account="usage"]')!.getAttribute("aria-haspopup")).toBe("menu");
   expect(known.querySelector('[data-account="usage"] > svg.i')).not.toBeNull();
   expect(known.querySelector('[data-account="usage"]')!.textContent).toBe("用量");
@@ -51,13 +51,13 @@ test("the rows are 用量 with a chevron and no number, 聽寫, 行事曆, a hai
   expect([...known.querySelectorAll(".menu-sep")].pop()!.nextElementSibling!.getAttribute("data-account")).toBe("settings");
   const none = document.createElement("div");
   none.innerHTML = accountMenuHTML([]);
-  expect([...none.querySelectorAll("button")].map(row => row.dataset.account)).toEqual(["usage-settings", "dictation", "calendar", "raphael", "tour", "settings"]);
+  expect([...none.querySelectorAll("button")].map(row => row.dataset.account)).toEqual(["usage-settings", "dictation", "calendar", "raphael", "settings"]);
   expect(none.querySelector('[data-account="usage-settings"]')!.hasAttribute("aria-haspopup")).toBe(false);
   expect(none.querySelector("button > svg.i")).toBeNull();
   // A Lucide icon on every row, and no two rows share one; Raphael's cell holds its own slime instead.
   const icons = [...known.querySelectorAll("button .ck")].map(icon => icon.innerHTML);
-  expect(icons.every(Boolean) && new Set(icons).size).toBe(6);
-  expect(known.querySelectorAll('button .ck svg.i')).toHaveLength(5);
+  expect(icons.every(Boolean) && new Set(icons).size).toBe(5);
+  expect(known.querySelectorAll('button .ck svg.i')).toHaveLength(4);
 });
 
 test("the submenu has a block for each provider with its words and number, no reset time, then 管理用量", () => {
@@ -79,7 +79,7 @@ test("the submenu has a block for each provider with its words and number, no re
   expect(sub.querySelector(".menu-sep")!.nextElementSibling).toBe(sub.querySelector('[data-account="manage"]'));
 });
 
-function mount(read: () => Promise<CliAllowances>, side: "above" | "right" = "above", more: { chatgptStatus?: () => Promise<ChatGptStatus>; status?: () => Promise<Status>; startTour?: () => void } = {}) {
+function mount(read: () => Promise<CliAllowances>, side: "above" | "right" = "above", more: { chatgptStatus?: () => Promise<ChatGptStatus>; status?: () => Promise<Status> } = {}) {
   document.body.innerHTML = '<nav class="sidebar"><button type="button" class="sidebar-account" aria-label="Sam" aria-haspopup="menu" aria-expanded="false"></button></nav>';
   document.querySelector<HTMLElement>(".sidebar")!.getBoundingClientRect = () => ({ left: 0, right: 88, top: 0, bottom: 900, width: 88, height: 900 } as DOMRect);
   const anchor = document.querySelector<HTMLButtonElement>(".sidebar-account")!;
@@ -192,8 +192,8 @@ test("a reading that fails keeps what was known of that provider, and the others
 test("Raphael has an entry of its own in the menu: after 行事曆, apart by hairlines, with its blue slime and its name", async () => {
   const known = document.createElement("div");
   known.innerHTML = accountMenuHTML([block({})]);
-  expect([...known.querySelectorAll("button")].map(row => row.dataset.account)).toEqual(["usage", "dictation", "calendar", "raphael", "tour", "settings"]);
-  expect([...known.children].map(child => child.getAttribute("data-account") ?? "|")).toEqual(["usage", "dictation", "calendar", "|", "raphael", "tour", "|", "settings"]);
+  expect([...known.querySelectorAll("button")].map(row => row.dataset.account)).toEqual(["usage", "dictation", "calendar", "raphael", "settings"]);
+  expect([...known.children].map(child => child.getAttribute("data-account") ?? "|")).toEqual(["usage", "dictation", "calendar", "|", "raphael", "|", "settings"]);
   const row = known.querySelector<HTMLElement>('[data-account="raphael"]')!;
   expect(row.querySelector(".mt")!.textContent).toBe("拉斐爾");
   expect(row.querySelector(".ck .mb-av-slime")).not.toBeNull();
@@ -213,17 +213,9 @@ test("choosing Raphael opens its conversation space as the app's ordinary route"
   expect(document.activeElement).toBe(anchor);
 });
 
-test("導覽 stands under Raphael's own entry and starts the guided tour again, from the menu, with the focus back on the face", async () => {
-  const startTour = vi.fn();
-  const { anchor } = mount(async () => ({ brains: [] }), "above", { startTour });
+test("the account menu has no tour entry", async () => {
+  const { anchor } = mount(async () => ({ brains: [] }));
   anchor.click(); await flush();
-  const rows = [...menu()!.querySelectorAll<HTMLElement>("button")];
-  const tour = menu()!.querySelector<HTMLElement>('[data-account="tour"]')!;
-  expect(rows.indexOf(tour)).toBe(rows.findIndex(row => row.dataset.account === "raphael") + 1);
-  expect(tour.querySelector(".mt")!.textContent).toBe("導覽");
-  expect(tour.querySelector(".ck svg.i")).not.toBeNull();
-  tour.click();
-  expect(startTour).toHaveBeenCalledOnce();
-  expect(menu()).toBeNull();
-  expect(document.activeElement).toBe(anchor);
+  expect(menu()!.querySelector('[data-account="tour"]')).toBeNull();
+  expect(menu()!.textContent).not.toContain("\u5c0e\u89bd");
 });

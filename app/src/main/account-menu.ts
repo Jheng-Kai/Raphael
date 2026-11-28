@@ -4,8 +4,8 @@
 // its tightest window and number, or what is truthfully known instead; no reset time) and 管理用量. The row itself carries no number:
 // one provider's figure under the bare word would read as everyone's. 聽寫 and 行事曆 (the calendar, on today in a fresh session, R-CAL-04)
 // follow. After a hairline Raphael stands alone with its blue slime (its conversation space, `go("agent", "raphael")`: it is not a
-// slime of the sidebar's list) with 導覽 under it, which starts Raphael's tour of the window again, and after another 設定. What each reading means is decided in usage-blocks.ts, which Settings'
-// usage cards use as well.
+// slime of the sidebar's list), followed by another hairline before Settings. The usage cards read the same data from
+// usage-blocks.ts.
 
 import { t } from "./i18n";
 import { RAPHAEL_ID, faceHTML } from "./members";
@@ -26,7 +26,7 @@ export function accountMenuHTML(blocks: UsageBlock[]): string {
   const raphael = `<button type="button" role="menuitem" tabindex="-1" data-account="raphael"><span class="ck ck-face">${faceHTML({ id: RAPHAEL_ID, name: "" }, 16)}</span><span class="mt">${esc(raphaelName())}</span></button>`;
   const hairline = `<div class="menu-sep" role="separator"></div>`;
   return usage + row("dictation", "mic", t("nav.dictation")) + row("calendar", "calendar", t("overview.calendar")) +
-    hairline + raphael + row("tour", "compass", t("tour.menu")) + hairline + row("settings", "gear", t("nav.settings"));
+    hairline + raphael + hairline + row("settings", "gear", t("nav.settings"));
 }
 
 /** The submenu of 用量: each provider's block (name, words at the right, and OpenRouter's balance under them), then the way to the
@@ -38,7 +38,7 @@ export function usageSubmenuHTML(blocks: UsageBlock[]): string {
     `<button type="button" role="menuitem" tabindex="-1" data-account="manage"><span class="mt">${esc(t("brains.manageUsage"))}</span></button>`;
 }
 
-export interface AccountMenuHost extends Pick<AppContext, "go" | "startTour"> {
+export interface AccountMenuHost extends Pick<AppContext, "go"> {
   /** `usage.allowances`, as the settings' usage card reads it. */
   allowances(): Promise<CliAllowances>;
   /** `chatgpt.status`: whether the ChatGPT sign-in is one of the providers. */
@@ -79,8 +79,6 @@ export function openAccountMenu(anchor: HTMLElement, host: AccountMenuHost, side
     // No date: a dated link would open the day view and forget the view the owner chose (R-CAL-04); the calendar starts on today in a fresh session.
     else if (id === "calendar") leave(() => host.go("automations"));
     else if (id === "raphael") leave(() => host.go("agent", "raphael"));
-    // Raphael's guided tour of the window, again (tour/): it points at the window's parts one by one.
-    else if (id === "tour") leave(() => host.startTour?.());
     else if (id === "settings") leave(() => host.go("settings", "general"));
     else if (id === "usage-settings") leave(() => host.go("settings", "usage"));
   });

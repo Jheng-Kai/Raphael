@@ -171,7 +171,7 @@ async function start(): Promise<void> {
   prefetchEmojiWhenIdle();
 
   const listeners = new Set<(event: MainEvent) => void>();
-  /** Raphael's guided tour of the window: offered once after the first-run guide, started again from the account menu. */
+  /** Raphael's guided tour of the window. */
   let tour: Tour | null = null;
   const ctx: AppContext = {
     go,
@@ -189,7 +189,6 @@ async function start(): Promise<void> {
     undo: new Undoable(toaster),
     cleared: new Cleared(),
     closeSettings: () => closeSettings(),
-    startTour: () => tour?.start(),
   };
   tour = createTour(ctx);
 
@@ -445,7 +444,6 @@ watchChipRows(document.body);
           tellAgentPage();
           go(START_PAGE);
           firstViewShown();
-          // The first time the window shows after the guide, Raphael offers its tour (once, never again on its own).
           tour?.offerOnce();
           void openPendingTemplate(templateFile).catch((err) => console.warn("main: the opened template file was not shown", err));
           // The speech models that the guide did not wait for come on in the background.
@@ -466,6 +464,7 @@ watchChipRows(document.body);
     showPages();
     go(START_PAGE);
     firstViewShown();
+    if (deviceRead && device.get().onboarded) tour?.offerOnce();
     void openPendingTemplate(templateFile).catch((err) => console.warn("main: the opened template file was not shown", err));
     // A guide that was left before the speech models were all there: fetch what is missing.
     void resumeModels({ status: api.modelsStatus, ensure: api.modelsEnsure }, (message) => console.warn("main:", message));

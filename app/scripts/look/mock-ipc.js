@@ -416,7 +416,7 @@ export function installMock(fixture, config = {}, target = window) {
     }
     data.pluginCatalog.push(data.pluginCatalog[6]);
   }
-  Object.assign(data.device, { appearance: config.theme ?? "light", ui_language: config.locale ?? "zh-TW", onboarded: !variant.onboarding, tour_offered: !variant.tourOffer });
+  Object.assign(data.device, { appearance: config.theme ?? "light", ui_language: config.locale ?? "zh-TW", onboarded: !variant.onboarding, tour_offered: !variant.tourUnanswered });
   // The composer's row at its fullest (R-UI-160): a permission mode with a long word (`mode`, in `language` when one is named)
   // and the scene's `model`, with a depth beside it.
   if (variant.composerLongRow) {
