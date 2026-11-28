@@ -1,3 +1,4 @@
+import { tourRu } from "./tour-catalogs";
 import type { Messages } from "./zh-TW";
 
 export const ru = {
@@ -2295,4 +2296,5 @@ export const ru = {
   "report.allWellNoLimit": "《Уведомление. Всё в порядке.》",
   "usage.weeklyOpus": "Недельный лимит · Opus",
   "usage.weeklySonnet": "Недельный лимит · Sonnet",
+  ...tourRu,
 } satisfies Messages;

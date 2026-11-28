@@ -1,3 +1,4 @@
+import { tourTh } from "./tour-catalogs";
 import type { Messages } from "./zh-TW";
 
 export const th = {
@@ -2295,4 +2296,5 @@ export const th = {
   "report.allWellNoLimit": "《แจ้งให้ทราบ. ทุกอย่างปกติ》",
   "usage.weeklyOpus": "วงเงินรายสัปดาห์ · Opus",
   "usage.weeklySonnet": "วงเงินรายสัปดาห์ · Sonnet",
+  ...tourTh,
 } satisfies Messages;

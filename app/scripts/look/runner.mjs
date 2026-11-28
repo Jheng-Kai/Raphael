@@ -414,6 +414,19 @@ export async function run(options) {
         const image = `${scene.name}-${theme}-${width}.png`;
         await page.screenshot({ path: join(directory, image), type: "png" });
         result.image = image;
+        if (scene.afterCapture && !result.runtimeErrors?.some(error => error.kind === "scene")) {
+          try {
+            for (const step of scene.afterCapture) {
+              const assertion = await perform(page, step, directory);
+              if (assertion?.check) (result.assertions ??= []).push(assertion);
+            }
+          } catch (value) {
+            if (value.assertion) (result.assertions ??= []).push(value.assertion);
+            error("scene", value.message);
+          }
+          const errors = await page.evaluate(() => window.__look.errors);
+          for (const message of errors.slice(mockErrors.length)) error("ipc", message);
+        }
         if (scene.captureColumn) {
           const height = await page.evaluate(() => Math.min(6000, Math.ceil(document.querySelector('.thread')?.scrollHeight ?? document.querySelector('.ra-body')?.closest('.thread')?.scrollHeight ?? document.querySelector('.mb-chat')?.scrollHeight ?? 4000) + 300));
           await page.setViewport({width, height: Math.max(height, 4000)});

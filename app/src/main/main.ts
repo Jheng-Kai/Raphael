@@ -20,6 +20,7 @@ import { applyAppearance } from "./owner-settings";
 import { DeviceState } from "./device";
 import { resumeModels } from "./models";
 import { mountOnboarding } from "./onboarding";
+import { createTour, type Tour } from "./tour";
 import { fitGuideWindow, releaseGuideWindow } from "./guide-window";
 import { clearLayerForward, setLayerPlace, type NavStep } from "./nav-history";
 import { PlaceHistory, stepPlace, type MainPlace } from "./place-history";
@@ -80,6 +81,7 @@ const DEFAULT_DEVICE: DeviceSettings = {
   auto_update: true,
   auto_learn: false,
   onboarded: false,
+  tour_offered: false,
   computer_apps: [],
 };
 
@@ -168,6 +170,8 @@ async function start(): Promise<void> {
   prefetchEmojiWhenIdle();
 
   const listeners = new Set<(event: MainEvent) => void>();
+  /** Raphael's guided tour of the window. */
+  let tour: Tour | null = null;
   const ctx: AppContext = {
     go,
     showDay(date) {
@@ -246,6 +250,9 @@ watchChipRows(document.body);
 
   let current: MainPageId | null = null;
   let settingsOpen = false;
+  tour = createTour({ ...ctx, isConversation: () => current === "agent" && guide.hidden && !settingsOpen && agent.conversationShown(),
+    practiseKeys: on => void api.hotkeysPractice(on).catch(error => console.warn("tour: the keys could not be practised", error)),
+    rehearse: (prefix, text) => void api.overlayRehearse(prefix, text).catch(error => console.warn("tour: the corner could not answer", error)) });
   /** What had the focus before the settings opened: it gets it back when they close. */
   let opener: HTMLElement | null = null;
   let shownAt = 0;
@@ -257,6 +264,7 @@ watchChipRows(document.body);
    * question to Raphael is shown here alone, and the overlay at the bottom right stays empty.
    */
   function tellAgentPage(): void {
+    tour?.conversationChanged();
     const shown = current === "agent" && !settingsOpen && guide.hidden !== false && agent.settingsOf() === null;
     if (shown === agentPageTold) return;
     agentPageTold = shown;
@@ -275,7 +283,7 @@ watchChipRows(document.body);
     stepping = true;
     try {
       stepPlace(direction, placeHistory, {
-        layer: direction => stepOpenLayer(direction) || !guide.hidden,
+        layer: direction => !!tour?.navigate(direction) || stepOpenLayer(direction) || !guide.hidden,
         leave: () => current === "agent" && agent.keepNavigationPlace(),
         exists: place => place.page === "member" || place.page === "room" ? agent.chatPlaceExists(place) : true,
         show(place) {
@@ -437,6 +445,7 @@ watchChipRows(document.body);
           tellAgentPage();
           go(START_PAGE);
           firstViewShown();
+          tour?.offerOnce();
           void openPendingTemplate(templateFile).catch((err) => console.warn("main: the opened template file was not shown", err));
           // The speech models that the guide did not wait for come on in the background.
           void resumeModels({ status: api.modelsStatus, ensure: api.modelsEnsure }, (message) => console.warn("main:", message));
@@ -454,6 +463,7 @@ watchChipRows(document.body);
     showPages();
     go(START_PAGE);
     firstViewShown();
+    if (deviceRead && device.get().onboarded) tour?.offerOnce();
     void openPendingTemplate(templateFile).catch((err) => console.warn("main: the opened template file was not shown", err));
     // A guide that was left before the speech models were all there: fetch what is missing.
     void resumeModels({ status: api.modelsStatus, ensure: api.modelsEnsure }, (message) => console.warn("main:", message));

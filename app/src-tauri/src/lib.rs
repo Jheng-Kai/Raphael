@@ -256,6 +256,7 @@ pub fn run() {
             commands::window_hotkey,
             commands::main_window_forward,
             commands::hotkeys_practice,
+            commands::overlay_rehearse,
             commands::mic_access,
             commands::microphone_permission,
             commands::microphone_ask,

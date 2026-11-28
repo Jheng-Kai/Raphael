@@ -2061,6 +2061,24 @@ pub fn hotkeys_practice(webview: Webview, on: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// The guided tour's practice of the quick-ask keys, once they all went down: Raphael's emblem appears in its corner and
+/// answers with 《`prefix`。`text`》, then vanishes, exactly as a real answer does. Nothing is recorded and nothing is
+/// asked; the practice keeps the keys from starting a real question meanwhile.
+#[tauri::command]
+pub fn overlay_rehearse(
+    app: AppHandle,
+    webview: Webview,
+    prefix: String,
+    text: String,
+) -> Result<(), String> {
+    require_main(&webview)?;
+    let overlay = app
+        .try_state::<Arc<Overlay>>()
+        .ok_or("the overlay is not running")?;
+    crate::overlay::OverlayApi::say(overlay.inner().as_ref(), &prefix, &text);
+    Ok(())
+}
+
 /// Whether the privacy settings of Windows let desktop apps use the microphone, and if not, which
 /// switch is off (`system`, `user` or `desktop_apps`). On macOS, whether the person allowed this
 /// app the microphone: `user` when they said no, `system` when a profile forbids it; a question
@@ -2942,6 +2960,7 @@ mod tests {
                 "open_library_file",
                 "open_link",
                 "open_team_file",
+                "overlay_rehearse",
                 "owner_clipboard_sequence",
                 "owner_clipboard_text",
                 "pick_import_source",

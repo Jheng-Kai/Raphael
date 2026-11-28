@@ -139,6 +139,84 @@ is before the primary in the tab order). Native proof needs an authorized fresh 
 steps, relaunch and verify onboarding stays dismissed and the chosen tools, services and switches
 persist. Keep sanitized readback and stop the owned dev process.
 
+## Raphael's guided tour of the window
+
+Raphael's blue slime offers a tour after the first-run guide or on an ordinary launch
+with an unanswered offer. It waits for the main conversation to be uncovered. When another page or a dialog covers it, the offer fades out in 150 ms and its buttons immediately leave the tab order. Returning to the uncovered conversation plays one pop-in and keeps the offer unanswered. The tour's own confirmations sit above it. Start and confirmed Skip save `tour_offered`. Escape on
+the offer leaves it unanswered. The account menu has no route to relaunch the tour.
+`app/src/main/tour/` contains the controller, placement and view. Titles, short spoken
+lines, progress labels and confirmation copy come from fifteen `tour.*` catalogues.
+
+- **The offer** (`tour-offer`, `tour-offer-returning`, `tour-offer-skip`, `tour-offer-escape`):
+  Raphael grows from the account button and touches down at 250 ms, revealing its blue light.
+  The bubble appears after the landing settles, at 430 ms. The offer says about two minutes. Start begins immediately.
+  `tour-offer-settings-open` opens Settings over the offer and checks its portrait, light and
+  buttons are hidden, its controls are inert and the answer is still unwritten.
+  `tour-offer-skip-ask` shows the Skip confirmation over the unanswered offer.
+  Cancel, Escape or a press beside it returns focus to Skip. Confirming saves the answer
+  and dismisses the offer in `tour-offer-skip`.
+- **The walk**: every step is one framed action. When the app reacts, a step that opened something
+  worth a look lights it inside a resting frame with one plain line and waits for 好的, for as long
+  as the owner reads. `tour-step-N` captures the instruction; `tour-step-N-seen` captures what
+  the action opened, lit and explained. A new slime comes first, then what sets the app apart; the composer and the permission
+  chip are not steps. What is lit can be used while it is explained, and closing it by that use moves on.
+
+  | Look scenes | Action | What is lit and explained |
+  | --- | --- | --- |
+  | `tour-step-1`, `tour-step-1-seen` | Press the sidebar plus | The member maker: a slime can really be made; 好的 cancels it |
+  | `tour-step-2`, `tour-step-2-seen` | Press the slime's name at the top (an already open panel is closed first) | Its panel, with routines and messaging apps |
+  | `tour-step-3`, `tour-step-3-seen` | Press 電腦 in the lit panel | The computer it works on |
+  | `tour-step-4`, `tour-step-4-seen` | Press the panel's gear | Its settings: tools, skills, personality, notifications |
+  | `tour-step-5`, `tour-step-5-seen` | Press Connect apps | The dialog |
+  | `tour-step-6` | Press the model chip | (its menu opens and the tour moves on into it) |
+  | `tour-step-7`, `tour-step-7-seen` | Press the model name inside the lit menu | The model list |
+  | `tour-step-8` | Press the account avatar | (its menu opens and the tour moves on into it) |
+  | `tour-step-9`, `tour-step-9-seen` | Press 聽寫 in the lit account menu | The dictation page, beside the dimmed sidebar |
+  | `tour-step-10`, `tour-step-10-seen` | Press 行事曆 in the account menu the tour opened again | The calendar page |
+  | `tour-step-11`, `tour-step-11-seen` | Press Raphael's row | Raphael's own conversation, which stays open to the end |
+  | `tour-step-12` | Hold the quick-ask keys together (practised: they start nothing) | Each large 3D key sinks and lights while held; all down makes the real quick-ask corner say Raphael's introduction as a notice and vanish (nothing recorded), and Finish shows |
+
+  A missing action is skipped at entry. Nothing moves on by the clock: a press the app does not react to leaves the step
+  as it was. 好的 closes what the step opened through the window's own path; after the dictation and calendar pages it
+  brings the conversation back and opens the account menu again for the next row, and a resize that closed a menu opens
+  it again. No line of the tour ends with a full stop. The keys are practised while the last step shows (`hotkeys_practice`), and the practice ends however the tour ends.
+- **Ending early** (`tour-end-ask`, `tour-close`): every step has the shared round End tour
+  button at the top right and in the Tab order. End tour and Skip use the compact shared
+  confirmation with the ordinary primary button and shared Cancel. The confirmation
+  catches presses above the dim and takes keyboard focus. Cancel, Escape and a press
+  beside it preserve the same step and open layer and return focus to End tour. Confirm closes the step's layer and removes the tour
+  immediately. The saved answer stands. The farewell and its hops belong to Finish.
+- **The motion** (`tour-hop`): the scene enables motion and waits for the hops to settle. The motion is the shared
+  `app/src/main/slime-hop.ts` library (plans as numbers, `playHops` on a ground, body and glow), so any slime can travel the same way.
+  Raphael never appears elsewhere at once: a step's move and one the layout forces (a resize, a layer that opened) are
+  hopped along one straight line from where it stands. 80 ms of crouch, then two to six hops (the square root of the
+  distance over 40 px), each 240 to 420 ms in the air and rising 14 to 80 px (never above the window), 70 ms on the
+  ground between them and a 180 ms landing. Hops under way keep their course to the landing; a move the layout forces
+  meanwhile is hopped from there afterwards. In the air its eyes turn toward where it
+  goes, as a face seen from the side, and it faces the person again on landing. A nudge of a few pixels only shifts where
+  the hops land. Its blue light follows the ground and narrows and dims at the top. At rest the shared portrait sits on
+  whole pixels, and only the light breathes over 2.6 s. The words being left fade where they stand; the new ones appear
+  after landing. Reduced motion places both immediately.
+- **The goodbye** (`tour-end`, `tour-end-closed`): Finish clears the dim, Raphael returns to
+  the sidebar foot and hops twice as the farewell appears. Each hop is 12 px high and
+  takes 150 ms. The farewell fades 4.5 s after it appears. Reduced motion skips both hops.
+- **The checks**: `page-unshifted` checks the app root and the zero scroll offsets in
+  `after-onboarding`, the offer scenes, `tour-step-1`, `tour-step-5`, every `-seen` scene and
+  `tour-end`. The dim covers the window edges and opens on the action. The full group stays
+  inside the viewport and clears the ring and every visible pressable element in the open
+  layer, including connection buttons. The window's own dialogs, menus and pages never move or
+  get padded for the tour at any size: the group tries the space beside the layer (its bubble
+  narrows to no less than 200 px to fit a strip), the open part of its header, then the dim above
+  or below it. Only while a dialog that leaves no such strip is looked at does Raphael stand on
+  its lower right, clear of its title; the check then proves no strip could hold the group. Check
+  the apps, maker and page scenes at the owner's 1080 × 640 size as well as the usual sizes.
+
+```powershell
+npm run look -- tour-offer tour-offer-returning tour-offer-settings-open tour-offer-skip-ask tour-offer-skip tour-offer-escape tour-step-1 tour-step-1-seen tour-step-2 tour-step-2-seen tour-step-3 tour-step-3-seen tour-step-4 tour-step-4-seen tour-step-5 tour-step-5-seen tour-step-6 tour-step-7 tour-step-7-seen tour-step-8 tour-step-9 tour-step-9-seen tour-step-10 tour-step-10-seen tour-step-11 tour-step-11-seen tour-step-12 tour-hop tour-end tour-end-closed tour-end-ask tour-close --theme both --width 1120,720,1920x1080,1080x640
+```
+
+Native verification still needs the real window. Look exercises the app with fixture data.
+
 ## Gotchas
 
 Each scene begins fresh. The onboarding variant overrides the ordinary onboarded device setting.

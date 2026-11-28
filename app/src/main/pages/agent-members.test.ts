@@ -198,12 +198,15 @@ test.each(navInputs)("Back closes member settings from Skills and Forward restor
   try {
     await flush(); await pick(3);
     agent.show("member-settings:3");
+    expect(agent.conversationShown()).toBe(false);
     $('[data-ms="cat"][data-cat="skills"]').click();
     expect($('[data-ms="cat"][data-cat="skills"]').getAttribute("aria-current")).toBe("page");
     sendNavInput(input, "back");
     expect(agent.settingsOf()).toBeNull();
+    expect(agent.conversationShown()).toBe(true);
     sendNavInput(input, "forward");
     expect(agent.settingsOf()).toBe(3);
+    expect(agent.conversationShown()).toBe(false);
     expect($('[data-ms="cat"][data-cat="skills"]').getAttribute("aria-current")).toBe("page");
   } finally { stop(); clearLayerForward(); agent.hide(); }
 });

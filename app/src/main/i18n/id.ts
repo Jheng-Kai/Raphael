@@ -1,3 +1,4 @@
+import { tourId } from "./tour-catalogs";
 import type { Messages } from "./zh-TW";
 
 export const id = {
@@ -2295,4 +2296,5 @@ export const id = {
   "report.allWellNoLimit": "《Pemberitahuan. Semua baik.》",
   "usage.weeklyOpus": "Batas mingguan · Opus",
   "usage.weeklySonnet": "Batas mingguan · Sonnet",
+  ...tourId,
 } satisfies Messages;

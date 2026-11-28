@@ -1,3 +1,4 @@
+import { tourVi } from "./tour-catalogs";
 import type { Messages } from "./zh-TW";
 
 export const vi = {
@@ -2295,4 +2296,5 @@ export const vi = {
   "report.allWellNoLimit": "《Thông báo. Mọi thứ ổn.》",
   "usage.weeklyOpus": "Hạn mức hằng tuần · Opus",
   "usage.weeklySonnet": "Hạn mức hằng tuần · Sonnet",
+  ...tourVi,
 } satisfies Messages;

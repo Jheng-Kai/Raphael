@@ -1,3 +1,4 @@
+import { tourEs } from "./tour-catalogs";
 import type { Messages } from "./zh-TW";
 
 export const es = {
@@ -2295,4 +2296,5 @@ export const es = {
   "report.allWellNoLimit": "《Aviso. Todo va bien.》",
   "usage.weeklyOpus": "Límite semanal · Opus",
   "usage.weeklySonnet": "Límite semanal · Sonnet",
+  ...tourEs,
 } satisfies Messages;

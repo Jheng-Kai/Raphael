@@ -1,3 +1,4 @@
+import { tourZhCN } from "./tour-catalogs";
 import type { Messages } from "./zh-TW";
 
 export const zhCN = {
@@ -2295,4 +2296,5 @@ export const zhCN = {
   "report.allWellNoLimit": "《告。一切正常。》",
   "usage.weeklyOpus": "每周额度 · Opus",
   "usage.weeklySonnet": "每周额度 · Sonnet",
+  ...tourZhCN,
 } satisfies Messages;

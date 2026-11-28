@@ -1,3 +1,4 @@
+import { tourZh } from "./tour-catalogs";
 import { navZh } from "./nav-catalogs";
 import { homeZh } from "./home-catalogs";
 import { reviewZh } from "./review-catalogs";
@@ -2108,6 +2109,7 @@ export const zhTW = {
   "report.allWellNoLimit": "《告。一切正常。》",
   "usage.weeklyOpus": "每週額度 · Opus",
   "usage.weeklySonnet": "每週額度 · Sonnet",
+  ...tourZh,
 } as const;
 export type MessageKey = keyof typeof zhTW;
 export type Messages = Record<MessageKey, string>;

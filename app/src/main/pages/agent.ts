@@ -265,6 +265,7 @@ export function createAgent(app: AppContext, places?: {
   resolved(member: number, conversation: number): void;
 }): Page & {
   sidebar: HTMLElement; loadSidebar(): Promise<void>; memberFace(id: number, size: number): string; settingsOf(): number | null;
+  conversationShown(): boolean;
   keepNavigationPlace(): boolean;
   currentChatPlace(): ChatPlace; chatPlaceExists(place: ChatPlace): boolean; showChatPlace(place: ChatPlace): void;
 } {
@@ -1295,6 +1296,8 @@ export function createAgent(app: AppContext, places?: {
     // An open conversation between members follows the turns it is read from, and closes with its conversation.
     if (peer) queueMicrotask(() => peer?.update());
     stage.setAttribute("aria-busy", String(pending));
+    // Whose space the page shows: the guided tour knows from it that Raphael's own conversation is open.
+    el.toggleAttribute("data-raphael", inRaphael());
     // Only a thread not read yet says it is loading: a refresh of an empty one keeps its ordinary empty layout (R-UI-71, R-UI-183).
     if (pending && isEmpty() && !loadedThread) {
       wait.innerHTML = loadingHTML();
@@ -3493,6 +3496,7 @@ export function createAgent(app: AppContext, places?: {
     loadSidebar: () => members.load(),
     memberFace: (id, size) => members.faceOf(id, size),
     settingsOf: () => members.settings.isOpen() ? members.current() : null,
+    conversationShown: () => !memberChat.hidden && !members.settings.isOpen() && !desktop.expanded() && !pagesHost.shown() && !peer,
     keepNavigationPlace,
     currentChatPlace,
     chatPlaceExists,

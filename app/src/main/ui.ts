@@ -402,6 +402,7 @@ interface MenuState {
 }
 let menu: MenuState | null = null;
 let menuListening = false;
+let heldMenu: MenuState | null = null;
 
 /** Where a right click asked for the menu of a ⋯ button; `until` is when that stops holding (see `pressOverflow`). */
 interface PointerAt { x: number; y: number; until: number }
@@ -424,7 +425,14 @@ export function pressOverflow(button: HTMLElement, at?: { x: number; y: number }
 }
 
 export function closeMenu(): void {
+  if (heldMenu) return;
   while (menu) closeMenuLevel();
+}
+
+/** Keep a visible menu in place while a modal above it owns input. */
+export function holdMenuOpen(): () => void {
+  heldMenu = menu;
+  return () => { heldMenu = null; };
 }
 
 /** Closes the submenus of the open menu and keeps the menu itself (a pick in a submenu that only changes a row). */
@@ -463,7 +471,7 @@ function listenForMenuEvents(): void {
   if (menuListening) return;
   menuListening = true;
   document.addEventListener("keydown", (e) => {
-    if (!menu || e.isComposing || e.keyCode === 229) return;
+    if (!menu || heldMenu || e.isComposing || e.keyCode === 229) return;
     const target = e.target === document ? document.activeElement : e.target;
     if (["PageDown", "PageUp", "Home", "End", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", " "].includes(e.key) && !insideMenus(target) &&
       !(target instanceof Element && target.closest('input, textarea, [contenteditable="true"]'))) {
@@ -681,9 +689,9 @@ function listenForSubmenus(state: MenuState): void {
     while (child && child.parent !== state) child = child.parent;
     return child;
   };
-  const closeChild = (): void => { while (menu && menu !== state && childOf()) closeMenuLevel(); };
+  const closeChild = (): void => { while (!heldMenu && menu && menu !== state && childOf()) closeMenuLevel(); };
   const move = (event: PointerEvent): void => {
-    if (!(event.target instanceof Element) || !state.el.isConnected) return;
+    if (heldMenu || !(event.target instanceof Element) || !state.el.isConnected) return;
     const child = childOf(), point = { x: event.clientX, y: event.clientY };
     const inChild = child && child.el.contains(event.target);
     const row = event.target.closest<HTMLElement>('button[role="menuitem"], button[role="menuitemradio"]');
@@ -700,7 +708,7 @@ function listenForSubmenus(state: MenuState): void {
       const open = (): void => {
         pending = null; timer = undefined;
         // A press that opened the submenu before the pointer's delay ran out has done it: opening it again would be a second press on its opener, which folds it away (R-UI-124).
-        if (!row.isConnected || !state.el.isConnected || childOf()?.anchor === row) return;
+        if (heldMenu || !row.isConnected || !state.el.isConnected || childOf()?.anchor === row) return;
         const focus = document.activeElement as HTMLElement | null;
         row.click();
         focus?.focus({ preventScroll: true });

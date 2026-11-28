@@ -1,3 +1,4 @@
+import { tourKo } from "./tour-catalogs";
 import type { Messages } from "./zh-TW";
 
 export const ko = {
@@ -2295,4 +2296,5 @@ export const ko = {
   "report.allWellNoLimit": "《알림. 모두 정상입니다.》",
   "usage.weeklyOpus": "주간 한도 · Opus",
   "usage.weeklySonnet": "주간 한도 · Sonnet",
+  ...tourKo,
 } satisfies Messages;
