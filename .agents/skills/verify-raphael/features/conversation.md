@@ -2316,7 +2316,11 @@ core/tests/agent/test_routine_event.py and core/tests/members/test_harness.py.
 
 ## Local paths in member replies
 
-A checked local path is inline code in the conversation, with the same text, background and
+A link to a file on this computer never shows its raw words (R-UI-184): a `file://` address is the path it names, and a
+file linked under its own name (`[report.md](file:///…/report.md)`, in code marks or not) shows that name, with the whole
+path as its title and the press. A label of other words keeps them beside the whole path. The owner's file manager wrote
+230 such links in 44 replies (plain names, names in code marks, encoded spaces); each now renders with no `](`, `file://`
+or `%20` left in its words. A checked local path is inline code in the conversation, with the same text, background and
 spacing as other code. Hover or keyboard focus adds a thin underline and a pointer. Keyboard
 focus also shows the shared focus ring. A path outside the member's workspace, the team files,
 the member and team shared folders and the remembered projects stays plain code. The core resolves

@@ -3895,8 +3895,9 @@ export function checkRendered(name, context = {}) {
       const card = scope.querySelector('.message-table'), scroller = card.querySelector('.rich-scroll');
       require(!card.textContent.includes('file://') && !card.textContent.includes(']('), "the file link is never shown as its raw words");
       const path = card.querySelector('td code[data-message-path]');
-      require(path?.textContent === '/Users/owner/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw', `the link shows the path it names (${path?.textContent})`);
-      require(path.getClientRects().length > 1 || path.getBoundingClientRect().width <= path.closest('td').clientWidth, "the path wraps inside its cell");
+      require(path?.dataset.messagePath === '/Users/owner/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw', `the link presses the path it names (${path?.dataset.messagePath})`);
+      require(path.textContent === 'Docker.raw' && path.title === path.dataset.messagePath, `a file linked under its own name shows that name, its path as the title (${path.textContent})`);
+      require(path.getBoundingClientRect().width <= path.closest('td').clientWidth + 1, "the name stays inside its cell");
       const last = card.querySelector('thead th:last-child').getBoundingClientRect(), box = scroller.getBoundingClientRect();
       if (innerWidth >= 1000) {
         require(scroller.scrollWidth <= scroller.clientWidth + 1, `the whole table fits its card (${scroller.scrollWidth} > ${scroller.clientWidth})`);

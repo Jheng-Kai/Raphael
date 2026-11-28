@@ -38,12 +38,29 @@ test("a link to a file by its file:// address shows the path it names, which a t
   expect(el.textContent).not.toContain("](file:");
   expect(el.textContent).not.toContain("file://");
   const path = el.querySelector<HTMLElement>(".message-table td code[data-message-path]");
-  expect(path?.textContent).toBe("/Users/me/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw");
+  expect(path?.dataset.messagePath).toBe("/Users/me/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw");
   expect(path?.closest("td")?.classList.contains("short")).toBe(false);
   expect(messageHTML("[報告](file:///Users/me/My%20Files/report.md)", "", true)).toContain(">/Users/me/My Files/report.md</code>");
   expect(messageHTML("[D](file:///D:/Team/a.txt)", "", true)).toContain(">D:\\Team\\a.txt</code>");
   // Another host's address is no path of this computer, and stays as it was written.
   expect(messageHTML("[x](file://server/share/a.txt)", "", true)).not.toContain("data-message-path");
+});
+
+test("a file linked under its own name shows that name, with its whole path as the title and the press", () => {
+  // A file manager's reply listed four files of one folder as four whole paths, and [`.lab`](…/.lab) said its name twice
+  // (R-UI-184). The owner's three link forms: a plain name, a name in code marks, and an encoded space.
+  const el = document.createElement("div");
+  el.innerHTML = messageHTML("實驗紀錄（[`.lab`](file:///Users/me/HeHe/.lab)）\n\n- [firebase-defines.json](file:///Users/me/HeHe/.lab/firebase-defines.json)、" +
+    "[ios.xcconfig](file:///Users/me/HeHe/.lab/ios.xcconfig)\n- [Antigravity](file:///Users/me/Library/Application%20Support/Antigravity/)\n" +
+    "- [uv 快取](file:///Users/me/.cache/uv)", "", true);
+  const codes = [...el.querySelectorAll<HTMLElement>("code[data-message-path]")];
+  expect(codes.map(code => code.textContent)).toEqual([".lab", "firebase-defines.json", "ios.xcconfig", "Antigravity", "/Users/me/.cache/uv"]);
+  expect(codes.map(code => code.dataset.messagePath)).toEqual(["/Users/me/HeHe/.lab", "/Users/me/HeHe/.lab/firebase-defines.json",
+    "/Users/me/HeHe/.lab/ios.xcconfig", "/Users/me/Library/Application Support/Antigravity/", "/Users/me/.cache/uv"]);
+  expect(codes.slice(0, 4).map(code => code.title)).toEqual(codes.slice(0, 4).map(code => code.dataset.messagePath));
+  // A label of other words keeps them beside the whole path.
+  expect(el.textContent).toContain("uv 快取 /Users/me/.cache/uv");
+  expect(el.textContent).not.toMatch(/\]\(|file:|%20|`/);
 });
 
 test("only a checked path becomes a plain-looking keyboard link with a quiet failure notice", async () => {
