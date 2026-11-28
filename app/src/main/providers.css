@@ -39,21 +39,18 @@
 /* The title and its x stay above the list, which scrolls on its own: the way out is never scrolled away, nor covered. */
 .pv-dir { grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
 .pv-dir > .pv-scroll { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-4); min-height: 0; margin: 0 calc(var(--sp-4) * -1) calc(var(--sp-4) * -1); padding: 0 var(--sp-4) var(--sp-4); overflow-y: auto; }
-/* The editor is one column as wide as its dialog: fields, what the test found right under them, then the actions in the foot. */
+/* Setup, models and settings share the same narrow dialog. */
 .pv-setup { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); width: 100%; }
 .cs-dialog.pv-editor { display: flex; flex-direction: column; overflow: hidden; gap: 0; padding: 0; }
 .pv-editor > .cs-dlg-head { flex: none; padding: var(--sp-4); }
 .pv-body { min-height: 0; flex: 1 1 auto; overflow-y: auto; padding: 0 var(--sp-4) var(--sp-4); }
-.pv-feedback:empty, .pv-models-host:empty { display: none; }
+.pv-feedback:empty, .pv-footer:empty { display: none; }
 .pv-feedback .note { margin: 0; }
-.pv-test-status { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-.pv-test-status .i { flex: none; }
-.pv-test-status > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pv-test-status.is-ok { color: var(--ok); }
+.pv-models .pv-test-status:not(.is-error) { color: var(--text-2); font-weight: var(--weight-regular); }
 .pv-test-status.is-error { color: var(--err); }
-.pv-footer { display: flex; flex: none; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); background: var(--panel); }
-.pv-footer-actions { display: flex; align-items: center; gap: var(--sp-2); margin-inline-start: auto; }
-.pv-setup > .btn { justify-self: start; }
+.pv-models .pv-test-status.is-error { display: flex; align-items: center; gap: var(--sp-2); }
+.pv-models .pv-test-status > .btn { flex: none; }
+.pv-footer { display: flex; flex: none; justify-content: flex-end; padding: 0 var(--sp-4) var(--sp-4); }
 .pv-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); min-width: 0; }
 /* A plain blue word, no fill and no frame (the app's inline links): the page where a key is made, beside the key's field. */
 .btn.pv-link { flex: none; min-height: 0; height: auto; padding: 0; border: 0; background: transparent; color: var(--link); font: inherit; font-size: var(--fs-sm); text-align: start; white-space: nowrap; }
@@ -68,9 +65,10 @@
 .pv-account .field { width: 100%; height: auto; min-height: var(--h-ctl); padding-block: var(--sp-2); }
 .pv-account textarea { width: 100%; min-width: 0; resize: vertical; font: inherit; color: inherit; background: transparent; border: 0; outline: 0; }
 .pv-context-warning { grid-column: 1 / -1; justify-self: start; border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
-.pv-models { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-width: 0; }
-.pv-models > .field { width: 100%; }
-.pv-model-list { max-height: 220px; overflow-y: auto; overflow-x: hidden; }
+.pv-models { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; overflow: hidden; }
+.pv-models > .field { flex: none; width: 100%; }
+.pv-model-scroll { min-height: 0; overflow-y: auto; }
+.pv-model-scroll > .btn { margin-block: var(--sp-2); }
 .pv-model-list ul { list-style: none; margin: 0; padding: 0; }
 /* One row for a model: its name at the left, its id (quiet) at the right; a long id wraps in its own column. */
 .pv-model-list li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 45%); align-items: baseline; gap: var(--sp-1) var(--sp-3); padding: var(--sp-2) 0; }

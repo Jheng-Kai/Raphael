@@ -2289,11 +2289,21 @@ export function installMock(fixture, config = {}, target = window) {
       case "models.local": return { models: data.localModels };
       case "providers.list": return { providers: data.providers };
       case "providers.kinds": return { kinds: data.providerKinds };
-      // A test of the form as it stands, saved or not: the core keeps nothing of it. A key spelled look-refused-key is refused.
       case "providers.test": {
         if (p.key === "look-refused-key") return { ok: false, kind: "auth", models: 0 };
+        if (Object.keys(p).length === 1 && p.id) {
+          return { ok: true, models: p.id === "p-lmstudio" ? LOOK_LOCAL_MODELS.length : data.catalog.llm.length };
+        }
         const found = LOOK_LOCAL_MODELS.map(model => ({ ...model, context_warning: false }));
-        return p.id && !p.base_url && !p.key && !p.name ? { ok: true, models: found.length } : { ok: true, models: found.length, found };
+        return { ok: true, models: found.length, found };
+      }
+      case "providers.add": {
+        const kind = data.providerKinds.find(item => item.kind === p.kind);
+        const provider = { id: `p-${p.kind}`, kind: p.kind, name: p.name ?? kind.name,
+          base_url: p.base_url ?? kind.default_base_url, has_key: !!p.key, enabled: true, status: "ok", models: LOOK_LOCAL_MODELS.length };
+        data.providers.push(provider);
+        notify("ProvidersChanged");
+        return { provider };
       }
       case "providers.models": if (p.id === "p-lmstudio") return { models: LOOK_LOCAL_MODELS }; return { models: data.catalog.llm.map(model => ({ id: model.id, name: model.name, context: model.context_length, vision: true, tools: true, audio_in: false, price_in: model.input_per_mtok, price_out: model.output_per_mtok })) };
       case "languages.list": return { groups: data.languages };

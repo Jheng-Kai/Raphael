@@ -1686,17 +1686,17 @@ existing retract-and-restore behavior after the second Escape.
 npm run look -- esc-main-armed esc-member-armed esc-recording-cancel composer-stop-pending-result composer-stop-background-result composer-stop-voice-result composer-stop-navigation composer-stop-roster chat --theme both --width 1120,720,1920x1080
 npm run look -- member-delete --theme both --width 1120,720,1920x1080
 npm run look -- page-state-kept page-state-restored page-product page-buy page-expand page-gone page-composer-grows page-inplace page-inplace-back page-inplace-esc page-inplace-update page-inplace-working page-inplace-reply page-inplace-room page-inplace-room-update page-library-open page-library-scrolled page-library-report page-library-back page-library-esc page-library-older page-library-share --theme both --width 1120,720,1920x1080
-npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-long composer-model-none composer-model-none-add composer-model-off settings-models-fresh chooser-openrouter-off settings-provider-directory settings-provider-directory-stt settings-provider-editor settings-provider-editor-refused settings-provider-editor-local settings-provider-editor-saved composer-model-menu composer-model-alias model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
+npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-long composer-model-none composer-model-none-add composer-model-off settings-models-fresh chooser-openrouter-off settings-provider-directory settings-provider-directory-stt settings-provider-editor settings-provider-editor-refused settings-provider-editor-local settings-provider-editor-saved settings-provider-editor-settings composer-model-menu composer-model-alias model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
 ```
 
-A provider's dialog (R-PROV-TEST-01, R-PROV-EDITOR-01; the same editor in Settings › 模型 and in the guide's AI tools step) is one
-narrow column: the fields, then what 測試連線 found right under them, then the foot (移除 at the left, 測試連線 and 儲存 at the right).
-The test runs on the typed values with nothing saved (the mock `providers.test` answers a local server's two models, and refuses a key
-spelled `look-refused-key`); the page where a key is made is plain blue text on the key field's label line. `settings-provider-editor`
-(OpenAI, key typed, tested), `settings-provider-editor-refused` (one line, no models), `settings-provider-editor-local` (LM Studio, no
-key, tested before it is saved), `settings-provider-editor-saved` (a saved server lists its models, is tested as it stands, 移除 at the left and 再新增一個 a framed button) and the guide's
-`onboarding-provider-editor` run the `provider-editor` and `provider-editor-tested` checks: a narrow dialog, every field as wide as the
-column, the foot closing the dialog, no sentence about saving first, an empty list or 64K, and the result and the models under the last field.
+The guide's AI tools step and Settings › 模型 share the same provider dialog (R-PROV-TEST-01, R-PROV-EDITOR-01).
+`settings-provider-editor` shows setup for OpenAI, with a key link on its label row and one Connect button.
+`settings-provider-editor-refused` uses the synthetic key `look-refused-key` and shows an error below the fields.
+`settings-provider-editor-local` shows LM Studio setup with an address and no key field.
+`settings-provider-editor-saved` checks the automatic test, focused search, scrollable model list and framed button to add another.
+`settings-provider-editor-settings` opens the gear for OpenRouter and shows Back, a trash icon and a configured key with a small framed Replace button to the right of its status.
+`onboarding-provider-editor` checks setup and Connect through the guide, then waits for the save and model results.
+All six scenes use the `provider-editor` check for the layout and controls of the current view.
 
 What the owner does on a page stays with it (R-PAGE-14, issue 236): `page-state-kept` ticks a box, writes a note and a password
 and sets `raphael.state` inside the real frame the core serves (`fixtures/page-state.json`, rendered by `document()`), then waits

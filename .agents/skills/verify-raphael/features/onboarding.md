@@ -60,7 +60,7 @@ Settings has no 導覽 entry any more;
    only its account), and on the right its one button, then the check of a ready tile (black edge in
    light, lifted fill in dark; the check carries the word a reader hears). Three tiles to a row where
    each gets at least 256 px, two in a 720 px window. Every provider, OpenRouter included, has 連接,
-   which opens the same editor as Settings › 模型 › 新增供應商 (`onboarding-provider-editor`: tested before it is saved, R-PROV-TEST-01); the guide has no key tile of its own
+   which opens the same editor as Settings › 模型 › 新增供應商 (`onboarding-provider-editor`: Connect tests the setup form, saves on success and shows the models, R-PROV-TEST-01); the guide has no key tile of its own
    (R-COPY-02). ChatGPT and the command-line tools are driven by the same account controller as
    Settings > Models (`createCliBrains`).
 3. **Services** (`onboarding-services`, `onboarding-service-waiting`, `onboarding-services-composio`,
