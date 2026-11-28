@@ -2928,7 +2928,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       if (command === "member_template_pending") return null;
       if (command === "save_usage_csv") { state.exported = args.csv; return true; }
-      if (["agent_page_shown", "hotkeys_pause", "hotkeys_practice", "plugin:event|unlisten", "plugin:window|set_focus", "plugin:window|minimize", "plugin:window|close", "plugin:window|start_dragging", "plugin:webview|set_webview_zoom"].includes(command)) return;
+      if (["agent_page_shown", "hotkeys_pause", "hotkeys_practice", "overlay_rehearse", "plugin:event|unlisten", "plugin:window|set_focus", "plugin:window|minimize", "plugin:window|close", "plugin:window|start_dragging", "plugin:webview|set_webview_zoom"].includes(command)) return;
       return unsupported(command);
     },
   };
