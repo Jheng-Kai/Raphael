@@ -139,8 +139,10 @@ THEME = {
 FONT = '"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei UI","Microsoft JhengHei",system-ui,sans-serif'
 
 
-# A page open in the whole area is shown as a browser shows it (R-PAGE-10): its frame is the page's window and the page scrolls in it.
-# The height it says only sizes its card in the thread; the background it says is what the window paints behind the composer's row.
+# A page open in the whole area is shown as a browser shows it (R-PAGE-10): its frame is the page's window, to the window's foot
+# (R-PAGE-11), and the page scrolls in it. The height it says only sizes its card in the thread. The window tells it how much of its
+# foot the composer floats over (`foot`) and how much of its head the header's buttons do (`head`), so its first and last lines
+# scroll clear of them.
 _HELPER = "<script>" + FRAME_NAVIGATION + """
 (() => {
   const post = (type, data) => parent.postMessage({raphaelPage: 1, type, ...data}, '*');
@@ -211,36 +213,117 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
   // Where the owner is reading: the window keeps it, so a page changed while open comes back to the same place.
   let scrolling = 0;
   addEventListener('scroll', () => { if (!scrolling) scrolling = requestAnimationFrame(() => { scrolling = 0; post('scroll', {y: Math.round(scrollY)}); }); }, {passive: true});
-  // The page's own background (R-PAGE-10): the window paints it behind the composer's row, so the page still reads as running to the
-  // window's foot. The first computed background colour of the body that is not transparent, then of the root, as a plain rgb() or
-  // rgba() (nothing else is ever sent; a colour in another notation is converted), or an empty one when the page has none.
-  const plain = value => {
-    // (This text is a Python string: no backslash may stand in it.)
-    let parts = /^rgba?[(][^)]*[)]$/.test(value) ? value.slice(value.indexOf('(') + 1, -1).split(/[ ,/]+/).filter(Boolean).map(Number) : null;
-    if (!parts || parts.length < 3 || parts.some(Number.isNaN)) {
-      try { const paint = document.createElement('canvas').getContext('2d'); paint.fillStyle = value; paint.fillRect(0, 0, 1, 1);
-        const [r, g, b, a] = paint.getImageData(0, 0, 1, 1).data; parts = [r, g, b, a / 255]; } catch { return ''; }
-    }
-    const [r, g, b, a = 1] = parts, byte = n => Math.max(0, Math.min(255, Math.round(n)));
-    if (!(a > 0)) return '';
-    return a >= 1 ? 'rgb(' + byte(r) + ', ' + byte(g) + ', ' + byte(b) + ')' : 'rgba(' + byte(r) + ', ' + byte(g) + ', ' + byte(b) + ', ' + Math.round(a * 1000) / 1000 + ')';
-  };
-  const background = () => {
-    for (const root of [document.body, document.documentElement]) {
-      const color = root ? plain(getComputedStyle(root).backgroundColor) : '';
-      if (color) return color;
-    }
-    return '';
-  };
-  const tell = () => post('background', {color: background()});
-  addEventListener('DOMContentLoaded', tell, {once: true});
-  addEventListener('load', tell, {once: true});
   // The page has the keys once the owner pressed in it: Escape there goes back to the conversation as it does outside,
   // unless it only drops an input method's candidate (WebKit, on macOS, marks that Escape with keyCode 229 alone).
   addEventListener('keydown', event => { if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing && event.keyCode !== 229) post('escape', {}); });
+  // The room the window keeps over the page (R-PAGE-11, R-PAGE-16): the composer at the foot and the header's buttons at the head. It is the
+  // root's own padding, which is page and canvas alike, so the page's first line stands clear under the buttons and its last clear above the
+  // composer, and nothing but the page's own background shows in either. A fixed or sticky part of the page that reaches into either room
+  // (a rail one window tall with its buttons at its foot, a bar at the top or the bottom) is moved clear of it too, or it would stand under the
+  // composer for good: a part as tall as the window takes the room as its own padding, so its background still runs to the edge, and a smaller
+  // one moves by it. A sticky part as tall as the window also reaches the window's foot when the page is read to its end (R-PAGE-17): its
+  // container ends where the page's own content does, so the part would stop short of the foot by the room left under that container
+  // (the body's own padding and the foot above); a negative bottom margin of that much lets it run on to the foot.
+  let foot = 0, head = 0, moved = [], settle = 0, tone = '';
+  const fades = {};
+  // The page's own ground (R-PAGE-17): the colour its root paints, else its body's, else (it paints nothing) the app's own colour behind the
+  // frame, which follows the colour scheme. A page whose ground is not one opaque colour (a gradient, a picture, a translucent colour) has none.
+  const numbers = text => { const match = /^rgba?[(]([^)]*)[)]$/.exec(text); return match ? match[1].split(/[ ,/]+/).filter(Boolean).map(Number) : null; };
+  const ground = () => {
+    const paint = element => { const style = getComputedStyle(element); return {image: style.backgroundImage !== 'none', numbers: numbers(style.backgroundColor)}; };
+    const root = paint(document.documentElement), body = paint(document.body || document.documentElement);
+    if (root.image || body.image) return null;
+    const clear = list => !list || (list.length > 3 && list[3] === 0);
+    const own = !clear(root.numbers) ? root.numbers : !clear(body.numbers) ? body.numbers : null;
+    if (!own) return getComputedStyle(document.documentElement).colorScheme === 'dark' ? [10, 10, 10] : [255, 255, 255];
+    const colour = own.slice(0, 3);
+    return (own.length > 3 && own[3] !== 1) || colour.length < 3 || colour.some(Number.isNaN) ? null : colour.map(Math.round);
+  };
+  const lin = value => { value /= 255; return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4); };
+  // What the window's own buttons are drawn in over the page (its tone, light or dark; mixed when it has no one ground) and a fade of that
+  // ground at the head and the foot, so what scrolls under the header's buttons and the composer fades out in the page's own colour, never the
+  // app's. The fades are fixed, take no pointer and are none for a page that has no one ground.
+  const shade = () => {
+    const colour = ground(), say = !colour ? 'mixed' : 0.2126 * lin(colour[0]) + 0.7152 * lin(colour[1]) + 0.0722 * lin(colour[2]) > 0.179 ? 'light' : 'dark';
+    if (say !== tone) { tone = say; post('tone', {tone}); }
+    for (const [at, room] of [['top', head], ['bottom', foot]]) {
+      const on = room > 0 && colour;
+      if (!fades[at] && on) {
+        fades[at] = document.createElement('div');
+        fades[at].setAttribute('data-raphael-fade', at);
+        fades[at].style.cssText = 'position:fixed;left:0;right:0;pointer-events:none;z-index:2147483647;' + at + ':0';
+        document.documentElement.appendChild(fades[at]);
+      }
+      if (!fades[at]) continue;
+      fades[at].style.display = on ? 'block' : 'none';
+      if (!on) continue;
+      const solid = 'rgb(' + colour.join(',') + ')', clear = 'rgba(' + colour.join(',') + ',0)';
+      fades[at].style.height = (room + 16) + 'px';
+      fades[at].style.backgroundImage = 'linear-gradient(' + (at === 'top' ? 'to bottom' : 'to top') + ',' + solid + ' 0,' + solid + ' ' + Math.round(room * 0.85) + 'px,' + clear + ' 100%)';
+    }
+  };
+  const lift = () => {
+    settle = 0;
+    // What was moved is put back first, so that each pass reads the page as the page made it.
+    for (const [element, was] of moved) for (const name in was) element.style[name] = was[name];
+    moved = [];
+    const root = document.documentElement.style;
+    root.paddingTop = head ? head + 'px' : '';
+    root.paddingBottom = foot ? foot + 'px' : '';
+    shade();
+    if ((!foot && !head) || !document.body) return;
+    let seen = 0;
+    for (const element of document.body.querySelectorAll('*')) {
+      if (++seen > 4000) break;
+      const style = getComputedStyle(element);
+      if (style.position !== 'fixed' && style.position !== 'sticky') continue;
+      const box = element.getBoundingClientRect(), was = {}, tall = box.height >= innerHeight * 0.6;
+      if (!(box.width > 0 && box.height > 0)) continue;
+      const take = (edge, room, reaches) => {
+        if (!reaches) return;
+        if (tall) {
+          const side = edge === 'bottom' ? 'paddingBottom' : 'paddingTop';
+          if (!('boxSizing' in was)) { was.boxSizing = element.style.boxSizing; element.style.boxSizing = 'border-box'; }
+          was[side] = element.style[side];
+          element.style[side] = (parseFloat(style[side]) || 0) + room + 'px';
+        } else if (style[edge] !== 'auto') {
+          was[edge] = element.style[edge];
+          element.style[edge] = (parseFloat(style[edge]) || 0) + room + 'px';
+        }
+      };
+      let beyond = 0;
+      if (tall && style.position === 'sticky' && element.parentElement) {
+        const parent = element.parentElement, around = getComputedStyle(parent);
+        beyond = Math.max(0, Math.round(document.documentElement.scrollHeight - (parent.getBoundingClientRect().bottom + scrollY - (parseFloat(around.paddingBottom) || 0) - (parseFloat(around.borderBottomWidth) || 0))));
+        if (beyond > 0) { was.marginBottom = element.style.marginBottom; element.style.marginBottom = ((parseFloat(style.marginBottom) || 0) - beyond) + 'px'; }
+      }
+      take('bottom', foot, foot > 0 && box.bottom + beyond > innerHeight - foot && box.top < innerHeight);
+      take('top', head, head > 0 && box.top < head && box.bottom > 0);
+      if (Object.keys(was).length) moved.push([element, was]);
+    }
+  };
+  const settleSoon = () => { if (!settle && (foot || head)) settle = setTimeout(lift, 120); };
+  addEventListener('DOMContentLoaded', () => {
+    settleSoon();
+    new MutationObserver(settleSoon).observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden', 'data-theme']});
+  }, {once: true});
+  addEventListener('load', settleSoon, {once: true});
+  addEventListener('resize', settleSoon);
+  // A page that changes its own theme does it by a press, and its colours may come by a transition: its ground is read again after either.
+  addEventListener('click', settleSoon, true);
+  addEventListener('transitionend', settleSoon, true);
+  // A sticky part reaches a room only once it sticks, as the page is read down to it.
+  addEventListener('scroll', settleSoon, {passive: true});
   addEventListener('message', event => {
-    const data = event.data;
-    if (event.source === parent && data && data.raphaelPage === 1 && data.type === 'scroll-to' && Number.isFinite(data.y)) scrollTo(0, Math.max(0, data.y));
+    const data = event.data, own = event.source === parent && data && data.raphaelPage === 1;
+    if (own && data.type === 'scroll-to' && Number.isFinite(data.y)) scrollTo(0, Math.max(0, data.y));
+    if (own && (data.type === 'foot' || data.type === 'head') && Number.isFinite(data.y)) {
+      const room = Math.max(0, Math.min(2000, Math.round(data.y)));
+      if (data.type === 'foot') foot = room; else head = room;
+      // A page opened again is told its tone again: the window clears it when the page is put away.
+      tone = '';
+      lift();
+    }
   });
   // A style sheet the page loads from another host holds all of it back while it comes: nothing is drawn and the page's own
   // script waits. One still on its way after a few seconds stops holding the page, which draws in the fonts and styles it
@@ -335,7 +418,7 @@ def document(page, theme, state=None):
     base = BASE if page["source"] == "html" else ""
     return ('<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
             f"<title>{html_lib.escape(page['title'])}</title><style>:root{{{variables};color-scheme:{theme}}}"
-            f"body{{background:var(--bg);color:var(--fg);font-family:var(--font)}}{base}</style>" + state_script(state)
+            f"body{{color:var(--fg);font-family:var(--font)}}{base}</style>" + state_script(state)
             + theme_script(theme) + _HELPER + content)
 
 

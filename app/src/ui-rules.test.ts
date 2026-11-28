@@ -199,6 +199,8 @@ describe("buttons", () => {
       'desktop-viewer.css: .window-chrome > .btn.icon[data-desktop="collapse"]:active:not(:disabled)',
       "styles.css: .window-button:hover", "styles.css: .window-button:active",
       "styles.css: .window-close:hover", "styles.css: .window-close:active",
+      // Over an open page (R-PAGE-17) the window's buttons have no plate and fill softly under the pointer, in the ink the page's tone asks for.
+      ...["light", "dark"].flatMap(tone => [":hover", ":active"].map(state => `page-view.css: :root[data-page-tone="${tone}"] .window-chrome .window-button:not(.window-close)${state}`)),
       // The guide's foot: a step's two round buttons (the way back and the way on, a triangle in each) are filled circles
       // in every state.
       "styles.css: .ob-foot .ob-pair .btn.icon.ob-go:hover:not(:disabled)", "styles.css: .ob-foot .ob-pair .btn.icon.ob-go:active:not(:disabled)",

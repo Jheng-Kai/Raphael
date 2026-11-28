@@ -1594,9 +1594,10 @@ export function installMock(fixture, config = {}, target = window) {
         // made by the core itself for each theme before the run (runner.mjs `pageBaseDocuments`).
         // `pageWindow`: a page laid out as a screen, a side column one window tall plus its padding (R-PAGE-12).
         // `pageRail`: a sticky rail one window tall with its buttons at its foot beside a long article (R-PAGE-10).
+        // `pageReading`: a tall reading page that paints its own root and has a light theme of its own (R-PAGE-10, R-PAGE-11).
         // A checklist as the core serves it: with nothing left on it, or with what the owner left on it (R-PAGE-14).
         if (p.id === "page-state") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageStateDocs[variant.pageState === "saved" ? "saved" : "fresh"][p.theme === "dark" ? "dark" : "light"])}`, title: "出發前清單", rev: 1, height: 420, source: "html", server: null };
-        if (p.id === "page-base") return { url: `data:text/html;charset=utf-8,${encodeURIComponent((variant.pageRail ? data.pageRailDocs : variant.pageWindow ? data.pageWindowDocs : data.pageBaseDocs)[p.theme === "dark" ? "dark" : "light"])}`, title: "東京行程候選清單", rev: 1, height: 900, source: "html", server: null };
+        if (p.id === "page-base") return { url: `data:text/html;charset=utf-8,${encodeURIComponent((variant.pageReading ? data.pageReadingDocs : variant.pageRail ? data.pageRailDocs : variant.pageWindow ? data.pageWindowDocs : data.pageBaseDocs)[p.theme === "dark" ? "dark" : "light"])}`, title: "東京行程候選清單", rev: 1, height: 900, source: "html", server: null };
         // Not a file of the dev server, which would write its own client into the page.
         // A page its member changed (`state.updatePage`) is another page: the news page's last heading, the product's price.
         if (p.id === "page-news") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageNewsHtml.replace("__THEME__", p.theme === "dark" ? "dark" : "").replace("練習問題", (state.pageRevs[p.id] ?? 1) > 1 ? "練習問題（已更新）" : "練習問題"))}`, title: "每日新聞日文學習 2026-11-11", rev: state.pageRevs[p.id] ?? 1, height: 900, source: "html", server: null };
