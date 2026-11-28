@@ -360,7 +360,7 @@ export function checkRendered(name, context = {}) {
       const buttons = [...card.querySelectorAll(".card-actions button")];
       require(buttons.map(button => button.dataset.act).join() === "template-copy-link,template-unshare,template-view" && buttons.every(visible), "copy the link again, stop sharing, view");
       require(buttons[0].classList.contains("pri") && !buttons[1].classList.contains("pri"), "copying the link stays the one primary button");
-      require(document.querySelector(".toast")?.textContent.includes("已複製連結"), "the owner is told the link is on the clipboard");
+      require(!document.querySelector(".toast"), "no toast repeats the link the card shows (R-TOAST-01)");
     }
     if (name === "colleague-bad-file") {
       const toast = document.querySelector(".toast");
@@ -6343,10 +6343,9 @@ export function checkRendered(name, context = {}) {
     const asked = window.__look.calls.filter(call => call.method === "keychain.ask_again");
     require(asked.length === 1, `再問一次 asks the core once: ${asked.length}`);
     require(![...document.querySelectorAll(".toast .keychain-refused")].some(visible), "the refusal's toast is gone");
-    const notes = [...document.querySelectorAll(".toast span")].filter(visible).map(span => span.textContent);
-    // On a Mac the note names the Keychain's own Always Allow.
-    const next = document.documentElement.dataset.platform === "macos" ? "下次需要金鑰時，macOS 會再問一次；選「永遠允許」就不再問。" : "下次需要金鑰時會再問你一次。";
-    require(notes.includes(next), `what happens next is said: ${JSON.stringify(notes)}`);
+    // The press was the answer: no second toast says what happens next (R-TOAST-01).
+    const notes = [...document.querySelectorAll(".toast")].filter(visible).map(toast => toast.textContent);
+    require(notes.length === 0, `nothing is said after it: ${JSON.stringify(notes)}`);
     return { check: name, notes };
   }
   if (name === "quota-warning-before") {
@@ -9084,12 +9083,12 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(stage.querySelector(".ra-scroll")).visibility === "visible", "the thread is in sight");
     return { check: name };
   }
-  // Share on an HTML page: one call of the shell's file command with the page's id and no text of the window's; a word of where it went.
+  // Share on an HTML page: one call of the shell's file command with the page's id and no text of the window's; no toast says where it went.
   if (name === "page-library-shared") {
     const saves = window.__look.calls.filter(call => call.command === "report_save");
     require(saves.length === 1 && saves[0].id === "page-news" && saves[0].html === "", `one save, of the page by its id, with no text from the window: ${JSON.stringify(saves.map(call => [call.id, call.html]))}`);
     const toast = document.querySelector(".toast");
-    require(toast && /下載/.test(toast.textContent), `a word of where it went: ${toast?.textContent}`);
+    require(!toast, `no toast says where it went, the folder shows the file selected (R-TOAST-01): ${toast?.textContent}`);
     const stage = document.querySelector(".page-agent .mb-chat:not([hidden]) > .ra-stage");
     require(stage.classList.contains("is-page"), "the page stays open");
     return { check: name };
@@ -9604,7 +9603,7 @@ export function checkRendered(name, context = {}) {
       require(/^[^]*?<style>:root\{[^}]*--content:#ffffff;/.test(file) && /prefers-color-scheme: dark\)\{:root\{[^}]*--content:#0a0a0a;/.test(file), "the light theme's words and the dark theme's");
       require(file.includes('.rp-st[data-tone="ok"]') && !/<style>[^<]*<(?!\/style>)/.test(file), "the page's own rules, with no tag in them");
       const toast = [...document.querySelectorAll(".toast")].at(-1)?.textContent;
-      require(toast === "已存到「下載」", `it says where the file went: ${toast}`);
+      require(toast === undefined, `no toast says where the file went, the folder shows it selected (R-TOAST-01): ${toast}`);
       require(document.activeElement?.closest(".rp-view") || document.activeElement?.matches("[data-page-act]") || document.activeElement === document.body, "the focus stays with the report or its button");
       return { check: name, bytes: file.length };
     }

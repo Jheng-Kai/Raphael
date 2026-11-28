@@ -639,7 +639,7 @@ test("a changed page that cannot be read stays as it was, and one that never say
 });
 
 // Share (R-PAGE-08): one button at the header's right on every page; the core builds the file of the page it keeps.
-test("an HTML page has Share at the header's right: it saves the page by its id, with no text of the window's, and says where it went", async () => {
+test("an HTML page has Share at the header's right: it saves the page by its id, with no text of the window's, and shows no toast", async () => {
   const { thread, frame } = mount();
   await flush();
   loaded(frame);
@@ -652,7 +652,8 @@ test("an HTML page has Share at the header's right: it saves the page by its id,
   share.click();
   expect(api.pageSave).toHaveBeenCalledExactlyOnceWith("p1");
   await flush();
-  expect(document.querySelector(".toast")?.textContent).toContain(t("page.report.downloads"));
+  // The file is shown selected in its folder: no toast says where it went (R-TOAST-01).
+  expect(document.querySelector(".toast")).toBeNull();
   back().click();
   // It left with the page: no button of Share's stands in the header of the thread.
   expect(document.querySelector(".mb-head .ra-tools > [data-page-act]")).toBeNull();

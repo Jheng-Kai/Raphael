@@ -1,4 +1,4 @@
-import { scene, check, click, focus, frameCheck, frameExpect, frameScroll, hover, key, lookCall, member, pageBand, pageCovered, room, scroll, type, wait, waitCall, waitScrollEnd } from "./steps.mjs";
+import { scene, check, click, focus, frameCheck, frameExpect, frameScroll, hover, key, lookCall, member, pageBand, pageCovered, room, scroll, type, wait, waitCall, waitGone, waitScrollEnd } from "./steps.mjs";
 
 const shown = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#buy" }];
 // A page in a card is only a preview (inert): the owner presses the card and the page opens in the conversation's place, where it
@@ -9,7 +9,8 @@ const news = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: 
 const newsFixture = { pageTurn: true, pageNews: "only" };
 const roomShown = [room(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#buy" }];
 const report = [member(1), wait(".pg-link"), click(".pg-link"), wait(".pgv:not([hidden]) .rp-team-draw")];
-const share = [click(".mb-head .ra-tools > [data-page-act]"), wait(".toast")];
+// Share saves the file and shows it in its folder: no toast says where it went (R-TOAST-01).
+const share = [click(".mb-head .ra-tools > [data-page-act]"), waitGone(".toast")];
 const draft = "還沒送出的草稿";
 // A member's Library with the pages its replies hold (`libraryPages`): a press on a row opens the page itself.
 const libraryFixture = { pageTurn: true, pageNews: "only", reportTurn: true, memberPanelFiles: true, libraryPages: true };
@@ -100,7 +101,7 @@ export default [
   scene("page-report-tab", "A tab over the table shows only its group's rows", [...report, { ...scroll(".rp-table-box"), block: "center" }, click('.rp-table-box [data-report-tab="g1"]'), check("page-report-tab")], { reportTurn: true }),
   scene("page-report-close", "The header's arrow brings the thread back where it was, with the link card in sight", [...report, back, check("page-report-closed")], { reportTurn: true }),
   // Share (存成檔案): the report saved as one HTML file, and that file opened on its own, as a browser opens it.
-  scene("page-report-share", "Share saves the report as a file and says where it went, and the report stays open", [...report, ...share, check("page-report-shared")], { reportTurn: true }),
+  scene("page-report-share", "Share saves the report as a file, selects it in its folder with no toast, and the report stays open", [...report, ...share, check("page-report-shared")], { reportTurn: true }),
   { ...scene("page-report-file", "The saved file opened on its own: the same page in its reader's theme, with nothing of the app", [...report, ...share, { action: "saved-file" }, check("page-report-file")], { reportTurn: true }), file: true },
   { ...scene("page-report-file-team", "The file's contents take its reader to the team, drawn for the width it is read at", [...report, ...share, { action: "saved-file" }, click('.rp-toc a[href="#rp-s2"]'), check("page-report-file-team")], { reportTurn: true }), file: true },
   // A page of the Library opens as the page itself (R-PAGE-08):
@@ -112,7 +113,7 @@ export default [
   scene("page-library-back", "The arrow brings back the Library on its tab and the thread read higher up exactly where it was", [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#hide" }, { ...scroll(".pg-card"), block: "center" }, wait(".pg-card .pg-more"), { ...scroll(".pg-card"), block: "center" }, { action: "open-details" }, click('.mb-tabs [data-tab="library"]'), wait('.mb-det[data-details-tab="library"] [data-panel-file="page:page-news"]'), check("page-inplace-before"), pressNews, wait(".pgv-frame-box iframe"), check("page-library-open"), back, check("page-library-kept")], { ...libraryFixture, longThread: true }),
   scene("page-library-esc", "Escape puts the page away as the arrow does: the Library is back on its tab", [...inLibrary, pressNews, wait(".pgv-frame-box iframe"), key("Escape"), check("page-library-kept")], libraryFixture),
   scene("page-library-older", "A page of an older conversation opens from the Library without a stop in that conversation, and the arrow brings back the conversation that was open, with the Library", [...inLibrary, pressNews, wait(".pgv-frame-box iframe"), check("page-library-open"), check("page-library-older-open"), back, check("page-library-older-kept")], { ...libraryFixture, libraryOlder: true }),
-  scene("page-library-share", "Share on an HTML page saves it as a file (the core builds it of the stored page, the window gives no text) and says where it went; the page stays open", [...inLibrary, pressNews, wait(".pgv-frame-box iframe"), ...share, check("page-library-shared")], libraryFixture),
+  scene("page-library-share", "Share on an HTML page saves it as a file (the core builds it of the stored page, the window gives no text) with no toast; the page stays open", [...inLibrary, pressNews, wait(".pgv-frame-box iframe"), ...share, check("page-library-shared")], libraryFixture),
   // Raphael's daily overview (the page a 07:00 routine sends; every kind of chart):
   // figures, weather, schedule, projects by status and owner, investments, members, on one report.
   scene("page-dashboard-card", "The 07:00 routine's turn in Raphael's conversation: a few words of what it did, then the overview's link card", [member(0), wait(dashboardLink), check("page-dashboard-card")], dashboardFixture),

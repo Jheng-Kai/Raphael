@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 // What the core says about the features' models (models-notice.ts, R-DEFAULT-05): the words name the feature, never a provider.
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { tellModelsFilled, warnModelMissing } from "./models-notice";
+import * as notices from "./models-notice";
+import { warnModelMissing } from "./models-notice";
 import { setLocale } from "./i18n";
 
 afterEach(() => { document.body.innerHTML = ""; setLocale("zh-TW"); });
@@ -29,13 +30,9 @@ describe("a feature with no model", () => {
 });
 
 describe("features filled when a source is connected", () => {
-  test("are said once, naming the source", () => {
-    tellModelsFilled({ source: "Claude Code", roles: ["answer", "cleanup"] });
-    expect(document.querySelector(".toast")!.textContent).toContain("已連上 Claude Code，空著的功能用它的推薦模型填好了");
-  });
-
-  test("nothing filled says nothing", () => {
-    tellModelsFilled({ source: "Claude Code", roles: [] });
+  // The choices on screen show the models a connected source filled; a toast saying so repeated them (R-TOAST-01).
+  test("are not announced: the window has no way to toast them", () => {
+    expect(Object.keys(notices).sort()).toEqual(["modelMissingHTML", "warnModelMissing"]);
     expect(document.querySelector(".toast")).toBeNull();
   });
 });

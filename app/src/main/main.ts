@@ -1,4 +1,3 @@
-import { installedUpdateNotice } from "./updates";
 import { watchWindowVisibility } from "./window-visibility";
 import { onLocaleChange, setLocale, t } from "./i18n";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -55,7 +54,7 @@ import { warnQuota } from "./quota-warning";
 import { warnKeychainRefused } from "./keychain-refused";
 import { followDeviceLogin } from "./device-login";
 import { warnConnectionLost } from "./connection-lost";
-import { tellModelsFilled, warnModelMissing } from "./models-notice";
+import { warnModelMissing } from "./models-notice";
 import "./styles.css";
 import "./sidebar.css";
 
@@ -403,7 +402,6 @@ watchChipRows(document.body);
     if (event.type === "KeychainRefused") warnKeychainRefused();
     followDeviceLogin(event);
     if (event.type === "ConnectionLost") warnConnectionLost(event, (id) => go("settings", `repair:relogin:${id}`));
-    if (event.type === "ModelsFilled") tellModelsFilled(event);
     // The answer's model is chosen where the owner writes; the others in Settings, each in its own row.
     if (event.type === "ModelMissing") warnModelMissing(event, (role) => role === "answer" ? document.querySelector<HTMLButtonElement>(".composer .cmp-model .mp-trigger")?.click() : go("settings", `repair:models:${role}`));
     if (event.type === "Dictation") followDictation(event.phase, event.agent);
@@ -447,8 +445,6 @@ watchChipRows(document.body);
       ctx,
     );
   }
-
-  void installedUpdateNotice();
 
   // Until the first-run guide is done it takes the place of the pages. (Settings that could not be
   // read are no reason to start a guide for someone who has been through it.)

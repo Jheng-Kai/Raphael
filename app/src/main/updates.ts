@@ -1,7 +1,7 @@
 import * as api from "./api";
 import { t } from "./i18n";
 import { linkedText } from "./message-content";
-import { btn, esc, row, tg, toaster } from "./ui";
+import { btn, esc, row, tg } from "./ui";
 
 export const UPDATE_STATUS_MS = 2000;
 
@@ -31,17 +31,4 @@ export function updateHTML(view: api.UpdateView | null, automatic: boolean, curr
       description, btn(label, "", ` data-act="update-${action}"${busy ? " disabled" : ""}`)) +
     row(t("update.auto"), t("update.autoHelp"), tg(automatic, t("update.auto"), ' data-k="auto-update"')) + `</div>` +
     (view?.notes ? `<p class="note update-notes">${linkedText(view.notes)}</p>` : "") + `</section>`;
-}
-
-export async function installedUpdateNotice(): Promise<void> {
-  if (document.hidden) {
-    const visible = (): void => {
-      if (document.hidden) return;
-      document.removeEventListener("visibilitychange", visible);
-      void installedUpdateNotice();
-    };
-    document.addEventListener("visibilitychange", visible);
-    return;
-  }
-  try { const status = await api.updateControl("receipt"); if (status.installed) toaster.info(t("update.installed", {p0:status.installed})); } catch { /* A page can start before native services are ready. */ }
 }

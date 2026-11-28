@@ -3201,7 +3201,7 @@ The core stamps `as_of` (ISO text, never 13 digits of milliseconds, which can pa
   report page, only that drawing's elements and attributes, links within the page; the file is
   named after the page as Windows takes a name, `(2)` and on, never over a file, in 設定 › 一般 ›
   member's work folder, or Downloads when that destination is unavailable. The shell selects it in File
-  Explorer; a toast says 已存到「下載」 or the work folder's name (a failure: 檔案沒有存成，請再試一次。),
+  Explorer, which shows it, so no toast says where it went (a failure: 檔案沒有存成，請再試一次。, R-TOAST-01),
   and the report stays open.
 - **The share card** (`conversation-share`): the member's share opens one row, 建立副本 and what
   follows it, whose mark is the member's own face twice (`.share-faces`: 20 px behind and above at
@@ -3246,7 +3246,7 @@ npm run look -- page-report page-report-team page-report-tab page-report-close p
 
 page-report-share checks one `report_save` of the page on screen, a file that starts with its
 policy and holds no script, button or tabs, its title, three drawings of the team, both themes'
-words and the page's own rules with no tag in its style, the toast 已存到「下載」, and the report
+words and the page's own rules with no tag in its style, no toast (R-TOAST-01), and the report
 still open. page-report-file and page-report-file-team are scenes marked `file`: the `saved-file`
 step opens what was saved on its own (a blank page given the file; it is also kept as
 `saved-report.html` in the run), so the runner's app checks stay out of it and the audit treats a

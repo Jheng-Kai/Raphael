@@ -1,4 +1,4 @@
-import { scene, click, wait, member, settings, check, scroll } from "./steps.mjs";
+import { scene, click, wait, member, settings, check, scroll, waitGone } from "./steps.mjs";
 
 const prerequisite = {resource: "searxng", requirement: "url", state: "missing", repair: "search"};
 const turn = {id: 502, session_id: "look-missing", member_id: 1, conversation_id: 11, created_at_ms: 1792807154000,
@@ -14,10 +14,10 @@ const keychainRefused = [member(1), {action: "main-event", event: {type: "Keycha
   wait(".toast .keychain-refused"), check("keychain-refused"), check("toast-clearance")];
 export default [
   // The owner chose Deny on the macOS Keychain (R-PRIV-KEYCHAIN-01): one toast above the composer says so with 再問一次,
-  // which asks the core to ask again and leaves the note of what happens next. Only the shell's event is synthetic.
+  // which asks the core to ask again and takes the toast away. Only the shell's event is synthetic.
   scene("keychain-refused", "A refused Keychain, told twice, is said in one toast above the composer with 再問一次", keychainRefused),
-  scene("keychain-asked", "再問一次 asks the core once and leaves the note of what happens next",
-    [...keychainRefused, click("[data-keychain-ask-again]"), wait(".toast:not(:has(.keychain-refused))"), check("keychain-asked")]),
+  scene("keychain-asked", "再問一次 asks the core once, takes the toast away and says nothing more",
+    [...keychainRefused, click("[data-keychain-ask-again]"), waitGone(".toast"), check("keychain-asked")]),
   scene("missing-card", "The shared connection card names the exact Composio form in visible words", [member(1), wait('.connector-card .missing-note'), check("missing-card")], {composioConfigured: false, turns: [{...turn, steps: [], connectors: [{id: "missing-gmail", app: "gmail", name: "Gmail", state: "failed", error: "needs_composio_key", reconnect: false, tool_count: 0, missing: {resource: "composio", requirement: "composio_key", state: "missing", repair: "store"}}]}]}),
   // #320: Composio refused the saved key while a member connected an app: the card's button opens the vault's form for that key.
   scene("card-key-refused-repair", "A card whose Composio key was refused opens the form in Settings › 安全 › 保管箱 that replaces the saved key", [member(1), wait('.connector-card [data-act="card-settings"]'),
