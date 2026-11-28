@@ -61,7 +61,7 @@ async def test_worker_and_scheduler_use_only_the_selected_persona(make_rig, conn
         # (tests/background/test_task_prefix.py).
         assert "<team_roster>" in team and "<team_roster>" not in system
         assert "another member's thread" in system and "ask_member" in system
-        assert "The interface language never selects" in system
+        assert "Without one, use the interface language." in system
         assert "By default use" not in system
         assert "ask_member" in {t["function"]["name"] for t in model_call["tools"]}
         for person in (teacher, coach):

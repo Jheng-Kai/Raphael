@@ -34,7 +34,7 @@ async def test_work_has_private_replies_steps_and_a_separate_ordered_exchange(ma
     captured = []
     if brain == "api":
         def first(**kwargs):
-            captured.append(str(kwargs["messages"]))
+            captured.append("\n".join(message["content"] for message in kwargs["messages"]))
             return turn(json.dumps({"messages": [opening]}), [use("Notes__look", {"topic": "source"})])
         rig.client.replies.extend([first, report(full)])
     else:
@@ -61,7 +61,8 @@ async def test_work_has_private_replies_steps_and_a_separate_ordered_exchange(ma
     replies = [m["text"] for m in history.messages([work.id])[work.id] if m["kind"] == "reply"]
     assert opening in replies and any("PRIVATE-WORK-BODY" in text for text in replies)
     assert "MEMBER-OWN-CONTEXT" in captured[0] and "CHIEF-THREAD-SECRET" not in captured[0]
-    assert "OWNER-FACING-PERSONA" in captured[0] and "the language the owner writes in" in captured[0]
+    assert "OWNER-FACING-PERSONA" in captured[0]
+    assert "answer in the language of the owner's latest message" in captured[0]
     assert any(s.tool == "look" and s.outcome == "ok" for s in rig.service._store.steps(task_id))
     [view] = rig.service.handoff_views(source_turn_id=source.id)
     assert view["exchange_turn_id"] == audit.id and view["work_turn_id"] == work.id

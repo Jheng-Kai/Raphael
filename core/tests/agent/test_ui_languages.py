@@ -33,9 +33,8 @@ def test_locale_aliases(value, expected):
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_every_locale_has_fixed_copy_and_no_brain_path_names_it(language):
-    # The interface language is only the interface's: it never reaches a system prompt. The prompts take no
-    # language at all; the locale keeps its fixed copy (names, labels, prefixes) for the window.
+def test_every_locale_has_fixed_copy_and_the_shared_prompts_are_locale_independent(language):
+    # Shared prompts stay stable. The concrete fallback is supplied only where it is needed.
     member = dict(name="Test assistant", role="Assistant", instructions="Answer in the owner's language.")
     prompts = [
         persona.system_prompt("answer"),

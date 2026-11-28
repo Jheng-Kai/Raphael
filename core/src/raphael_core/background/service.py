@@ -369,11 +369,6 @@ def _interrupted_report(language: str, steps: int) -> tuple[str, str]:
     return PREFIXES[language].notice, phrase(language, "worker_interrupted", steps=str(steps))
 
 
-# What a task is told of the language to write in, with the task (R-CACHE-02), naming no language: the owner's own words
-# say which. It took the place of the interface language the task was told before.
-TASK_LANGUAGE = ("Language: unless the owner or your own persona asks for another, write every message and the report "
-                 "in the language the owner writes in, as their own messages here show it; when there are none, in the "
-                 "language of this task's text.")
 # Where the owner's own words come from (a typed or spoken request, a messaging chat).
 _OWNER_WORDS = frozenset({"app", "voice", "overlay", "telegram", "slack", "discord"})
 
@@ -391,6 +386,7 @@ def _prompts(
     paths: Mapping[str, str] | None = None,
     placed: Mapping[str, str] | None = None,
     brain: tuple | None = None,
+    fallback_language: str | None = None,
 ) -> tuple[str, str]:
     """The system prompt and the first message of the user for a task, with the memory files as they are
     now when there is a memory (`memory_snapshot`). A task of a member of the team runs in the member's
@@ -450,7 +446,7 @@ def _prompts(
             "one only if the task clearly needs a second.\n"
             f"{calls}\n</previous_attempt>"
         )
-    parts.append(language_reminder())
+    parts.append(language_reminder(fallback_language))
     # A CLI task's loop gives the progress rules itself (agent/cli/loop.py): twice cost every call 1.7 KB.
     return system + ("" if cli else PUBLIC_PROGRESS_RULES), "\n\n".join(parts)
 
@@ -1600,8 +1596,8 @@ class BackgroundService:
     @staticmethod
     def _chat_language(task, origin, context) -> str:
         """The language the owner writes in for this task, read from the owner's own words (the request it came from,
-        else their latest message in the conversation), else from the task's text: never the interface language, which
-        goes to no model. It picks the per-language pieces a model is given (Raphael's name)."""
+        else their latest message), else from the task's text. This selects contextual names such as Raphael's;
+        the report's language follows the instruction supplied with the task."""
         asked = origin.question if origin is not None and origin.source in _OWNER_WORDS else ""
         latest = next((turn.question for turn in reversed(context or ())
                        if turn.source in _OWNER_WORDS and detect_language(turn.question)), "")
@@ -2306,6 +2302,8 @@ class BackgroundService:
                 self._skill_notice(task, notice)
         run._memory_untrusted = run._memory_untrusted or skill_loaded or bool(notices)
         from ..agent.cli.discovery import brain_ref
+        has_owner_words = any(detect_language(turn.question) for turn in (origin, *context)
+                              if turn is not None and turn.source in _OWNER_WORDS)
         system, user = _prompts(
             request,
             self._tools.local_time().data or {},
@@ -2319,8 +2317,9 @@ class BackgroundService:
             paths=self._stored_paths(files),
             placed=await self._place_videos(speaker, files),
             brain=brain_ref(selected_model),
+            # Rooms already supply their owner messages in a separate transcript.
+            fallback_language=language if task.scope != 'room' and not has_owner_words else None,
         )
-        user += "\n" + TASK_LANGUAGE
         from ..agent.card_context import source_text
         user += "\n" + source_text(origin.source if origin else "")
         if delegated:

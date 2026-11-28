@@ -342,6 +342,7 @@ class MembersService:
         tz: tzinfo | None = None,
         tick_s: float = TICK_S,
         vault=None,
+        default_answer_model: Callable[[], str] | None = None,
     ) -> None:
         self.store = MemberStore(conn, now_ms)
         self.capabilities = MemberCapabilities(conn, local_dir / "member-skills", self.store)
@@ -351,6 +352,7 @@ class MembersService:
         self._conn = conn
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
+        self._default_answer_model = default_answer_model
         from .activity import Activity
         self.activity = getattr(background, "activity", None) or Activity(notify)
         self.activity.owner_waiting = self.waiting_members
@@ -547,7 +549,9 @@ class MembersService:
         return member.speaker()
 
     def _starting_model(self) -> str:
-        """A new member starts on Raphael's model and holds it as its own, so that its next change moves no one else."""
+        """Pin the available default when creating a member so later changes to Raphael's choice do not move it."""
+        if self._default_answer_model is not None:
+            return self._default_answer_model()
         model = self._settings.get("agent_model")
         return model.strip() if isinstance(model, str) and model.strip() else ""
 

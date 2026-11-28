@@ -109,7 +109,7 @@ async def test_the_model_is_asked_for_json_with_a_little_reasoning(voice, client
 
 
 def test_the_schema_offers_the_fixed_reply_kinds_and_requires_every_field():
-    # The interface language goes to no model, a reply schema included.
+    # Reply schemas offer a fixed set of model-facing kinds.
     schema = reply_schema()
     assert schema["properties"]["prefix"]["enum"] == list(persona.REPLY_KINDS)
     assert schema["properties"]["text"] == {"type": "string"}

@@ -330,7 +330,7 @@ def test_the_system_prompt_names_the_reply_kinds_and_complete_reply(route):
 
 
 def test_the_prompt_offers_the_same_reply_kinds_whatever_the_interface_language():
-    # The interface language goes to no model. The kinds are fixed words; the app shows the prefix
+    # Model-facing reply kinds are fixed words. The app shows the prefix
     # of the interface language (canonical_prefix), so a kind the model names reads as that language's prefix.
     prompt = persona.system_prompt("chat")
     assert persona.REPLY_LANGUAGE in prompt

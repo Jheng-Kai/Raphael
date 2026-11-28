@@ -1,6 +1,4 @@
-"""A routine or a task is told nothing of the interface language: 「它的 UI 語言就是單純 UI 語言而已，
-它也不會去到 system prompt，什麼事都不會發生」. It writes in the language the owner writes in, which its own words show;
-the notices the app draws of it keep the interface language. Fake models only."""
+"""Background report language follows the owner words or the interface fallback."""
 
 import json
 from datetime import timezone
@@ -8,7 +6,7 @@ from datetime import timezone
 import pytest
 
 from members.conftest import QuietModel
-from raphael_core.background.service import TASK_LANGUAGE
+from raphael_core.agent.persona import REPLY_LANGUAGE
 from raphael_core.brain.secrets import MemoryKeyStore
 from raphael_core.members.service import MembersService
 from raphael_core.memory.service import MemoryService
@@ -19,7 +17,7 @@ INTERFACE_HINTS = ("configured reply language", "Interface locale", "This select
 
 
 @pytest.mark.parametrize("routine_id", [1, None])
-async def test_a_routine_written_in_chinese_is_told_nothing_of_a_japanese_interface(make_rig, conn, tmp_path, routine_id):
+async def test_a_background_report_without_owner_messages_names_the_interface_fallback(make_rig, conn, tmp_path, routine_id):
     rig = make_rig()
     memory = MemoryService(conn, tmp_path / "memory", QuietModel(), MemoryKeyStore(), quiet_s=3600, start_delay_s=3600)
     members = MembersService(conn, tmp_path, background=rig.service, memory=memory, now_ms=rig.wall, tz=timezone.utc)
@@ -44,11 +42,11 @@ async def test_a_routine_written_in_chinese_is_told_nothing_of_a_japanese_interf
         system, task = sent["ja"]
         for hint in INTERFACE_HINTS:
             assert hint not in system and hint not in task
-        # The task says which language with no language named: the owner's words, else the task's own text.
-        assert TASK_LANGUAGE in task and ROUTINE in task
-        # Raphael is the guide, not on the team roster: the Japanese interface's name for it is told nowhere either.
+        assert "The interface language is Japanese (ja)." in task
+        assert "The interface language is English (en)." in sent["en"][1]
+        assert REPLY_LANGUAGE in task and ROUTINE in task
         assert "ラファエル" not in task
-        assert sent["ja"] == sent["en"]
+        assert sent["ja"][0] == sent["en"][0]
         # What the app draws of the run (its notices, its waiting line) keeps the interface language.
         assert languages == {"ja": "ja", "en": "en"}
     finally:

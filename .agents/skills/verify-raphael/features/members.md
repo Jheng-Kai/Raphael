@@ -1217,7 +1217,9 @@ member-profile-resources.test.ts. This presentation change adds no migration or 
 
 R-COLLEAGUE-01..03: New member > Start from a template opens eight shipped slime roles; Open template file uses the system file picker and previews profile, skill names, paused routines and one disabled connect card per app. Import creates the colleague without grants; only subsequent per-app Connect requests sign-in and member access. The member row menu exports one .raphael-member file without memory, pictures, credentials or model choices.
 
-A new member's greeting is its own model's line with ONE question card (R-COLLEAGUE-02: a choice form, one thing set up at a time); the card is the ordinary `ask_owner` card, and the earlier idle clone (`member-greeting.ts`) is gone. Greetings stored earlier with locally computed suggestions read as the plain line they were. The shared API/CLI prompt puts the one outcome question rule beside owner input before set_my_job saves the goal. Fake-brain tests prove routing and persistence, not a real model's judgment.
+A new member's greeting and question card use its explicit language preference or the owner's, with the named interface
+language as the fallback (R-LANG-02). The model starts from Raphael's connected model or a connected source's
+recommended answer model. The greeting is its own model's line with ONE question card (R-COLLEAGUE-02: a choice form, one thing set up at a time); the card is the ordinary `ask_owner` card, and the earlier idle clone (`member-greeting.ts`) is gone. Greetings stored earlier with locally computed suggestions read as the plain line they were. The shared API/CLI prompt puts the one outcome question rule beside owner input before set_my_job saves the goal. Fake-brain tests prove routing and persistence, not a real model's judgment.
 
 ### A new member sets itself up by cards (R-COLLEAGUE-08)
 

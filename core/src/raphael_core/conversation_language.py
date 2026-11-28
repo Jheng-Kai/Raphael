@@ -1,9 +1,7 @@
 """The language a conversation is written in, read from its own words, never from the interface.
 
-The interface language (device.json `ui_language`) picks the words the app draws
-and nothing that a model reads. Where code must still choose a per-language piece for a model (Raphael's name in the
-team roster, the language a weather tool names a place in, the mark the memory host writes beside an entry), it picks it
-from the words of the conversation with `detect_language`: kana is Japanese, Hangul Korean, Han Chinese (Traditional or
+Localized conversation context (Raphael's name in the roster, the name of a place in a weather result,
+or the mark the memory host writes beside an entry) follows the conversation's words. With `detect_language`, kana is Japanese, Hangul Korean, Han Chinese (Traditional or
 Simplified by its characters), Thai and Cyrillic their own; Latin text is the language its common words and letters
 point to, else English. It is small and deterministic, and None when the text has no letters to read.
 """

@@ -3417,19 +3417,14 @@ and never opens a token card, including when receiving is off. Panel rows keep s
 other removal/disconnect actions go through conversation tools and existing owner approval.
 Migration 71 changes the account and pairing anchors from secret-card ids to turn ids.
 
-R-AG-LANG-01: UI locale selects fixed app labels/notices only. All authored replies, progress,
-thinking, greetings, reports, recaps and routines follow the speaker's own profile/instructions,
-otherwise the owner's words or conversation. API, CLI, background/routine reports, greetings and
-public narration share this policy. In R-LANG-01 to R-LANG-04 the interface language reaches no model at all: no
-prompt builder takes a language, the "Interface locale" line and the configured reply language line are gone, the
-reply schema offers fixed kinds (`REPLY_KINDS`) the app shows as the interface's prefix, and what is still chosen
-per language for a model (Raphael's name in the roster, a weather place name, 「看這個」, the memory host's mark) is
-read from the conversation's own words (`conversation_language`). Chinese prose without kana follows the owner's Chinese script
-chosen in settings.languages (zh-TW, zh-HK/yue-HK, zh-CN; `textnorm.authored_chinese`), never
-ui_language; kana, code and English stay unchanged. The configured voice language remains
-independent, including Japanese rendering on a Japanese interface.
+R-AG-LANG-01: Authored speech follows an explicit language preference in the speaker's persona or the owner's
+instructions or saved profile, then the owner's latest message, then the named UI locale (R-LANG-01 and R-LANG-02).
+Greetings, the tour and their question cards use the explicit preference or the interface fallback. A member saves
+lasting changes through `member_update`. The fixed reply kinds (`REPLY_KINDS`) still render as localized prefixes.
+Localized context such as a weather result or a memory mark follows the conversation's words. Dictation language
+is configured separately.
 
-R-LANG-05: the notes a CLI brain writes between its tool calls (progress lines, thinking, and the update owed after two minutes) are shown only in the owner's language, read from their own words (`AgentService._words_language`, never the interface's); a note in another script is dropped and the step keeps its label, the answer is never held back. The CLI is told once that every text it writes is in that language (`language_rule`). Not a `look` matter (no screen changes); `core/tests/agent/test_interim_language.py`. Not proved: a real model obeying the sentence (the filter is the guarantee), and an API-brain turn (`NarratedLoop`), which this did not touch.
+R-LANG-05: the notes a CLI brain writes between its tool calls (progress lines, thinking, and the update owed after two minutes) are shown only in the owner's language, read from their own words (`AgentService._words_language`, never the interface's); a note in another script is dropped and the step keeps its label, the answer is never held back. The CLI is told once that its notes use that language unless the speaker or owner specifies another (`language_rule`). Not a `look` matter (no screen changes); `core/tests/agent/test_interim_language.py`. Not proved: a real model obeying the sentence (the filter is the guarantee), and an API-brain turn (`NarratedLoop`), which this did not touch.
 
 Offline coverage: core/tests/test_pairing_language.py, test_chat_setup_share.py,
 brain/test_db.py, agent/test_persona.py, agent/test_answers.py,

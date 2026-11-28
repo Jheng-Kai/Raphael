@@ -1,5 +1,4 @@
-"""An external or unattended turn is told no language: the owner's words say which (the interface
-language is only the interface's: it reaches no system prompt). The interface language stays for the app's own notices."""
+"""External replies with owner words follow those words. Fixed notices use the interface locale."""
 
 import pytest
 

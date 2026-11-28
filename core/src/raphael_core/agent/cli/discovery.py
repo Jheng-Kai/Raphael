@@ -553,15 +553,24 @@ class CliBrains:
         chosen = effort if effort in levels else next((e for e in ("low", "medium", "none", "minimal") if e in levels), levels[0])
         return entry.get("effort_models", {}).get(chosen) or f"{base}?effort={chosen}"
 
-    def _fill_models(self, name):
+    def _recommended_models(self, name):
         from ...brain.first_models import recommendations
+
+        rows = self._known_models(name) or [{"id": f"cli:{name}"}]
+        return recommendations([{**row, "id": runnable_model(row)} for row in rows])
+
+    def starting_answer_model(self) -> str:
+        for name in NAMES:
+            if self.available(name) and (answer := self._recommended_models(name).get("answer")):
+                return answer
+        return ""
+
+    def _fill_models(self, name):
         from ...brain.settings import SettingsStore
         if isinstance(self.settings, SettingsStore):
-            rows = self._known_models(name) or [{"id": f"cli:{name}"}]
             # A subscription program answers and takes quick questions; dictation's tidying stays fast, so it is never filled
             # with a program started for every phrase, and the program hears nothing (R-DEFAULT-05).
-            runnable = [{**row, "id": runnable_model(row)} for row in rows]
-            choices = {role: model for role, model in recommendations(runnable).items() if role in ("answer", "quick")}
+            choices = {role: model for role, model in self._recommended_models(name).items() if role in ("answer", "quick")}
             self.settings.fill_models(NAMES[name], choices, self.notify)
 
     async def _one(self, name):

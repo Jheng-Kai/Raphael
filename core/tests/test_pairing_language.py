@@ -127,7 +127,7 @@ async def test_own_japanese_language_and_english_progress_survive_other_interfac
     else:
         prompt = captured[0]["system"] + captured[0]["user"]
     assert instruction in prompt
-    assert "The interface language never selects" in prompt
+    assert "Without one, use the interface language." in prompt
     for stale in ("Owner's UI language:", "in the owner's UI language", "Reply ONLY in", "By default use", "By default reply in"):
         assert stale not in prompt
     assert result["text"] == "日本語で答えます。"
@@ -148,7 +148,7 @@ async def test_greeting_obeys_own_language_not_app_language(rig):
     await until(lambda: rig.agent.history.get(result["turn_id"]).status == "done")
     system = rig.brain.chat_calls[0]["messages"][0]["content"]
     assert "Always speak Japanese." in system
-    assert "app language" not in system and "The interface language never selects" in system
+    assert "explicit saved preference" in system and "Otherwise use English (en)." in system
 
 
 @pytest.mark.parametrize("brain", ["api", "codex", "claude", "gemini"])
@@ -194,10 +194,8 @@ async def test_owner_script_covers_api_cli_messages_and_public_narration(rig, mo
 
 
 @pytest.mark.parametrize("brain", ["api", "codex", "claude", "gemini"])
-@pytest.mark.parametrize(("authored", "expected"), [
-    ("软件检查。", "軟體檢查。"), ("日本の学校へ行きます。", "日本の学校へ行きます。"),
-])
-async def test_greeting_uses_owner_script_on_an_english_interface(rig, monkeypatch, brain, authored, expected):
+@pytest.mark.parametrize("authored", ["软件检查。", "日本の学校へ行きます。"])
+async def test_greeting_keeps_the_model_authored_script(rig, monkeypatch, brain, authored):
     rig.agent.settings.set("languages", ["zh-TW"])
     if brain == "api":
         rig.brain.chats = [live_said(authored)]
@@ -213,8 +211,8 @@ async def test_greeting_uses_owner_script_on_an_english_interface(rig, monkeypat
     result = rig.agent.service.start_greeting(rig.member.id, "en")
     await until(lambda: rig.agent.history.get(result["turn_id"]).status == "done")
     saved = rig.agent.history.get(result["turn_id"])
-    assert saved.text == expected
-    assert [m["text"] for m in rig.agent.history.messages([saved.id])[saved.id]] == [expected]
+    assert saved.text == authored
+    assert [m["text"] for m in rig.agent.history.messages([saved.id])[saved.id]] == [authored]
 
 @pytest.mark.parametrize("state", ["approved", "rejected", "expired"])
 async def test_terminal_pairing_updates_in_place_then_next_code_adds_a_turn(rig, state):

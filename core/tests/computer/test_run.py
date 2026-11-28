@@ -380,7 +380,7 @@ async def test_the_lines_of_the_run_are_in_the_owners_language(make_run, shell):
 
 
 def test_the_prompt_asks_for_the_owners_language_and_names_no_interface_language():
-    # The interface language goes to no model. The run's prompt takes no language at all.
+    # The desktop prompt's shared rules remain stable across interface locales.
     from raphael_core.agent.persona import REPLY_LANGUAGE
     prompt = run_module.system_prompt()
     assert REPLY_LANGUAGE in prompt

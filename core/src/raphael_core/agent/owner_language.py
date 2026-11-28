@@ -1,8 +1,7 @@
-"""The interface language the owner chose in the window, for the words the app draws and for nothing a model reads.
+"""Read the interface language the owner chose in the window.
 
-The interface language picks the words the app draws; it never changes the language a conversation is held in and never reaches a system prompt.
-`configured_language` picks the fixed notices of unattended and external conversations (a Telegram chat, a routine, a
-resumed request); the language of a reply comes from the owner's own words (`conversation_language`)."""
+Unattended and external conversations use it for fixed notices and as the authored-language fallback when the
+owner has supplied no words or explicit preference."""
 
 import json
 from pathlib import Path
