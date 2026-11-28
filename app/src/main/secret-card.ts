@@ -7,7 +7,7 @@
 // read when Save is pressed and emptied at once, and a card drawn again takes the characters from the old
 // field to the new one (`carryTyped`) so that a redraw does not cost what the owner was typing.
 
-import { cardCloseHTML, cardDisclosureHTML, cardHTML, cardPromptText, waitingCloseHTML, waitingOwnerQuestion } from "./card";
+import { cardCloseHTML, cardDisclosureHTML, cardHTML, cardPromptText, stoppedTurn, waitingCloseHTML, waitingOwnerQuestion } from "./card";
 import { NAME, eventLineHTML } from "./event-line";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
@@ -115,7 +115,10 @@ function keyCardHTML(card: SecretCard, close: string | undefined): string {
  * back (`cancel-secret-turn`), on work the member handed itself it tells that work the owner will not give the key
  * (`waiting`, the background question the card belongs to). Nothing of the card stands under it.
  */
-export function secretCardHTML(card: SecretCard, canCancelTurn = false, waiting?: OwnerQuestion): string {
+export function secretCardHTML(card: SecretCard, canCancelTurn = false, waiting?: OwnerQuestion, stopped = false): string {
+  // Closed by the owner's Stop: its name and nothing of the stop (R-CHAT-STOP-02).
+  if (stopped && card.state === "cancelled") return cardHTML({ title: card.name, mark: card.key ? undefined : connectionMarkHTML(card.name), status: "ready", hideStatus: true,
+    cls: `secret-card${card.key ? " key-card" : ""}`, attrs: ` data-secret-card="${esc(card.id)}" data-card-state="cancelled"` });
   // Left unanswered when the owner wrote again (`error: "skipped"`): its name and a quiet pill. Closed by its × it reads as stopped.
   if (card.state === "cancelled" && card.error === "skipped") return cardHTML({ title: card.name, mark: card.key ? undefined : connectionMarkHTML(card.name),
     status: "ready", statusText: t("ownerQuestion.left"), cls: `secret-card${card.key ? " key-card" : ""}`,
@@ -137,7 +140,7 @@ export function secretCardHTML(card: SecretCard, canCancelTurn = false, waiting?
 
 /** The cards of the keys a turn waits for, below what it said. */
 export function secretCardsHTML(turn: AgentTurn, canCancelTurn = false): string {
-  return (turn.secrets ?? []).map(card => secretCardHTML(card, canCancelTurn, waitingOwnerQuestion(turn, card.id))).join("");
+  return (turn.secrets ?? []).map(card => secretCardHTML(card, canCancelTurn, waitingOwnerQuestion(turn, card.id), stoppedTurn(turn))).join("");
 }
 
 /** The centred line a task resumed after its key was saved opens with, in place of the owner's words it carries on. */

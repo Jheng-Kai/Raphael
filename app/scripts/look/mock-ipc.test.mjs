@@ -290,7 +290,7 @@ describe("shared look IPC boundary", () => {
     expect((await history(1)).turns.find(turn => turn.id === 90).status).toBe("running");
     expect(await invoke("core_call", { method: "agent.history.stop", params: { session_id: "look-quick", member_id: 0 } })).toEqual({ stopped: true });
     const stopped = (await history(1)).turns.find(turn => turn.id === 90);
-    expect([stopped.status, stopped.text, stopped.messages.some(message => message.kind === "reply")]).toEqual(["denied", "已取消。", false]);
+    expect([stopped.status, stopped.text, stopped.messages.some(message => message.kind === "reply")]).toEqual(["cancelled", "", false]); // closed with no word of the stop (R-CHAT-STOP-02)
     target.__look.emit({ type: "AgentTurn", turn_id: 91, member_id: 0 });
     expect((await history(1)).turns.map(turn => turn.id)).toContain(91);
     expect((await history(1)).turns.find(turn => turn.id === 1)).toEqual(typed);

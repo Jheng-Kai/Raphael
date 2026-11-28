@@ -5970,12 +5970,14 @@ class AgentService:
         """End the turn of a question: what Raphael says now, and how it ended."""
         turn = self._history.get(pending.turn_id)
         prefix = _prefix(pending.language, which) if turn is None or turn.member_id == 0 else ""
+        if status == 'cancelled' and not text:
+            prefix = ""  # a stop says nothing (R-CHAT-STOP-02): no 「了解」 left alone under the message
         reply_text = text
         if status == 'cancelled':
             saved = [message['text'] for message in self._history.messages([pending.turn_id]).get(pending.turn_id, [])
                      if message['kind'] == 'reply']
             if saved:
-                text = '\n\n'.join([*saved, text])
+                text = '\n\n'.join(filter(None, [*saved, text]))
         self._write(
             lambda: self._history.resolve(
                 pending.turn_id,
@@ -6019,7 +6021,7 @@ class AgentService:
                     ))
                     self._turn_changed(pending.turn_id)
             else:
-                self._outcome(pending, "understood", phrase(pending.language, "denied"), "cancelled")
+                self._outcome(pending, "understood", "", "cancelled")
 
     def _computer_refusal(self, pending, kind):
         if pending.action.tool == "management_batch" and kind == "expired" and self._team is not None:
@@ -6083,9 +6085,9 @@ class AgentService:
                 ask.admission_stopped = True
                 preparing.append(ask)
         returned = []
-        # The message being worked on that nothing has answered yet (no line said, nothing shown, no step taken) is taken back
-        # as a waiting one is: its words go back to the composer and its turn goes, instead of staying with 已取消 under it,
-        # which no one could take back (R-CHAT-STOP-01). Once anything was said or done, Stop only stops it.
+        # The message being worked on that nothing has answered yet (no line or thinking said, no step or card shown) is taken
+        # back as a waiting one is: its words go back to the composer and its turn goes (R-CHAT-STOP-01). Once anything of
+        # the reply was shown, Stop only stops it: the message stays, what was shown stays, and nothing is written (R-CHAT-STOP-02).
         untouched = []
         if scope:
             untouched = [row for row in self._conn.execute(
@@ -6136,18 +6138,25 @@ class AgentService:
         step = self._conn.execute("SELECT COALESCE(MAX(rowid),0) FROM agent_steps").fetchone()[0]
         return line, step
 
+    # What a turn's view carries besides its words: cards and the work handed on, each of them drawn in the thread.
+    _CARDS = ("task", "handoffs", "delegates", "connectors", "secrets", "connection_proposals", "computers", "computer_suggestion", "permissions",
+              "drafts", "pages", "templates", "pairings", "owner_questions")
+
     def _untouched(self, turn_id: int, before: tuple[int, int] | None = None) -> bool:
-        """Whether nothing answered the turn yet: no line said, no picture shown, no step taken, so taking it back loses
-        nothing and hides nothing that was done. `before` counts only what was written up to those marks: the words a stop
-        writes (「Understood. Cancelled.」) come after them and are no answer."""
-        if before is None and (turn := self._history.get(turn_id)) and turn.status == "done" and turn.text.strip():
+        """Whether nothing of the reply has been shown to the owner yet: no line said (words, a thinking line, a note, a
+        picture), no step shown, no card or task, so taking the message back loses nothing and hides nothing that was done
+        (R-CHAT-STOP-01). `before` counts only the lines and steps written up to those marks: what a stop writes comes
+        after them and is no answer."""
+        if before is None:
+            turn = self._history.get(turn_id)
+            if turn is not None and (turn.text.strip() or (turn.detail or "").strip()) and turn.status != "running":
+                return False
+        if self._history.shown(turn_id, before):
             return False
-        line, step = before if before is not None else (None, None)
-        steps = self._conn.execute("SELECT 1 FROM agent_steps WHERE turn_id=? AND (? IS NULL OR rowid<=?) LIMIT 1",
-                                   (turn_id, step, step)).fetchone()
-        said = self._conn.execute("SELECT 1 FROM agent_messages WHERE turn_id=? AND kind IN ('reply','media','progress') AND trim(text)<>''"
-                                  " AND (? IS NULL OR rowid<=?) LIMIT 1", (turn_id, line, line)).fetchone()
-        return steps is None and said is None
+        if before is None and (turn := self._history.get(turn_id)) is not None:
+            view = self._turn_views([turn])[0]
+            return not any(view.get(key) for key in self._CARDS)
+        return True
 
     async def _history_send_now(self, params):
         """「立即送出」: a message that waits its turn is read now. It goes to the front of its conversation's inbox and the
@@ -7017,6 +7026,10 @@ class AgentService:
         negative, ...) or a prefix as the model wrote it. A member of the team says it with no
         prefix: it speaks in plain sentences."""
         prefix = _prefix(ask.language, which) if ask.speaker.is_raphael else ""
+        if status == "cancelled" and ask.exchange_speakers is None:
+            # A stop says nothing: the turn keeps the words it already had and is closed, with no 已取消 (R-CHAT-STOP-02). Only a
+            # colleague's exchange keeps the words, which the member that asked reads as the answer.
+            prefix, text = "", ""
         if status == "cancelled" and ask.superseded:
             status, text = "superseded", ""
             if turn := self._history.get(ask.turn_id):

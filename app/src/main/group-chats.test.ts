@@ -503,6 +503,17 @@ test("a blocked reply is a line of the thread after its exchange, with its reaso
  expect(document.querySelector('.au-room-controls')!.textContent).toBe('');
 });
 
+test("the owner's Stop after a member spoke leaves no line for the members that had not (R-CHAT-STOP-02), before anyone spoke it does",async()=>{
+ const intent=(id:number,origin:number,reason:string)=>({id,origin_message_id:origin,source_message_id:origin,recipient_id:1,recipient_name:'Alice',state:'blocked',reason});
+ api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:null,text:'@Alice @Bob check',created:1,status:'done'},{id:2,member_id:0,text:'On it.',created:2,status:'done',origin_message_id:1},
+   {id:3,member_id:null,text:'@Alice again',created:3,status:'done'}],exchange:{state:'stopped',stop_requested:1,reply_intents:[intent(7,1,'owner'),intent(8,3,'owner'),intent(9,1,'cli_quota')]}});
+ await pane();
+ const rows=[...document.querySelectorAll('.au-room-thread > li')].map(row=>row.matches('.room-intent-blocked')?row.textContent:(row as HTMLElement).dataset.roomMessage);
+ // Message 1 was answered: no line says Alice was stopped (another reason still says why). Message 3 had no answer yet: its line stays.
+ expect(rows).toEqual(['1','2',"Alice couldn't reply: Subscription quota used up",'3',expect.stringContaining("Alice couldn't reply")]);
+ expect(rows.filter(row=>String(row).includes('Alice'))).toHaveLength(2);
+});
+
 test("a named member that passed, a stalled reply and an API brain's limits each say so, not that something went wrong",async()=>{
  const intent=(id:number,reason:string)=>({id,origin_message_id:1,source_message_id:1,recipient_id:1,recipient_name:'Alice',state:'blocked',reason});
  api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:null,text:'@Alice check',created:1,status:'done'}],exchange:{state:'stopped',stop_requested:0,

@@ -472,6 +472,15 @@ class RoomsService:
         self._changed(room["id"])
         return {"stopped":True}
 
+    def shown_by_members(self, origin):
+        """Whether a member showed anything of its reply to the owner's message `origin`: a message of the exchange, or in one of
+        its turns a line, a thinking line or a step the thread draws."""
+        if self._conn.execute("SELECT 1 FROM room_messages WHERE origin_message_id=? AND member_id IS NOT NULL AND kind<>'wrapup'"
+                              " AND trim(text)<>'' LIMIT 1", (origin,)).fetchone():
+            return True
+        return any(self._history.shown(row['turn_id'])
+                   for row in self._conn.execute("SELECT turn_id FROM room_exchange_turns WHERE origin_message_id=?", (origin,)).fetchall())
+
     def _close_stopped(self, room_id):
         """Close failed/stopped exchanges from persisted facts, without another paid model call."""
         if self._conn.execute("SELECT 1 FROM worker_tasks w JOIN agent_turns t ON t.id=w.turn_id WHERE COALESCE(w.report_room_id,w.room_id)=? "
@@ -491,6 +500,13 @@ class RoomsService:
                 continue
             if exchange['reason'] not in (*_OWNER_STOPS, 'reply_budget'):
                 # A failure is its status lines (the blocked replies): no one sums it up in the chief's name.
+                if not exchange['wrapup_sent']:
+                    with self._conn:
+                        self._conn.execute('UPDATE room_exchanges SET wrapup_sent=1,active_turn=NULL WHERE origin_message_id=?',(origin,))
+                    self._changed(room_id)
+                continue
+            if exchange['reason'] == 'owner' and self.shown_by_members(origin):
+                # Stop after a member showed anything of its reply only stops: nothing is written under it (R-CHAT-STOP-02).
                 if not exchange['wrapup_sent']:
                     with self._conn:
                         self._conn.execute('UPDATE room_exchanges SET wrapup_sent=1,active_turn=NULL WHERE origin_message_id=?',(origin,))

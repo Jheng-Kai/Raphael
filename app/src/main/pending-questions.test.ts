@@ -14,7 +14,7 @@ const question: OwnerQuestion = { id: "day", task_id: 7, turn_id: 2, member_id: 
 afterEach(() => { document.body.innerHTML = ""; vi.clearAllMocks(); });
 
 function setup(questions = [question]) {
-  document.body.innerHTML = `<section><div class="ra-scroll"><ol>${questions.map(ownerQuestionHTML).join("")}</ol></div><form></form></section>`;
+  document.body.innerHTML = `<section><div class="ra-scroll"><ol>${questions.map(question => ownerQuestionHTML(question)).join("")}</ol></div><form></form></section>`;
   const scroll = document.querySelector<HTMLElement>(".ra-scroll")!, thread = scroll.querySelector<HTMLElement>("ol")!;
   vi.spyOn(scroll, "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 400 } as DOMRect);
   let top = 60;

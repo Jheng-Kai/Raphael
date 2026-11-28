@@ -1170,7 +1170,6 @@ export const ja = {
   "chat.showAll": "すべて表示",
   "chat.latest": "最新のメッセージへ",
   "chat.showLess": "折りたたむ",
-  "agent.taskCancelled": "中止しました",
   "agent.taskLimit": "上限に達しました",
   "agent.taskFailed": "完了できませんでした",
   "agent.taskInterrupted": "中断されました",

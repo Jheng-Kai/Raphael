@@ -1169,7 +1169,6 @@ export const zhTW = {
   "chat.showAll": "顯示全部",
   "chat.latest": "跳至最新訊息",
   "chat.showLess": "收合",
-  "agent.taskCancelled": "已中止",
   "agent.taskLimit": "達到上限",
   "agent.taskFailed": "沒有完成",
   "agent.taskInterrupted": "被打斷",

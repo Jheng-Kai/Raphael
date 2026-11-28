@@ -1451,7 +1451,6 @@ export const ru = {
   "chat.regenerate": "Создать заново",
   "chat.showAll": "Показать всё",
   "chat.latest": "К последнему",
-  "agent.taskCancelled": "Остановлено",
   "agent.reason.cancelled": "Остановлено",
   "agent.taskLimit": "Достигнут лимит",
   "agent.taskFailed": "Не завершено",

@@ -1170,7 +1170,6 @@ export const en = {
   "chat.showAll": "Show all",
   "chat.latest": "Jump to latest",
   "chat.showLess": "Show less",
-  "agent.taskCancelled": "Stopped",
   "agent.taskLimit": "Hit a limit",
   "agent.taskFailed": "Didn't finish",
   "agent.taskInterrupted": "Interrupted",

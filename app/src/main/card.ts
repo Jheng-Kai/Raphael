@@ -6,6 +6,13 @@ import { btn, esc, headerCloseButton, ico, toaster } from "./ui";
 import { linkedText } from "./message-content";
 import type { AgentTurn, OwnerQuestion } from "./types";
 
+/**
+ * Whether the owner's Stop ended the turn (or its task): a card it closed without an answer keeps what it showed, with its buttons gone
+ * and no word of the stop (R-CHAT-STOP-02). A card closed in any other turn (sent over by a newer message, closed by the owner's own ×)
+ * keeps its own words.
+ */
+export const stoppedTurn = (turn: AgentTurn): boolean => turn.status === "cancelled" || turn.task?.state === "cancelled";
+
 export type CardStatus = "waiting" | "ready" | "done" | "failed";
 const CARD_PROMPTS = { key: "cards.inputWaiting", question: null, handover: "cards.answerWaiting", computer: "cards.needsYou", permission: "cards.waiting", draft: "cards.mailReady", connect: "cards.needsYou" } as const;
 export const cardPromptText = (kind: keyof typeof CARD_PROMPTS): string | undefined => CARD_PROMPTS[kind] ? t(CARD_PROMPTS[kind]) : undefined;

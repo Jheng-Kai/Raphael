@@ -104,6 +104,16 @@ export function installMock(fixture, config = {}, target = window) {
     // R-UI-163: the member is still thinking about the owner's message and has sent no bubble for it, so 編輯 takes it into the composer.
     if (variant.ownerSkillLinks) turn.messages.push({ seq: 1, kind: "event", at_ms: data.now, text: JSON.stringify({ type: "skill_unavailable", name: "code-review", reason: "archive" }) });
     if (variant.ownerThinking) Object.assign(turn, { status: 'running', prefix: '', text: '', messages: [], reactions: {} });
+    // What the member has shown of its reply when the owner presses Stop (R-CHAT-STOP-02): nothing (the message is taken back), a thinking line,
+    // words, a progress line or a step (the message stays, as it is).
+    if (variant.stopShown) {
+      Object.assign(turn, { steps: [], drafts: [], permissions: [], owner_questions: [], task: null });
+      const said = { thinking: [{ seq: 1, kind: 'thinking', text: '先把摘要的來源、日期和不確定的地方分開，再挑出三個重點。' }],
+        words: [{ seq: 1, kind: 'reply', text: '好，我先看一下這份範例研究摘要。' }], progress: [{ seq: 1, kind: 'progress', text: '正在讀範例摘要' }] }[variant.stopShown];
+      if (said) turn.messages = said.map(message => ({ ...message, at_ms: data.now }));
+      if (variant.stopShown === 'card') Object.assign(turn, { status: 'confirm', permissions: structuredClone(data.permissionTurns.local.turn.permissions) });
+      if (variant.stopShown === 'step') turn.steps = [{ kind: 'tool', tool: 'web_search', server: 'Raphael', outcome: 'ok', ms: 640, reason: null, at_ms: data.now }];
+    }
     // The owner's message was edited after its member answered it: the history's turn is its second version, the first is kept
     // beside it for `agent.history.version` (the core's `agent_turn_versions`).
     if (variant.ownerVersions) {
@@ -112,6 +122,9 @@ export function installMock(fixture, config = {}, target = window) {
       data.turnVersions = { [turn.id]: [first] };
     }
     data.turns = data.turns.filter(item=>item.member_id!==1).concat(turn);
+    // An earlier exchange stands before the message: taking the message back leaves a conversation that is not empty (an empty one greets, R-UI-183).
+    if (variant.stopShown) data.turns.unshift({ ...structuredClone(base), id: 8200, session_id: 'look-earlier', question: '早安，今天可以先看哪些事？', text: '早安，先從範例研究摘要開始。', status: 'done',
+      created_at_ms: data.now - 3_600_000, messages: [{ seq: 1, kind: 'reply', text: '早安，先從範例研究摘要開始。', at_ms: data.now - 3_600_000 }], steps: [], drafts: [], permissions: [], owner_questions: [], reactions: {}, attachments: [] });
     // Something the owner sent after that message, answered: the earlier one is no longer their last, and offers no 編輯.
     if (variant.ownerLater) data.turns.push({ ...structuredClone(turn), id: 8205, session_id: 'look-later', question: '再幫我把時程表也加進去。', text: '好，時程表也加進去了。', created_at_ms: data.now + 60_000, reactions: {} });
     if (variant.ownerEdit === 'placed') {
@@ -2025,11 +2038,24 @@ export function installMock(fixture, config = {}, target = window) {
         const queued = origin ? data.turns.filter(turn => turn.member_id === origin.member_id && turn.conversation_id === origin.conversation_id && turn.status === "queued") : [];
         const returned = queued.map(turn => ({session_id:turn.session_id,text:turn.question,attachments:turn.attachments,quote:turn.quote}));
         data.turns = data.turns.filter(turn => !queued.includes(turn));
-        // As the core settles a stopped request: denied, with no answer, keeping its public steps.
+        // As the core settles a stopped request (R-CHAT-STOP-01, R-CHAT-STOP-02): a message nothing of whose reply was shown (no words, no
+        // thinking line, no step, no card) is taken back and its words returned; one that showed anything stays as it is, closed, with no words added.
+        const cards = ["drafts", "permissions", "owner_questions", "connectors", "secrets", "pages", "computers", "handoffs", "delegates", "templates", "pairings"];
+        const answered = turn => !!(turn.text?.trim() || turn.detail?.trim() || turn.messages?.some(message => message.text?.trim())
+          || (turn.steps ?? []).some(step => !(step.kind === "model" && step.outcome === "ok") && step.outcome !== "cancelled")
+          || cards.some(key => turn[key]?.length) || turn.task);
+        const taken = [];
         for (const turn of data.turns.filter(item => item.session_id === p.session_id && item.member_id === (p.member_id ?? 0) && ["running", "confirm"].includes(item.status))) {
-          Object.assign(turn, { status: "denied", prefix: "了", text: "已取消。", messages: turn.messages.filter(message => message.kind !== "reply") });
+          if (!answered(turn)) {
+            data.turns = data.turns.filter(item => item !== turn);
+            taken.push({session_id:turn.session_id,text:turn.question,attachments:turn.attachments,quote:turn.quote});
+          } else {
+            for (const card of turn.permissions ?? []) if (card.state === "pending") card.state = "cancelled";
+            Object.assign(turn, { status: "cancelled", prefix: "", text: turn.messages.filter(message => message.kind === "reply").map(message => message.text).join("\n\n") });
+          }
           notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         }
+        returned.unshift(...taken);
         return { stopped: true, ...(returned.length ? {returned} : {}) };
       }
       // Send Now ends the current work with its public output intact and starts the queued message.
@@ -2237,7 +2263,20 @@ export function installMock(fixture, config = {}, target = window) {
         return { room };
       }
       case "rooms.delete": data.rooms = data.rooms.filter(item => item.id !== p.room_id); return { deleted: true };
-      case "rooms.stop": { for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id && ["running", "queued"].includes(item.state))) exchange.stop_requested = 1; for(const exchange of data.roomExchanges.filter(item=>item.room_id===p.room_id)){exchange.state="stopped";exchange.active_turn=null;}for(const message of data.messages.filter(item=>item.room_id===p.room_id&&item.status==="running")){message.status="error";message.text="已停止工作。";}for(const task of data.roomHandoffs.filter(item=>["queued","running","waiting"].includes(item.state)))task.state="cancelled";data.messages.push({...data.roomWrapupMessage,id:nextId(data.messages),reply_to:null,reply_to_member:null,text:"### 結論\n已停止本次工作，已完成的動作保留。\n\n### 待決定\n尚未完成的工作已取消。\n\n### 下一步\n等待你的新指示。"});notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true }; }
+      case "rooms.stop": {
+        const spoke = data.messages.some(item => item.room_id === p.room_id && item.member_id !== null && item.kind !== "wrapup" && item.status !== "running" && (item.text ?? "").trim());
+        for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id && ["running", "queued"].includes(item.state))) {
+          exchange.stop_requested = 1; exchange.reason = "owner";
+          for (const intent of exchange.reply_intents ?? []) if (["queued", "running"].includes(intent.state)) Object.assign(intent, { state: "blocked", reason: "owner" });
+        }
+        if (spoke) {
+          // A member had already shown something: Stop only stops. No wrap-up, and the replies that never began leave no mark.
+          for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id)) { exchange.state = "stopped"; exchange.active_turn = null; exchange.wrapup_sent = 1; }
+          data.messages = data.messages.filter(item => !(item.room_id === p.room_id && item.status === "running" && !(item.text ?? "").trim()));
+          for (const task of data.roomHandoffs.filter(item => ["queued", "running", "waiting"].includes(item.state))) task.state = "cancelled";
+          notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true };
+        }
+        for(const exchange of data.roomExchanges.filter(item=>item.room_id===p.room_id)){exchange.state="stopped";exchange.active_turn=null;}for(const message of data.messages.filter(item=>item.room_id===p.room_id&&item.status==="running")){message.status="error";message.text="已停止工作。";}for(const task of data.roomHandoffs.filter(item=>["queued","running","waiting"].includes(item.state)))task.state="cancelled";data.messages.push({...data.roomWrapupMessage,id:nextId(data.messages),reply_to:null,reply_to_member:null,text:"### 結論\n已停止本次工作，已完成的動作保留。\n\n### 待決定\n尚未完成的工作已取消。\n\n### 下一步\n等待你的新指示。"});notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true }; }
       case "rooms.send": { if (variant.ownerQuestion) for (const turn of data.turns) for (const item of turn.owner_questions ?? []) if (item.state === "asked" && item.kind === "ask_owner") { item.state = "cancelled"; item.result = { state: "cancelled", by: "message", said: p.text }; turn.task = { ...turn.task, state: "done", waiting_owner: 0 }; } const message = { thread_id:p.thread_id ?? 1, id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message", attachments: (p.attachments ?? []).map((file, index) => { const id = `${"f".repeat(30)}${String(index).padStart(2, "0")}.png`; (data.keptFiles ??= {})[id] = { mime: file.mime, data: file.data }; return { id, name: file.name, mime: file.mime }; }) }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
       case "brains.cli":
         // As the core does: a CLI's models come after the first read, in the background. With `codexLate` they come when the scene's

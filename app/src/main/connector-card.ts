@@ -3,7 +3,7 @@
 // as a turn of its own that opens with one centred line naming the apps it waited for.
 // Every state and public catalog logo comes from the core; no authorization URL or token is kept here.
 
-import { cardCloseHTML, cardDisclosureHTML, cardHTML, cardPromptText, waitingOwnerQuestion } from "./card";
+import { cardCloseHTML, cardDisclosureHTML, cardHTML, cardPromptText, stoppedTurn, waitingOwnerQuestion } from "./card";
 import { NAME, eventLineHTML } from "./event-line";
 import { asksGoogleClient, googleSetupHTML } from "./google-card";
 import { getLocale, t } from "./i18n";
@@ -131,7 +131,7 @@ function actionHTML(card: ConnectorCard): string {
 }
 
 /** `waiting`: the background question this card belongs to, whose way out is the card's × (`cardCloseHTML`), which answers it too. */
-export function connectorCardHTML(card: ConnectorCard, waiting?: OwnerQuestion): string {
+export function connectorCardHTML(card: ConnectorCard, waiting?: OwnerQuestion, stopped = false): string {
   const state = cardStateText(card);
   const connected = card.state === "connected";
   const closed = card.state === "cancelled";
@@ -153,13 +153,14 @@ export function connectorCardHTML(card: ConnectorCard, waiting?: OwnerQuestion):
     actions: connected ? btn(`${ico("check")}${esc(t("cards.connected"))}`, "sm", " disabled") : closed ? "" : actionHTML(card),
     // Every card that waits closes with its ×; closing it in the core also answers background work waiting on it.
     ...(waiting || ["pending", "failed", "authorizing"].includes(card.state) ? { close: cardCloseHTML(card.id), statusInHeading: true } : {}),
+    ...(stopped && closed ? { hideStatus: true } : {}),  // closed by the owner's Stop: nothing of the stop is said (R-CHAT-STOP-02)
     attrs: ` data-connector="${esc(card.id)}" data-card-state="${esc(card.state)}"`,
   });
 }
 
 /** The cards a turn showed, below what it said. */
 export function connectorCardsHTML(turn: AgentTurn): string {
-  const cards = (turn.connectors ?? []).map(card => connectorCardHTML(card, waitingOwnerQuestion(turn, card.id))).join("");
+  const cards = (turn.connectors ?? []).map(card => connectorCardHTML(card, waitingOwnerQuestion(turn, card.id), stoppedTurn(turn))).join("");
   // The one app a new member asks for in its set-up comes with one quiet line under the card.
   return cards + (cards && turn.setup ? `<p class="setup-note" data-setup-note>${esc(t("cards.connectYes"))}</p>` : "");
 }
