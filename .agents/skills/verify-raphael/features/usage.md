@@ -79,8 +79,10 @@ subscription's window reaches nine-tenths used.
 
 ## Driving it with look
 
+A spent window with credits to draw (R-QUOTA-02): `usage-credits` is Codex's card with its five-hour window at 0% saying 改用點數 and 點數餘額 20,636 under its windows, never 額度已用完; `foot-usage-credits` is the account menu's block for it, the window with 改用點數 and the balance under it. The core keeps the credits in every reading (`test_quota.py`) and records no exhaustion, so Codex runs on them.
+
 ```powershell
-npm run look -- settings-usage-overview settings-usage-cap settings-usage-analytics settings-usage-analytics-top settings-usage-bar-hover settings-usage-line-hover settings-usage-people-less settings-usage-analytics-empty usage usage-owner usage-allowances-chatgpt usage-empty usage-opens-quietly --theme both --width 1120,720,1920x1080
+npm run look -- settings-usage-overview settings-usage-cap settings-usage-analytics settings-usage-analytics-top settings-usage-bar-hover settings-usage-line-hover settings-usage-people-less settings-usage-analytics-empty usage usage-owner usage-credits usage-allowances-chatgpt usage-empty usage-opens-quietly --theme both --width 1120,720,1920x1080
 ```
 
 `settings-usage-overview` checks `usage-overview`: 這個月 says what it counts, the gear stands at the card's top right with

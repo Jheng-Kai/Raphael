@@ -5845,6 +5845,20 @@ export function checkRendered(name, context = {}) {
     require(Math.abs(last.tile.x - place.left) <= 1 && Math.abs(last.tile.y - place.top) <= 1 && Math.abs(last.tile.width - place.width) <= 1 && Math.abs(last.tile.height - place.height) <= 1, "the drag starts from the tile's place");
     return { check: name, width: last.width, height: last.height };
   }
+  if (name === "usage-credits-menu") {
+    // R-QUOTA-02: a spent window with credits to draw says the subscription runs on them, with what is left.
+    const row = document.querySelector('#app-submenu [data-provider="codex"]');
+    require(row?.dataset.state === "credits", `Codex's block runs on credits (${row?.dataset.state})`);
+    require(row.textContent.includes("改用點數") && row.textContent.includes("點數餘額 20,636") && !row.textContent.includes("額度已用完"), `the block says 改用點數 and the balance: ${row.textContent}`);
+    return { check: name };
+  }
+  if (name === "usage-credits-card") {
+    const card = document.querySelector('[data-allowance="codex"]');
+    require(card.textContent.includes("改用點數") && !card.textContent.includes("額度已用完"), "the spent window says 改用點數, never 額度已用完");
+    const left = card.querySelector('.run-credits');
+    require(visible(left) && left.textContent === "點數餘額 20,636", `the balance stands under the windows (${left?.textContent})`);
+    return { check: name };
+  }
   if (name === "learned-pill") {
     const pill = document.querySelector('#learned-pill');
     require(visible(pill) && !!pill.querySelector('img').getAttribute('src'), "one learned pill has Raphael's emblem");

@@ -4,9 +4,11 @@ export interface CliAllowanceWindow {
   remaining_percent: number | null; resets_at: number | null;
   status?: "allowed" | "allowed_warning" | "rejected"; updated_at_ms?: number;
 }
+/** The credits a subscription draws once a window is spent (Codex reports them with its windows); `balance` may be unknown. */
+export interface SubscriptionCredits { has_credits: boolean; unlimited: boolean; balance: number | null }
 export interface CliAllowances {
   quotas?: { provider: string; reset_at_ms: number | null }[];
-  brains: { id: string; name: string; source?: "live" | "reported" | "unavailable"; windows: CliAllowanceWindow[] }[];
+  brains: { id: string; name: string; source?: "live" | "reported" | "unavailable"; windows: CliAllowanceWindow[]; credits?: SubscriptionCredits | null }[];
 }
 
 /** One line of a breakdown (`usage.analytics`, core brain/usage.py): the top five by the period's total, then `__other__`. */

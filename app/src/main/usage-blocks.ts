@@ -5,9 +5,9 @@
 
 import { CLIS } from "./cli-brains";
 import { formatUsd } from "./format";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 import type { ChatGptStatus, Status } from "./types";
-import type { CliAllowanceWindow, CliAllowances } from "./usage-analytics-types";
+import type { CliAllowanceWindow, CliAllowances, SubscriptionCredits } from "./usage-analytics-types";
 
 /** The words of each window a subscription reports. */
 export const PERIODS = { fiveHour: "runs.fiveHour", weekly: "runs.weekly", weeklyOpus: "runs.weeklyOpus", weeklySonnet: "runs.weeklySonnet" } as const;
@@ -33,11 +33,25 @@ export function windowState(source: string | undefined, span: CliAllowanceWindow
   return { kind: "unknown" };
 }
 
+/** Whether a subscription draws credits once a window is spent: Codex ran on them while its usage said 額度已用完. */
+export const drawsCredits = (credits: SubscriptionCredits | null | undefined): boolean => !!credits && (credits.has_credits || credits.unlimited);
+
+/** What is left of the credits, in words (點數餘額 20,636, 點數不限), or nothing when the balance was not told. */
+export function creditsText(credits: SubscriptionCredits | null | undefined): string {
+  if (!credits || !drawsCredits(credits)) return "";
+  if (credits.unlimited) return t("usage.creditsUnlimited");
+  return typeof credits.balance === "number" && Number.isFinite(credits.balance)
+    ? t("usage.creditsLeft", { p0: new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 0 }).format(credits.balance) }) : "";
+}
+
+/** Whether a window's state says it is spent: its number at 100 % used, or the provider's rejection. */
+export const spent = (state: WindowState): boolean => state.kind === "percent" ? state.used >= 100 : state.kind === "status" && state.status === "rejected";
+
 /** One provider as the account menu shows it: its name (with the window it speaks of), the words at the right, and when it resets. */
 export interface UsageBlock {
   id: string;
   name: string;
-  state: "percent" | "reset" | "status" | "exhausted" | "spend" | "unreadable";
+  state: "percent" | "reset" | "status" | "exhausted" | "credits" | "spend" | "unreadable";
   /** Percent used, for `percent`. */
   used?: number;
   /** The words at the right of the name. */
@@ -72,6 +86,11 @@ function subscriptionBlock(brain: CliAllowances["brains"][number], quotas: CliAl
   if (quota && (!best || best.state.kind !== "percent")) return { id: brain.id, name: who, state: "exhausted", value: t("runs.exhausted"), resetsAt: quota.reset_at_ms ? quota.reset_at_ms / 1000 : null };
   if (!best) return { id: brain.id, name: who, state: "unreadable", value: t("account.unreadable"), resetsAt: null };
   const { state, span } = best;
+  // A spent window with credits to draw is not a spent subscription: it runs on the credits, and says so (R-QUOTA-02).
+  if (spent(state) && drawsCredits(brain.credits)) {
+    const left = creditsText(brain.credits);
+    return { id: brain.id, name: named, state: "credits", value: t("usage.onCredits"), resetsAt: span.resets_at, ...(left ? { detail: left } : {}) };
+  }
   if (state.kind === "percent") return { id: brain.id, name: named, state: "percent", used: state.used, value: t("overview.used", { p0: state.used }), resetsAt: span.resets_at };
   // A window that has reset says so and keeps no stale number; what comes next is for the next turn to report.
   if (state.kind === "reset") return { id: brain.id, name: named, state: "reset", value: t("account.reset"), resetsAt: null };
