@@ -524,7 +524,7 @@ test("placement follows a resized target without a hop, and locale changes redra
   await settle();
   expect(spot().style.left).toBe("156px");
   setLocale("ja");
-  expect(words()).toBe(t("tour.permission"));
+  expect(words()).toBe(t("tour.model"));
 });
 
 test("a dialog the tour lights keeps its place: nothing pads or moves the window's own layer", async () => {
