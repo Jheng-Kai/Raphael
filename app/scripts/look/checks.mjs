@@ -2032,7 +2032,7 @@ export function checkRendered(name, context = {}) {
     require(visible(document.querySelector('[data-act="project-add"]')), "the native picker is at the foot");
     return {check:name};
   }
-  if (name.startsWith("skills-") || ["growing-skills", "member-shared-source"].includes(name)) {
+  if (name.startsWith("skills-") || name === "growing-skills") {
     for (const label of document.querySelectorAll('[data-skill-provenance], .mp-resource p, .ms-meta, .cs-linked .ds, .cs-page .cs-desc')) {
       const text = label.textContent.trim(), title = label.getAttribute('title') ?? '';
       require(!/^(learned|owner|imported)$/i.test(text) && !/(?:local:|github:|plugin:|[/\\]plugins[/\\]cache[/\\])/i.test(text + title), "R-SKILL-08: skill origins never show raw source values or plugin cache paths");
@@ -6003,13 +6003,6 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.work-section')?.textContent.includes('skill_learned'), "internal skill payload never enters public work");
     return { check: name };
   }
-  if (name === "member-shared-source") {
-    // An inherited skill opens in its view read only, with the same readable origin as everywhere.
-    const pane = document.querySelector('.ms-pane'), text = pane.querySelector('#ms-skill-text'), meta = pane.querySelector('.ms-meta');
-    require(visible(meta) && meta.textContent.includes('共享 · ~/.codex/skills/source-check') && !meta.textContent.includes('local:'), "the skill's view uses the same readable source label");
-    require(visible(text) && text.disabled && !pane.querySelector('[data-ms="skill-save"], [data-ms="skill-more"]'), "inherited skills remain editable only in the library");
-    return { check: name };
-  }
   if (name === "growing-skills") {
     const pane = document.querySelector('.ms-pane');
     require(pane.textContent.includes("2026/10/29"), "skill dates follow the Chinese UI rather than the browser locale");
@@ -6029,7 +6022,9 @@ export function checkRendered(name, context = {}) {
     const pane = document.querySelector('.ms-pane'), calls = window.__look.calls;
     require(calls.some(c => c.method === "members.skills.delete" && c.params.id === 31), "Raphael deletes the skill through the same owner boundary");
     require(!calls.some(c => c.method === "members.skills.update" && "undo" in c.params), "no call asks the core to restore a skill");
-    require(!pane.querySelector('[data-ms="skill-open"][data-id="31"]') && pane.querySelector('[data-ms="skill-open"][data-id="32"]'), "the deleted skill is gone and the shared one stays");
+    require(!pane.querySelector('[data-ms="skill-open"][data-id="31"]'), "the deleted skill is gone");
+    // Only its own skills are rows (R-SKILL-17): a team skill is never one, and its package stays read-only under 來自團隊技能.
+    require(!pane.querySelector('[data-ms="skill-open"][data-id="32"]') && visible(pane.querySelector('.ms-lib-row')), "the team package stays, and no team skill is a row of its own");
     require(!pane.querySelector('[data-ms="skill-undo"]') && !/復原|undo/i.test(pane.textContent), "the list has no way to bring the skill back");
     return { check: name };
   }

@@ -1134,8 +1134,8 @@ one private row beside the library and captures the grant dialog after giving on
 member access and taking it from another. Inspect all four scenes at every size and
 theme, comparing private/app switches with grant switches and source import buttons
 with the section action. Member details continue using mountMemberResources.
-raphael-skills and details-skills also include an inherited package and assert its
-existing switch, readable source copy and library-only edit ownership. Inspect
+raphael-skills and details-skills list only the member's own skills as rows (R-SKILL-17): a team skill is never
+one, and its package stays read-only under 來自團隊技能. Inspect
 their full-size images as changed consumers too. Library icons keep the app's 20px
 size inside 28px row and 40px header slots, aligned with the existing member faces.
 
