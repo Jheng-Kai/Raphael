@@ -501,8 +501,8 @@ test("the shortcut's keys are large caps that light while held, and all of them 
   expect(button("done")).toBeNull();
   keyAt("keydown", "AltRight", "Alt");
   expect(caps().map(cap => cap.hasAttribute("data-down"))).toEqual([true, true]);
-  // The real quick ask's corner answers with one playful line and goes by itself, listening to nothing; Finish shows.
-  expect(rehearse).toHaveBeenCalledExactlyOnceWith("答", t("tour.summon"));
+  // The real quick ask's corner says Raphael's own introduction as a notice and goes by itself, listening to nothing; Finish shows.
+  expect(rehearse).toHaveBeenCalledExactlyOnceWith("告", "我是拉斐爾，有什麼問題請儘管吩咐");
   expect(find(".tour-summon")).toBeNull();
   expect(button("done")?.classList.contains("pri")).toBe(true);
 });
